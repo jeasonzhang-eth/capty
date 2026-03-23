@@ -28,6 +28,11 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 
+# Python sidecar virtual environment
+sidecar/.venv/
+sidecar/*.egg-info/
+sidecar/.pytest_cache/
+
 # Logs
 *.log
 npm-debug.log*
