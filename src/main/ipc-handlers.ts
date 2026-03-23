@@ -1,4 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from "electron";
+import fs from "fs";
 import Database from "better-sqlite3";
 import { SidecarManager } from "./sidecar";
 import {
@@ -12,6 +13,7 @@ import {
 import { saveSegmentAudio, saveFullAudio } from "./audio-files";
 import { exportTXT, exportSRT, exportMarkdown } from "./export";
 import { readConfig, writeConfig, getDataDir } from "./config";
+import { downloadModel } from "./model-downloader";
 
 export interface IpcDeps {
   readonly db: Database.Database;
@@ -125,4 +127,34 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     });
     return result.canceled ? null : result.filePaths[0];
   });
+
+  // Model download
+  ipcMain.handle(
+    "models:download",
+    async (_event, repo: string, destDir: string) => {
+      const win = getMainWindow();
+      await downloadModel(repo, destDir, (progress) => {
+        win?.webContents.send("models:download-progress", progress);
+      });
+    },
+  );
+
+  // Export save file
+  ipcMain.handle(
+    "export:save-file",
+    async (_event, defaultName: string, content: string) => {
+      const win = getMainWindow();
+      if (!win) return null;
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: defaultName,
+        filters: [
+          { name: "Text Files", extensions: ["txt", "srt", "md"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (result.canceled || !result.filePath) return null;
+      fs.writeFileSync(result.filePath, content, "utf-8");
+      return result.filePath;
+    },
+  );
 }

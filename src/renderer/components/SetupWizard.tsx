@@ -1,0 +1,172 @@
+import React, { useState, useCallback } from "react";
+
+interface SetupWizardProps {
+  readonly onComplete: (dataDir: string) => void;
+}
+
+const wizardButtonStyle: React.CSSProperties = {
+  backgroundColor: "var(--accent)",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  padding: "12px 32px",
+  fontSize: "15px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+export function SetupWizard({
+  onComplete,
+}: SetupWizardProps): React.ReactElement {
+  const [step, setStep] = useState(0);
+  const [dataDir, setDataDir] = useState<string | null>(null);
+  const [isDownloading] = useState(false);
+  const [downloadProgress] = useState(0);
+
+  const handleSelectFolder = useCallback(async () => {
+    const dir = await window.capty.selectDirectory();
+    if (dir) {
+      setDataDir(dir);
+      await window.capty.setConfig({ dataDir: dir });
+    }
+  }, []);
+
+  const handleSkipDownload = useCallback(() => {
+    setStep(3);
+  }, []);
+
+  const handleFinish = useCallback(() => {
+    if (dataDir) {
+      onComplete(dataDir);
+    }
+  }, [dataDir, onComplete]);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        gap: "24px",
+        padding: "40px",
+      }}
+    >
+      {step === 0 && (
+        <>
+          <h1 style={{ fontSize: "32px", fontWeight: "bold" }}>
+            Welcome to Capty
+          </h1>
+          <p
+            style={{
+              color: "var(--text-secondary)",
+              fontSize: "16px",
+              textAlign: "center",
+            }}
+          >
+            Real-time speech-to-text transcription, powered by local AI models.
+          </p>
+          <button onClick={() => setStep(1)} style={wizardButtonStyle}>
+            Get Started
+          </button>
+        </>
+      )}
+
+      {step === 1 && (
+        <>
+          <h2 style={{ fontSize: "24px" }}>Choose Data Folder</h2>
+          <p
+            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+          >
+            Select where Capty stores recordings, transcripts, and models.
+          </p>
+          <button onClick={handleSelectFolder} style={wizardButtonStyle}>
+            Select Folder
+          </button>
+          {dataDir && (
+            <p
+              style={{ color: "var(--text-secondary)", fontSize: "13px" }}
+            >
+              {dataDir}
+            </p>
+          )}
+          <button
+            onClick={() => setStep(2)}
+            disabled={!dataDir}
+            style={{ ...wizardButtonStyle, opacity: dataDir ? 1 : 0.5 }}
+          >
+            Next
+          </button>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <h2 style={{ fontSize: "24px" }}>Download Model</h2>
+          <p
+            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+          >
+            Download the ASR model for transcription. You can skip and do this
+            later.
+          </p>
+          {isDownloading ? (
+            <div style={{ width: "300px" }}>
+              <div
+                style={{
+                  height: "8px",
+                  backgroundColor: "var(--bg-tertiary)",
+                  borderRadius: "4px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${downloadProgress}%`,
+                    backgroundColor: "var(--accent)",
+                    transition: "width 0.3s",
+                  }}
+                />
+              </div>
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text-muted)",
+                  textAlign: "center",
+                  marginTop: "8px",
+                }}
+              >
+                {Math.round(downloadProgress)}%
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={handleSkipDownload}
+              style={{
+                ...wizardButtonStyle,
+                backgroundColor: "var(--bg-tertiary)",
+              }}
+            >
+              Skip for Now
+            </button>
+          )}
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <h2 style={{ fontSize: "24px" }}>All Set!</h2>
+          <p
+            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+          >
+            Capty is ready to use. Start recording to begin transcription.
+          </p>
+          <button onClick={handleFinish} style={wizardButtonStyle}>
+            Start Using Capty
+          </button>
+        </>
+      )}
+    </div>
+  );
+}

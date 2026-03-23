@@ -1,0 +1,11 @@
+[
+  {
+    "id": "qwen3-asr-0.6b",
+    "name": "Qwen3-ASR-0.6B",
+    "repo": "Qwen/Qwen3-ASR-0.6B",
+    "size_gb": 1.2,
+    "languages": ["zh", "en"],
+    "streaming": true,
+    "description": "Lightweight, bilingual Chinese-English, suitable for daily use"
+  }
+]

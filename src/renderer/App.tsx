@@ -3,6 +3,7 @@ import { ControlBar } from "./components/ControlBar";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
+import { SetupWizard } from "./components/SetupWizard";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
@@ -13,6 +14,7 @@ function App(): React.JSX.Element {
   const store = useAppStore();
   const audioCapture = useAudioCapture();
   const session = useSession();
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
   const transcription = useTranscription({
     onFinal: useCallback(
@@ -63,6 +65,11 @@ function App(): React.JSX.Element {
     const init = async (): Promise<void> => {
       try {
         const dataDir = await window.capty.getDataDir();
+        if (!dataDir) {
+          setNeedsSetup(true);
+          return;
+        }
+        setNeedsSetup(false);
         store.setDataDir(dataDir);
         await store.loadSessions();
         audioCapture.loadDevices();
@@ -152,10 +159,17 @@ function App(): React.JSX.Element {
     await store.loadSessions();
   }, [session, store, transcription, audioCapture]);
 
-  const handleExport = useCallback(async () => {
-    // Will be implemented in Task 17
-    console.log("Export not yet implemented");
+  const handleExport = useCallback(() => {
+    // Export is now handled by the ExportMenu inside RecordingControls
   }, []);
+
+  const handleWizardComplete = useCallback(
+    (dataDir: string) => {
+      store.setDataDir(dataDir);
+      setNeedsSetup(false);
+    },
+    [store],
+  );
 
   const handleSelectSession = useCallback(
     async (sessionId: number) => {
@@ -174,6 +188,16 @@ function App(): React.JSX.Element {
   useEffect(() => {
     store.setPartialText(transcription.partialText);
   }, [transcription.partialText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show nothing while checking setup status
+  if (needsSetup === null) {
+    return <></>;
+  }
+
+  // Show setup wizard if dataDir is not configured
+  if (needsSetup) {
+    return <SetupWizard onComplete={handleWizardComplete} />;
+  }
 
   return (
     <>
@@ -204,6 +228,7 @@ function App(): React.JSX.Element {
         isRecording={store.isRecording}
         elapsedSeconds={store.elapsedSeconds}
         audioLevel={audioLevel}
+        sessionId={store.currentSessionId}
         onStart={handleStart}
         onStop={handleStop}
         onExport={handleExport}

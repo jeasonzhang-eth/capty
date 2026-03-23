@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 
 interface RecordingControlsProps {
   readonly isRecording: boolean;
   readonly elapsedSeconds: number;
   readonly audioLevel: number;
+  readonly sessionId: number | null;
   readonly onStart: () => void;
   readonly onStop: () => void;
   readonly onExport: () => void;
@@ -47,15 +48,145 @@ function AudioLevelBars({ level }: { level: number }): React.ReactElement {
   );
 }
 
+interface ExportMenuProps {
+  readonly sessionId: number;
+  readonly onClose: () => void;
+}
+
+function ExportMenu({
+  sessionId,
+  onClose,
+}: ExportMenuProps): React.ReactElement {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [onClose]);
+
+  const handleExportTxt = useCallback(async () => {
+    const content = await window.capty.exportTxt(sessionId, {
+      timestamps: true,
+    });
+    await window.capty.saveFile("transcript.txt", content as string);
+    onClose();
+  }, [sessionId, onClose]);
+
+  const handleExportSrt = useCallback(async () => {
+    const content = await window.capty.exportSrt(sessionId);
+    await window.capty.saveFile("transcript.srt", content as string);
+    onClose();
+  }, [sessionId, onClose]);
+
+  const handleExportMarkdown = useCallback(async () => {
+    const content = await window.capty.exportMarkdown(sessionId);
+    await window.capty.saveFile("transcript.md", content as string);
+    onClose();
+  }, [sessionId, onClose]);
+
+  const menuItemStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    padding: "8px 16px",
+    fontSize: "13px",
+    color: "var(--text-primary)",
+    backgroundColor: "transparent",
+    border: "none",
+    textAlign: "left",
+    cursor: "pointer",
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        right: 0,
+        marginBottom: "4px",
+        backgroundColor: "var(--bg-secondary)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+        overflow: "hidden",
+        minWidth: "180px",
+        zIndex: 100,
+      }}
+    >
+      <button
+        onClick={handleExportTxt}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+        }}
+      >
+        Export as TXT
+      </button>
+      <button
+        onClick={handleExportSrt}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+        }}
+      >
+        Export as SRT
+      </button>
+      <button
+        onClick={handleExportMarkdown}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+        }}
+      >
+        Export as Markdown
+      </button>
+    </div>
+  );
+}
+
 export function RecordingControls({
   isRecording,
   elapsedSeconds,
   audioLevel,
+  sessionId,
   onStart,
   onStop,
   onExport,
   canExport,
 }: RecordingControlsProps): React.ReactElement {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const handleExportClick = useCallback(() => {
+    if (sessionId !== null) {
+      setShowExportMenu((prev) => !prev);
+    } else {
+      onExport();
+    }
+  }, [sessionId, onExport]);
+
+  const handleCloseMenu = useCallback(() => {
+    setShowExportMenu(false);
+  }, []);
+
   return (
     <div
       style={{
@@ -112,22 +243,27 @@ export function RecordingControls({
           {isRecording ? "Stop" : "Start"}
         </button>
 
-        <button
-          onClick={onExport}
-          disabled={!canExport}
-          style={{
-            backgroundColor: "var(--bg-tertiary)",
-            color: canExport ? "var(--text-primary)" : "var(--text-muted)",
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            padding: "8px 16px",
-            fontSize: "13px",
-            cursor: canExport ? "pointer" : "default",
-            opacity: canExport ? 1 : 0.5,
-          }}
-        >
-          Export
-        </button>
+        <div style={{ position: "relative" }}>
+          {showExportMenu && sessionId !== null && (
+            <ExportMenu sessionId={sessionId} onClose={handleCloseMenu} />
+          )}
+          <button
+            onClick={handleExportClick}
+            disabled={!canExport}
+            style={{
+              backgroundColor: "var(--bg-tertiary)",
+              color: canExport ? "var(--text-primary)" : "var(--text-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              padding: "8px 16px",
+              fontSize: "13px",
+              cursor: canExport ? "pointer" : "default",
+              opacity: canExport ? 1 : 0.5,
+            }}
+          >
+            Export
+          </button>
+        </div>
       </div>
     </div>
   );
