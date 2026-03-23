@@ -53,9 +53,10 @@ class ModelRunner:
         self._processor = AutoProcessor.from_pretrained(
             str(model_path), trust_remote_code=True
         )
+        import torch
         self._model = AutoModelForCausalLM.from_pretrained(
-            str(model_path), trust_remote_code=True
-        )
+            str(model_path), trust_remote_code=True, torch_dtype=torch.float32
+        ).to("cpu")
         self._model_id = model_id
         logger.info("Model %s loaded successfully", model_id)
 
@@ -138,8 +139,11 @@ class ModelRunner:
             skip_special_tokens=True,
         )
 
+        # Ensure inputs are on CPU
+        inputs = {k: v.to("cpu") if hasattr(v, "to") else v for k, v in inputs.items()}
+
         generation_kwargs = {
-            **{k: v for k, v in inputs.items()},
+            **inputs,
             "max_new_tokens": 4096,
             "streamer": streamer,
         }

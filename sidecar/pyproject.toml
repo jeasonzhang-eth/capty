@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
-    "uvicorn>=0.34",
+    "uvicorn[standard]>=0.34",
     "websockets>=14.0",
     "torch>=2.0",
     "transformers>=4.45",

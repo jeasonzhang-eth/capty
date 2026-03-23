@@ -90,6 +90,7 @@ def create_app(models_dir: str) -> FastAPI:
         await ws.accept()
         audio_buffer = bytearray()
         session_model: Optional[str] = None
+        segment_counter: int = 0
 
         try:
             while True:
@@ -171,9 +172,12 @@ def create_app(models_dir: str) -> FastAPI:
 
                         pcm_data = bytes(audio_buffer)
                         audio_buffer.clear()
+                        segment_counter += 1
 
                         try:
                             async for result in runner.transcribe_stream(pcm_data):
+                                if result.get("type") == "final":
+                                    result = {**result, "segment_id": segment_counter}
                                 await ws.send_json(result)
                         except Exception as exc:
                             logger.exception("Transcription error")
