@@ -20,7 +20,11 @@ import {
 } from "./audio-files";
 import { exportTXT, exportSRT, exportMarkdown } from "./export";
 import { readConfig, writeConfig, getDataDir } from "./config";
-import { downloadModel, isModelDownloaded } from "./model-downloader";
+import {
+  calcDirSizeGb,
+  downloadModel,
+  isModelDownloaded,
+} from "./model-downloader";
 
 export interface IpcDeps {
   readonly db: Database.Database;
@@ -146,7 +150,7 @@ function ensureUserModels(configDir: string): void {
           name,
           type,
           repo,
-          size_gb: 0,
+          size_gb: calcDirSizeGb(join(modelsDir, dir)),
           languages: ["multilingual"],
           description: repo,
         });
@@ -154,6 +158,17 @@ function ensureUserModels(configDir: string): void {
       }
     } catch {
       // Cannot read models dir
+    }
+  }
+
+  // Backfill size for existing entries that have size_gb == 0
+  for (const m of current) {
+    if (m.size_gb === 0 && isModelDownloaded(modelsDir, m.id)) {
+      const size = calcDirSizeGb(join(modelsDir, m.id));
+      if (size > 0) {
+        m.size_gb = size;
+        changed = true;
+      }
     }
   }
 

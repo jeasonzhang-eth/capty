@@ -65,7 +65,10 @@ async function fetchFileList(
         .filter((f) => !SKIP_FILES.has(f));
     }
   } catch (err) {
-    console.error(`[model-downloader] Failed to fetch file list for ${repo}:`, err);
+    console.error(
+      `[model-downloader] Failed to fetch file list for ${repo}:`,
+      err,
+    );
   }
 
   // Fallback: common model files
@@ -274,5 +277,24 @@ export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+/** Calculate total size of a directory in GB (rounded to 2 decimals). */
+export function calcDirSizeGb(dirPath: string): number {
+  try {
+    const entries = readdirSync(dirPath);
+    let total = 0;
+    for (const entry of entries) {
+      try {
+        const stat = statSync(join(dirPath, entry));
+        if (stat.isFile()) total += stat.size;
+      } catch {
+        // skip unreadable files
+      }
+    }
+    return Math.round((total / (1024 * 1024 * 1024)) * 100) / 100;
+  } catch {
+    return 0;
   }
 }
