@@ -170,10 +170,19 @@ function loadAllModels(configDir: string): ModelEntry[] {
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
 
-  return models.map((m) => ({
+  const withStatus = models.map((m) => ({
     ...m,
     downloaded: isModelDownloaded(modelsDir, m.id),
   }));
+
+  // Sort: group by type (alphabetically), then by size within each group
+  withStatus.sort((a, b) => {
+    const typeCmp = a.type.localeCompare(b.type);
+    if (typeCmp !== 0) return typeCmp;
+    return a.size_gb - b.size_gb;
+  });
+
+  return withStatus;
 }
 
 interface HFSearchResult {
