@@ -69,6 +69,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return addSegment(db, opts as any);
   });
 
+  ipcMain.handle("segment:list", (_event, sessionId: number) => {
+    return getSegments(db, sessionId);
+  });
+
   // Audio
   ipcMain.handle(
     "audio:save-segment",

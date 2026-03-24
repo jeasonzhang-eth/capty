@@ -51,6 +51,7 @@ interface AppState {
   readonly setDataDir: (dir: string | null) => void;
   readonly setCurrentSessionId: (id: number | null) => void;
   readonly addSegment: (seg: Segment) => void;
+  readonly setSegments: (segs: Segment[]) => void;
   readonly clearSegments: () => void;
   readonly setPartialText: (text: string) => void;
   readonly setElapsedSeconds: (s: number) => void;
@@ -86,6 +87,7 @@ export const useAppStore = create<AppState>((set) => ({
   setDataDir: (dir) => set({ dataDir: dir }),
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   addSegment: (seg) => set((state) => ({ segments: [...state.segments, seg] })),
+  setSegments: (segs) => set({ segments: segs, partialText: "" }),
   clearSegments: () => set({ segments: [], partialText: "" }),
   setPartialText: (text) => set({ partialText: text }),
   setElapsedSeconds: (s) => set({ elapsedSeconds: s }),

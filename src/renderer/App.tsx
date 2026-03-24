@@ -22,15 +22,28 @@ function App(): React.JSX.Element {
   const transcription = useTranscription({
     onFinal: useCallback(
       async (text: string) => {
-        // Update store with finalized segment
+        if (!text.trim()) return;
+        const now = store.elapsedSeconds;
+        // Persist to database
+        if (store.currentSessionId) {
+          await window.capty.addSegment({
+            sessionId: store.currentSessionId,
+            startTime: now,
+            endTime: now,
+            text,
+            audioPath: "",
+            isFinal: true,
+          });
+        }
+        // Update in-memory store
         store.addSegment({
           id: Date.now(),
-          start_time: store.elapsedSeconds,
-          end_time: store.elapsedSeconds,
+          start_time: now,
+          end_time: now,
           text,
         });
       },
-      [store.elapsedSeconds],
+      [store.elapsedSeconds, store.currentSessionId],
     ),
     onError: useCallback((msg: string) => {
       console.error("Transcription error:", msg);
@@ -245,9 +258,16 @@ function App(): React.JSX.Element {
   const handleSelectSession = useCallback(
     async (sessionId: number) => {
       try {
-        await window.capty.getSession(sessionId);
         store.setCurrentSessionId(sessionId);
-        // TODO: Load segments for the selected session
+        const segments = await window.capty.listSegments(sessionId);
+        store.setSegments(
+          segments.map((s) => ({
+            id: s.id,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            text: s.text,
+          })),
+        );
       } catch (err) {
         console.error("Failed to load session:", err);
       }

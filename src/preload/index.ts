@@ -13,6 +13,8 @@ const api = {
   // Segments
   addSegment: (opts: Record<string, unknown>) =>
     ipcRenderer.invoke("segment:add", opts),
+  listSegments: (sessionId: number) =>
+    ipcRenderer.invoke("segment:list", sessionId),
 
   // Audio
   saveSegmentAudio: (

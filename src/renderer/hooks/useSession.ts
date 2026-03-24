@@ -12,6 +12,15 @@ declare global {
       ) => Promise<void>;
       deleteSession: (id: number) => Promise<void>;
       addSegment: (opts: Record<string, unknown>) => Promise<number>;
+      listSegments: (sessionId: number) => Promise<
+        {
+          id: number;
+          session_id: number;
+          start_time: number;
+          end_time: number;
+          text: string;
+        }[]
+      >;
       saveSegmentAudio: (
         sessionDir: string,
         segmentIndex: number,
