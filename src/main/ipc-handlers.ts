@@ -40,8 +40,54 @@ interface ModelEntry {
   readonly downloaded?: boolean;
 }
 
-function loadLocalModels(configDir: string): ModelEntry[] {
-  // Read builtin models.json
+const USER_MODELS_FILE = "user-models.json";
+
+function readUserModels(configDir: string): ModelEntry[] {
+  const filePath = join(configDir, USER_MODELS_FILE);
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as ModelEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function writeUserModels(configDir: string, models: ModelEntry[]): void {
+  fs.mkdirSync(configDir, { recursive: true });
+  const filePath = join(configDir, USER_MODELS_FILE);
+  fs.writeFileSync(filePath, JSON.stringify(models, null, 2), "utf-8");
+}
+
+function addUserModel(configDir: string, model: ModelEntry): void {
+  const existing = readUserModels(configDir);
+  // Replace if already exists (update metadata), otherwise append
+  const idx = existing.findIndex((m) => m.id === model.id);
+  if (idx >= 0) {
+    existing[idx] = model;
+  } else {
+    existing.push(model);
+  }
+  writeUserModels(configDir, existing);
+}
+
+function removeUserModel(configDir: string, modelId: string): void {
+  const existing = readUserModels(configDir);
+  writeUserModels(
+    configDir,
+    existing.filter((m) => m.id !== modelId),
+  );
+}
+
+/** Infer model type from a directory name or config. */
+function inferTypeFromId(id: string): string {
+  const lower = id.toLowerCase();
+  if (lower.includes("whisper")) return "whisper";
+  if (lower.includes("qwen")) return "qwen-asr";
+  return "whisper";
+}
+
+function loadAllModels(configDir: string): ModelEntry[] {
+  // 1. Read builtin models.json (shipped with app)
   let builtinModels: ModelEntry[] = [];
   try {
     const registryPath = join(
@@ -56,39 +102,55 @@ function loadLocalModels(configDir: string): ModelEntry[] {
     // Local registry not found
   }
 
+  // 2. Read user-downloaded models (local registry)
+  const userModels = readUserModels(configDir);
+
+  // 3. Merge: builtin first, then user models (skip duplicates)
+  const knownIds = new Set([
+    ...builtinModels.map((m) => m.id),
+    ...userModels.map((m) => m.id),
+  ]);
+  const mergedModels = [
+    ...builtinModels,
+    ...userModels.filter(
+      (m) => !new Set(builtinModels.map((b) => b.id)).has(m.id),
+    ),
+  ];
+
+  // 4. Scan models directory for orphaned downloads (downloaded but not in any registry)
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
 
-  // Discover user-downloaded models via _meta.json files
-  const builtinIds = new Set(builtinModels.map((m) => m.id));
-  const userModels: ModelEntry[] = [];
-
   if (fs.existsSync(modelsDir)) {
     try {
       for (const dir of fs.readdirSync(modelsDir)) {
-        if (builtinIds.has(dir)) continue;
-        const metaPath = join(modelsDir, dir, "_meta.json");
-        if (fs.existsSync(metaPath)) {
-          try {
-            const meta = JSON.parse(
-              fs.readFileSync(metaPath, "utf-8"),
-            ) as ModelEntry;
-            userModels.push(meta);
-          } catch {
-            // Invalid meta, skip
-          }
-        }
+        if (knownIds.has(dir)) continue;
+        if (!isModelDownloaded(modelsDir, dir)) continue;
+
+        // Found an orphaned downloaded model — infer metadata and add to user registry
+        const repo = dir.replace(/--/g, "/");
+        const name = dir.split("--").pop() ?? dir;
+        const type = inferTypeFromId(dir);
+        const orphan: ModelEntry = {
+          id: dir,
+          name,
+          type,
+          repo,
+          size_gb: 0,
+          languages: ["multilingual"],
+          description: repo,
+        };
+        mergedModels.push(orphan);
+        // Persist so we don't have to scan again next time
+        addUserModel(configDir, orphan);
       }
     } catch {
       // Cannot read models dir
     }
   }
 
-  // Merge: builtin first, then user-downloaded
-  const allModels = [...builtinModels, ...userModels];
-
-  return allModels.map((m) => ({
+  return mergedModels.map((m) => ({
     ...m,
     downloaded: isModelDownloaded(modelsDir, m.id),
   }));
@@ -305,23 +367,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return sidecar.getUrl();
   });
 
-  // Models — read from local (builtin) registry + user-downloaded models
+  // Models — builtin registry + user-downloaded models
   ipcMain.handle("models:list", () => {
-    return loadLocalModels(configDir);
+    return loadAllModels(configDir);
   });
 
-  // Save model metadata (for user-downloaded models from search)
+  // Add a model to the user registry (called after downloading from search)
   ipcMain.handle(
     "models:save-meta",
-    (_event, modelId: string, meta: Record<string, unknown>) => {
-      const config = readConfig(configDir);
-      const dataDir = config.dataDir ?? join(configDir, "data");
-      const modelDir = join(dataDir, "models", modelId);
-      if (!fs.existsSync(modelDir)) {
-        fs.mkdirSync(modelDir, { recursive: true });
-      }
-      const metaPath = join(modelDir, "_meta.json");
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+    (_event, _modelId: string, meta: Record<string, unknown>) => {
+      addUserModel(configDir, meta as unknown as ModelEntry);
     },
   );
 
@@ -357,9 +412,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
               current_model: string | null;
             };
             if (health.current_model === modelId) {
-              // Unload by switching to a non-existent placeholder (triggers unload)
-              // Better: just call a dedicated unload endpoint or accept the model switch will fail
-              // For now, the sidecar will handle the missing model gracefully
+              // Sidecar will handle the missing model gracefully
             }
           }
         }
@@ -369,6 +422,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       fs.rmSync(modelPath, { recursive: true, force: true });
     }
+
+    // Also remove from user registry
+    removeUserModel(configDir, modelId);
   });
 
   // App

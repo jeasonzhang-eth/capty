@@ -543,7 +543,7 @@ export function SettingsModal({
             Models
           </div>
           <div style={labelStyle}>
-            Built-in models and models discovered from HuggingFace.
+            Manage your models. Search HuggingFace to add more.
           </div>
 
           {/* HuggingFace Mirror URL */}
@@ -651,7 +651,7 @@ export function SettingsModal({
             </div>
           )}
 
-          {/* Built-in models */}
+          {/* All models (builtin + user-downloaded) */}
           <div
             style={{
               fontSize: "12px",
@@ -660,7 +660,7 @@ export function SettingsModal({
               marginBottom: "8px",
             }}
           >
-            Built-in
+            My Models
           </div>
           <div
             style={{
@@ -695,7 +695,7 @@ export function SettingsModal({
                   fontSize: "13px",
                 }}
               >
-                No built-in models available
+                No models yet. Search HuggingFace below to add models.
               </div>
             )}
           </div>
