@@ -129,7 +129,23 @@ function App(): React.JSX.Element {
         setNeedsSetup(false);
         store.setDataDir(dataDir);
         await store.loadSessions();
-        audioCapture.loadDevices();
+        await audioCapture.loadDevices();
+
+        // Restore saved microphone device
+        const config = await window.capty.getConfig();
+        const savedDeviceId = config.selectedAudioDeviceId as string | null;
+        if (savedDeviceId) {
+          // Verify device still exists (may have been unplugged)
+          const allDevices = await navigator.mediaDevices.enumerateDevices();
+          const exists = allDevices.some(
+            (d) => d.kind === "audioinput" && d.deviceId === savedDeviceId,
+          );
+          if (exists) {
+            audioCapture.setSelectedDevice(savedDeviceId);
+          }
+          // If not found, stays on default — no need to clear config since
+          // the device might be reconnected later
+        }
 
         // Check sidecar
         try {
@@ -457,6 +473,20 @@ function App(): React.JSX.Element {
     [regeneratingSessionId, store],
   );
 
+  const handleDeviceChange = useCallback(
+    async (deviceId: string) => {
+      const effectiveId = deviceId || null;
+      audioCapture.setSelectedDevice(effectiveId);
+      // Persist to config
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({
+        ...config,
+        selectedAudioDeviceId: effectiveId,
+      });
+    },
+    [audioCapture],
+  );
+
   // Sync transcription partial text to store
   useEffect(() => {
     store.setPartialText(transcription.partialText);
@@ -479,7 +509,7 @@ function App(): React.JSX.Element {
         sidecarReady={store.sidecarReady}
         devices={audioCapture.devices}
         selectedDeviceId={audioCapture.selectedDeviceId}
-        onDeviceChange={audioCapture.setSelectedDevice}
+        onDeviceChange={handleDeviceChange}
         models={store.models}
         selectedModelId={store.selectedModelId}
         onModelChange={store.setSelectedModelId}
