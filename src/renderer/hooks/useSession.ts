@@ -63,6 +63,25 @@ declare global {
       selectDirectory: () => Promise<string | null>;
       openConfigDir: () => Promise<void>;
       openAudioFolder: (sessionId: number) => Promise<void>;
+      summarize: (sessionId: number) => Promise<{
+        id: number;
+        session_id: number;
+        content: string;
+        model_name: string;
+        provider_id: string;
+        created_at: string;
+      }>;
+      listSummaries: (sessionId: number) => Promise<
+        {
+          id: number;
+          session_id: number;
+          content: string;
+          model_name: string;
+          provider_id: string;
+          created_at: string;
+        }[]
+      >;
+      deleteSummary: (summaryId: number) => Promise<void>;
     };
   }
 }

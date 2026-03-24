@@ -8,6 +8,15 @@ export interface WindowBounds {
   readonly height: number;
 }
 
+export interface LlmProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly isPreset: boolean;
+}
+
 export interface AppConfig {
   readonly dataDir: string | null;
   readonly selectedAudioDeviceId: string | null;
@@ -15,6 +24,8 @@ export interface AppConfig {
   readonly modelRegistryUrl: string | null;
   readonly hfMirrorUrl: string | null;
   readonly windowBounds: WindowBounds | null;
+  readonly llmProviders: LlmProvider[];
+  readonly selectedLlmProviderId: string | null;
 }
 
 const CONFIG_FILENAME = "config.json";
@@ -26,6 +37,8 @@ const DEFAULT_CONFIG: AppConfig = {
   modelRegistryUrl: null,
   hfMirrorUrl: null,
   windowBounds: null,
+  llmProviders: [],
+  selectedLlmProviderId: null,
 };
 
 export function readConfig(configDir: string): AppConfig {

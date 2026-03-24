@@ -11,6 +11,15 @@ interface ModelInfo {
   readonly description: string;
 }
 
+export interface LlmProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly isPreset: boolean;
+}
+
 interface SettingsModalProps {
   readonly dataDir: string | null;
   readonly configDir: string | null;
@@ -23,12 +32,18 @@ interface SettingsModalProps {
   readonly isRecording: boolean;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly llmProviders: readonly LlmProvider[];
+  readonly selectedLlmProviderId: string | null;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly onSaveLlmProviders: (
+    providers: LlmProvider[],
+    selectedId: string | null,
+  ) => void;
   readonly onClose: () => void;
 }
 
@@ -58,11 +73,12 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-type TabId = "general" | "speech-models";
+type TabId = "general" | "speech-models" | "language-models";
 
 const TABS: readonly { readonly id: TabId; readonly label: string }[] = [
   { id: "general", label: "General" },
   { id: "speech-models", label: "Speech Models" },
+  { id: "language-models", label: "Language Models" },
 ];
 
 /* ─── Small reusable components ─── */
@@ -639,8 +655,7 @@ function SpeechModelsTab({
               border: "1px solid var(--border)",
               backgroundColor: "transparent",
               color: "var(--text-muted)",
-              cursor:
-                editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+              cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
               opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
               whiteSpace: "nowrap",
             }}
@@ -701,9 +716,7 @@ function SpeechModelsTab({
               backgroundColor: "var(--accent)",
               color: "white",
               cursor:
-                isSearching || !searchQuery.trim()
-                  ? "not-allowed"
-                  : "pointer",
+                isSearching || !searchQuery.trim() ? "not-allowed" : "pointer",
               opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
               whiteSpace: "nowrap",
             }}
@@ -891,6 +904,533 @@ function SpeechModelsTab({
   );
 }
 
+/* ─── Preset LLM provider templates ─── */
+
+const PRESET_PROVIDERS: readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+}[] = [
+  { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
+];
+
+/* ─── Tab: Language Models ─── */
+
+function LanguageModelsTab({
+  llmProviders,
+  selectedLlmProviderId,
+  onSave,
+}: {
+  readonly llmProviders: readonly LlmProvider[];
+  readonly selectedLlmProviderId: string | null;
+  readonly onSave: (
+    providers: LlmProvider[],
+    selectedId: string | null,
+  ) => void;
+}): React.ReactElement {
+  const [providers, setProviders] = useState<LlmProvider[]>([...llmProviders]);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    selectedLlmProviderId,
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    baseUrl: "",
+    apiKey: "",
+    model: "",
+  });
+
+  const save = useCallback(
+    (next: LlmProvider[], nextSelectedId: string | null) => {
+      setProviders(next);
+      setSelectedId(nextSelectedId);
+      onSave(next, nextSelectedId);
+    },
+    [onSave],
+  );
+
+  const handleAddPreset = useCallback(
+    (presetId: string) => {
+      const preset = PRESET_PROVIDERS.find((p) => p.id === presetId);
+      if (!preset) return;
+      if (providers.some((p) => p.id === preset.id)) return;
+      const newProvider: LlmProvider = {
+        id: preset.id,
+        name: preset.name,
+        baseUrl: preset.baseUrl,
+        apiKey: "",
+        model: "",
+        isPreset: true,
+      };
+      const next = [...providers, newProvider];
+      save(next, selectedId);
+      // Open edit form for the new provider
+      setEditingId(newProvider.id);
+      setEditForm({
+        name: newProvider.name,
+        baseUrl: newProvider.baseUrl,
+        apiKey: "",
+        model: "",
+      });
+    },
+    [providers, selectedId, save],
+  );
+
+  const handleAddCustom = useCallback(() => {
+    const id = `custom-${Date.now()}`;
+    const newProvider: LlmProvider = {
+      id,
+      name: "Custom Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+      isPreset: false,
+    };
+    const next = [...providers, newProvider];
+    save(next, selectedId);
+    setEditingId(id);
+    setEditForm({
+      name: "Custom Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+    });
+  }, [providers, selectedId, save]);
+
+  const handleEdit = useCallback(
+    (provider: LlmProvider) => {
+      if (editingId === provider.id) {
+        setEditingId(null);
+        return;
+      }
+      setEditingId(provider.id);
+      setEditForm({
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+      });
+    },
+    [editingId],
+  );
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editingId) return;
+    const next = providers.map((p) =>
+      p.id === editingId
+        ? {
+            ...p,
+            name: p.isPreset ? p.name : editForm.name,
+            baseUrl: p.isPreset ? p.baseUrl : editForm.baseUrl,
+            apiKey: editForm.apiKey,
+            model: editForm.model,
+          }
+        : p,
+    );
+    save(next, selectedId);
+    setEditingId(null);
+  }, [editingId, editForm, providers, selectedId, save]);
+
+  const handleDelete = useCallback(
+    (providerId: string) => {
+      const next = providers.filter((p) => p.id !== providerId);
+      const nextSelected = selectedId === providerId ? null : selectedId;
+      save(next, nextSelected);
+      if (editingId === providerId) setEditingId(null);
+    },
+    [providers, selectedId, editingId, save],
+  );
+
+  const handleUse = useCallback(
+    (providerId: string) => {
+      save([...providers], providerId);
+    },
+    [providers, save],
+  );
+
+  const availablePresets = PRESET_PROVIDERS.filter(
+    (preset) => !providers.some((p) => p.id === preset.id),
+  );
+
+  return (
+    <>
+      {/* Add buttons */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+        {availablePresets.length > 0 && (
+          <select
+            onChange={(e) => {
+              if (e.target.value) handleAddPreset(e.target.value);
+              e.target.value = "";
+            }}
+            defaultValue=""
+            style={{
+              padding: "6px 10px",
+              fontSize: "12px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--bg-tertiary)",
+              color: "var(--text-primary)",
+              cursor: "pointer",
+            }}
+          >
+            <option value="" disabled>
+              Add Preset...
+            </option>
+            {availablePresets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button
+          onClick={handleAddCustom}
+          style={{
+            padding: "6px 14px",
+            fontSize: "12px",
+            borderRadius: "6px",
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--bg-tertiary)",
+            color: "var(--text-primary)",
+            cursor: "pointer",
+          }}
+        >
+          + Custom
+        </button>
+      </div>
+
+      {/* Provider list */}
+      {providers.length === 0 && (
+        <div
+          style={{
+            padding: "24px",
+            textAlign: "center",
+            color: "var(--text-muted)",
+            fontSize: "13px",
+          }}
+        >
+          No Language Model providers configured. Add a preset or custom
+          provider to enable summarization.
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {providers.map((provider) => {
+          const isActive = selectedId === provider.id;
+          const isConfigured = Boolean(provider.apiKey && provider.model);
+          const isEditing = editingId === provider.id;
+
+          return (
+            <div
+              key={provider.id}
+              style={{
+                padding: "12px",
+                backgroundColor: isActive
+                  ? "var(--bg-tertiary)"
+                  : "transparent",
+                border: isActive
+                  ? "1px solid var(--accent)"
+                  : "1px solid var(--border)",
+                borderRadius: "8px",
+                transition: "border-color 0.2s",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      {provider.name}
+                    </span>
+                    {provider.isPreset && (
+                      <span
+                        style={{
+                          ...tagStyle,
+                          backgroundColor: "rgba(99, 102, 241, 0.15)",
+                          color: "#6366f1",
+                        }}
+                      >
+                        Preset
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        ...tagStyle,
+                        backgroundColor: isConfigured
+                          ? "rgba(34, 197, 94, 0.15)"
+                          : "rgba(239, 68, 68, 0.15)",
+                        color: isConfigured ? "#22c55e" : "#ef4444",
+                      }}
+                    >
+                      {isConfigured ? "Configured" : "Not configured"}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--text-muted)",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {provider.baseUrl || "No URL set"}
+                    {provider.model ? ` \u00b7 ${provider.model}` : ""}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "6px",
+                    marginLeft: "8px",
+                    flexShrink: 0,
+                    alignItems: "center",
+                  }}
+                >
+                  {isConfigured && !isActive && (
+                    <button
+                      onClick={() => handleUse(provider.id)}
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: "1px solid var(--accent)",
+                        backgroundColor: "transparent",
+                        color: "var(--accent)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Use
+                    </button>
+                  )}
+                  {isActive && (
+                    <span
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: "11px",
+                        color: "var(--accent)",
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Active
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleEdit(provider)}
+                    style={{
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      borderRadius: "5px",
+                      border: "1px solid var(--border)",
+                      backgroundColor: "transparent",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isEditing ? "Cancel" : "Edit"}
+                  </button>
+                  {!provider.isPreset && (
+                    <button
+                      onClick={() => handleDelete(provider.id)}
+                      style={{
+                        padding: "5px 8px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: "1px solid var(--border)",
+                        backgroundColor: "transparent",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      title="Delete provider"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Edit form */}
+              {isEditing && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  {!provider.isPreset && (
+                    <>
+                      <div>
+                        <div style={labelStyle}>Name</div>
+                        <input
+                          type="text"
+                          value={editForm.name}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              name: e.target.value,
+                            })
+                          }
+                          style={{
+                            width: "100%",
+                            padding: "6px 8px",
+                            fontSize: "12px",
+                            backgroundColor: "var(--bg-primary)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "4px",
+                            outline: "none",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <div style={labelStyle}>Base URL</div>
+                        <input
+                          type="text"
+                          value={editForm.baseUrl}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              baseUrl: e.target.value,
+                            })
+                          }
+                          placeholder="https://api.example.com/v1"
+                          style={{
+                            width: "100%",
+                            padding: "6px 8px",
+                            fontSize: "12px",
+                            backgroundColor: "var(--bg-primary)",
+                            color: "var(--text-primary)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "4px",
+                            outline: "none",
+                            fontFamily: "monospace",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <div style={labelStyle}>API Key</div>
+                    <input
+                      type="password"
+                      value={editForm.apiKey}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          apiKey: e.target.value,
+                        })
+                      }
+                      placeholder="sk-..."
+                      style={{
+                        width: "100%",
+                        padding: "6px 8px",
+                        fontSize: "12px",
+                        backgroundColor: "var(--bg-primary)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "4px",
+                        outline: "none",
+                        fontFamily: "monospace",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div style={labelStyle}>Model Name</div>
+                    <input
+                      type="text"
+                      value={editForm.model}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          model: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. gpt-4o, deepseek-chat"
+                      style={{
+                        width: "100%",
+                        padding: "6px 8px",
+                        fontSize: "12px",
+                        backgroundColor: "var(--bg-primary)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "4px",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      marginTop: "4px",
+                    }}
+                  >
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={!editForm.apiKey || !editForm.model}
+                      style={{
+                        padding: "6px 14px",
+                        fontSize: "12px",
+                        borderRadius: "6px",
+                        border: "none",
+                        backgroundColor: "var(--accent)",
+                        color: "white",
+                        cursor:
+                          !editForm.apiKey || !editForm.model
+                            ? "not-allowed"
+                            : "pointer",
+                        opacity: !editForm.apiKey || !editForm.model ? 0.5 : 1,
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 /* ─── Main Settings Modal ─── */
 
 export function SettingsModal({
@@ -905,12 +1445,15 @@ export function SettingsModal({
   isRecording,
   hfMirrorUrl,
   defaultHfUrl,
+  llmProviders,
+  selectedLlmProviderId,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
+  onSaveLlmProviders,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -995,9 +1538,7 @@ export function SettingsModal({
                 fontSize: "13px",
                 fontWeight: activeTab === tab.id ? 600 : 400,
                 color:
-                  activeTab === tab.id
-                    ? "var(--accent)"
-                    : "var(--text-muted)",
+                  activeTab === tab.id ? "var(--accent)" : "var(--text-muted)",
                 background: "none",
                 border: "none",
                 borderBottom:
@@ -1046,6 +1587,13 @@ export function SettingsModal({
               onDeleteModel={onDeleteModel}
               onSearchModels={onSearchModels}
               onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+            />
+          )}
+          {activeTab === "language-models" && (
+            <LanguageModelsTab
+              llmProviders={llmProviders}
+              selectedLlmProviderId={selectedLlmProviderId}
+              onSave={onSaveLlmProviders}
             />
           )}
         </div>

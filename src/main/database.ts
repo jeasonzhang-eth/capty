@@ -13,6 +13,13 @@ export interface AddSegmentOpts {
   readonly isFinal: boolean;
 }
 
+export interface AddSummaryOpts {
+  readonly sessionId: number;
+  readonly content: string;
+  readonly modelName: string;
+  readonly providerId: string;
+}
+
 export interface UpdateSessionFields {
   readonly status?: string;
   readonly durationSeconds?: number;
@@ -44,6 +51,18 @@ function initTables(db: Database.Database): void {
       text TEXT NOT NULL,
       audio_path TEXT NOT NULL,
       is_final INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (session_id) REFERENCES sessions(id)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      model_name TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT (datetime('now')),
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     )
   `);
@@ -109,6 +128,7 @@ export function deleteSegmentsBySession(
 }
 
 export function deleteSession(db: Database.Database, id: number): void {
+  deleteSummariesBySession(db, id);
   deleteSegmentsBySession(db, id);
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
 }
@@ -149,4 +169,38 @@ export function updateSession(
   const sql = `UPDATE sessions SET ${setClauses.join(", ")} WHERE id = ?`;
   values.push(id);
   db.prepare(sql).run(...values);
+}
+
+export function addSummary(
+  db: Database.Database,
+  opts: AddSummaryOpts,
+): number {
+  const stmt = db.prepare(
+    "INSERT INTO summaries (session_id, content, model_name, provider_id) VALUES (?, ?, ?, ?)",
+  );
+  const result = stmt.run(
+    opts.sessionId,
+    opts.content,
+    opts.modelName,
+    opts.providerId,
+  );
+  return result.lastInsertRowid as number;
+}
+
+export function getSummaries(db: Database.Database, sessionId: number): any[] {
+  const stmt = db.prepare(
+    "SELECT * FROM summaries WHERE session_id = ? ORDER BY created_at ASC",
+  );
+  return stmt.all(sessionId);
+}
+
+export function deleteSummary(db: Database.Database, id: number): void {
+  db.prepare("DELETE FROM summaries WHERE id = ?").run(id);
+}
+
+export function deleteSummariesBySession(
+  db: Database.Database,
+  sessionId: number,
+): void {
+  db.prepare("DELETE FROM summaries WHERE session_id = ?").run(sessionId);
 }

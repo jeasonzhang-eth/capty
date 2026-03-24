@@ -92,6 +92,14 @@ const api = {
   // Export save file
   saveFile: (defaultName: string, content: string) =>
     ipcRenderer.invoke("export:save-file", defaultName, content),
+
+  // LLM Summarization
+  summarize: (sessionId: number) =>
+    ipcRenderer.invoke("llm:summarize", sessionId),
+  listSummaries: (sessionId: number) =>
+    ipcRenderer.invoke("summary:list", sessionId),
+  deleteSummary: (summaryId: number) =>
+    ipcRenderer.invoke("summary:delete", summaryId),
 };
 
 if (process.contextIsolated) {

@@ -5,7 +5,8 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import { SettingsModal } from "./components/SettingsModal";
+import { SettingsModal, LlmProvider } from "./components/SettingsModal";
+import { SummaryPanel, Summary } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
@@ -94,6 +95,17 @@ function App(): React.JSX.Element {
   const DEFAULT_HF_URL = "https://huggingface.co";
   const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
 
+  // LLM provider state
+  const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
+  const [selectedLlmProviderId, setSelectedLlmProviderId] = useState<
+    string | null
+  >(null);
+
+  // Summary state
+  const [summaries, setSummaries] = useState<Summary[]>([]);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
       (m: { id: string }) => m.id === store.selectedModelId,
@@ -157,6 +169,16 @@ function App(): React.JSX.Element {
         const savedHfUrl = config.hfMirrorUrl as string | null;
         if (savedHfUrl) {
           setHfMirrorUrl(savedHfUrl);
+        }
+
+        // Restore LLM providers
+        const savedProviders = config.llmProviders as LlmProvider[] | undefined;
+        if (savedProviders?.length) {
+          setLlmProviders(savedProviders);
+        }
+        const savedLlmId = config.selectedLlmProviderId as string | null;
+        if (savedLlmId) {
+          setSelectedLlmProviderId(savedLlmId);
         }
 
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
@@ -335,6 +357,10 @@ function App(): React.JSX.Element {
             text: s.text,
           })),
         );
+        // Load summaries for this session
+        const sessionSummaries = await window.capty.listSummaries(sessionId);
+        setSummaries(sessionSummaries as Summary[]);
+        setGenerateError(null);
       } catch (err) {
         console.error("Failed to load session:", err);
       }
@@ -354,6 +380,7 @@ function App(): React.JSX.Element {
         if (store.currentSessionId === sessionId) {
           store.setCurrentSessionId(null);
           store.clearSegments();
+          setSummaries([]);
         }
         await store.loadSessions();
       } catch (err) {
@@ -680,6 +707,37 @@ function App(): React.JSX.Element {
     });
   }, []);
 
+  const handleSaveLlmProviders = useCallback(
+    async (providers: LlmProvider[], selectedId: string | null) => {
+      setLlmProviders(providers);
+      setSelectedLlmProviderId(selectedId);
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({
+        ...config,
+        llmProviders: providers,
+        selectedLlmProviderId: selectedId,
+      });
+    },
+    [],
+  );
+
+  const handleSummarize = useCallback(async () => {
+    if (!store.currentSessionId || isGeneratingSummary) return;
+    setIsGeneratingSummary(true);
+    setGenerateError(null);
+    try {
+      const result = await window.capty.summarize(store.currentSessionId);
+      setSummaries((prev) => [...prev, result as Summary]);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to generate summary";
+      console.error("Summarize error:", err);
+      setGenerateError(msg);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  }, [store.currentSessionId, isGeneratingSummary]);
+
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
     audioCapture.setOnDeviceRemoved(() => {
@@ -741,6 +799,20 @@ function App(): React.JSX.Element {
           partialText={store.partialText}
           isRecording={store.isRecording}
         />
+        <SummaryPanel
+          summaries={summaries}
+          isGenerating={isGeneratingSummary}
+          generateError={generateError}
+          currentSessionId={store.currentSessionId}
+          hasSegments={store.segments.length > 0}
+          hasLlmProvider={
+            selectedLlmProviderId !== null &&
+            llmProviders.some(
+              (p) => p.id === selectedLlmProviderId && p.apiKey && p.model,
+            )
+          }
+          onSummarize={handleSummarize}
+        />
       </div>
       {audioPlayer.playingSessionId !== null && (
         <PlaybackBar
@@ -781,12 +853,15 @@ function App(): React.JSX.Element {
           isRecording={store.isRecording}
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
+          llmProviders={llmProviders}
+          selectedLlmProviderId={selectedLlmProviderId}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
           onDeleteModel={handleDeleteModel}
           onSearchModels={handleSearchModels}
           onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
+          onSaveLlmProviders={handleSaveLlmProviders}
           onClose={() => setShowSettings(false)}
         />
       )}
