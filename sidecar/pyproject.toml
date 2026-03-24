@@ -8,6 +8,7 @@ dependencies = [
     "websockets>=14.0",
     "torch>=2.0",
     "qwen-asr>=0.0.6",
+    "transformers>=4.40",
 ]
 
 [project.optional-dependencies]

@@ -19,9 +19,12 @@ interface SessionSummary {
 interface ModelInfo {
   readonly id: string;
   readonly name: string;
+  readonly type: string;
   readonly repo: string;
   readonly downloaded: boolean;
   readonly size_gb: number;
+  readonly languages: readonly string[];
+  readonly description: string;
 }
 
 interface AppState {

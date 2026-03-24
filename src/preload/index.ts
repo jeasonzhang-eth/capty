@@ -46,6 +46,9 @@ const api = {
 
   // Models
   listModels: () => ipcRenderer.invoke("models:list"),
+  refreshModels: () => ipcRenderer.invoke("models:refresh"),
+  deleteModel: (modelId: string) =>
+    ipcRenderer.invoke("models:delete", modelId),
 
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),

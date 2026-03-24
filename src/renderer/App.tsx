@@ -81,6 +81,9 @@ function App(): React.JSX.Element {
 
   // Model download state
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
+    null,
+  );
   const [downloadProgress, setDownloadProgress] = useState(0);
 
   const handleDownloadModel = useCallback(async () => {
@@ -93,6 +96,7 @@ function App(): React.JSX.Element {
     if (!dataDir) return;
 
     setIsDownloading(true);
+    setDownloadingModelId(model.id);
     setDownloadProgress(0);
 
     const unsubscribe = window.capty.onDownloadProgress((progress) => {
@@ -105,20 +109,13 @@ function App(): React.JSX.Element {
 
       // Refresh models list
       const models = await window.capty.listModels();
-      store.setModels(
-        models as {
-          id: string;
-          name: string;
-          repo: string;
-          downloaded: boolean;
-          size_gb: number;
-        }[],
-      );
+      store.setModels(models as Parameters<typeof store.setModels>[0]);
     } catch (err) {
       console.error("Failed to download model:", err);
     } finally {
       unsubscribe();
       setIsDownloading(false);
+      setDownloadingModelId(null);
       setDownloadProgress(0);
     }
   }, [store, isDownloading]);
@@ -171,15 +168,7 @@ function App(): React.JSX.Element {
         // Load models
         try {
           const models = await window.capty.listModels();
-          store.setModels(
-            models as {
-              id: string;
-              name: string;
-              repo: string;
-              downloaded: boolean;
-              size_gb: number;
-            }[],
-          );
+          store.setModels(models as Parameters<typeof store.setModels>[0]);
         } catch {
           // Models not available yet
         }
@@ -568,10 +557,8 @@ function App(): React.JSX.Element {
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
-      // Select the model being downloaded
-      store.setSelectedModelId(modelId);
-
       setIsDownloading(true);
+      setDownloadingModelId(modelId);
       setDownloadProgress(0);
 
       const unsubscribe = window.capty.onDownloadProgress((progress) => {
@@ -583,25 +570,52 @@ function App(): React.JSX.Element {
         await window.capty.downloadModel(model.repo, destDir);
 
         const models = await window.capty.listModels();
-        store.setModels(
-          models as {
-            id: string;
-            name: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-          }[],
-        );
+        store.setModels(models as Parameters<typeof store.setModels>[0]);
       } catch (err) {
         console.error("Failed to download model:", err);
       } finally {
         unsubscribe();
         setIsDownloading(false);
+        setDownloadingModelId(null);
         setDownloadProgress(0);
       }
     },
     [store, isDownloading],
   );
+
+  const handleDeleteModel = useCallback(
+    async (modelId: string) => {
+      try {
+        await window.capty.deleteModel(modelId);
+
+        // Refresh models list
+        const models = await window.capty.listModels();
+        store.setModels(models as Parameters<typeof store.setModels>[0]);
+
+        // If deleted model was selected, switch to first downloaded model
+        if (store.selectedModelId === modelId) {
+          const firstDownloaded = (
+            models as { id: string; downloaded: boolean }[]
+          ).find((m) => m.downloaded);
+          if (firstDownloaded) {
+            store.setSelectedModelId(firstDownloaded.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to delete model:", err);
+      }
+    },
+    [store],
+  );
+
+  const handleRefreshModels = useCallback(async () => {
+    try {
+      const models = await window.capty.refreshModels();
+      store.setModels(models as Parameters<typeof store.setModels>[0]);
+    } catch (err) {
+      console.error("Failed to refresh models:", err);
+    }
+  }, [store]);
 
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
@@ -697,11 +711,14 @@ function App(): React.JSX.Element {
           models={store.models}
           selectedModelId={store.selectedModelId}
           isDownloading={isDownloading}
+          downloadingModelId={downloadingModelId}
           downloadProgress={downloadProgress}
           isRecording={store.isRecording}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSettingsSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
+          onDeleteModel={handleDeleteModel}
+          onRefreshModels={handleRefreshModels}
           onClose={() => setShowSettings(false)}
         />
       )}

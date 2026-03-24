@@ -9,6 +9,7 @@ interface ControlBarProps {
   readonly models: readonly {
     id: string;
     name: string;
+    type: string;
     downloaded: boolean;
     size_gb: number;
   }[];
@@ -116,7 +117,7 @@ export function ControlBar({
       >
         {models.map((m) => (
           <option key={m.id} value={m.id} disabled={!m.downloaded}>
-            {m.name}
+            [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
             {!m.downloaded ? " (not downloaded)" : ""}
           </option>
         ))}

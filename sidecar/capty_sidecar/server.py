@@ -69,7 +69,11 @@ def create_app(models_dir: str) -> FastAPI:
         # Unload current model (if any) and load the new one
         runner.unload()
         try:
-            runner.load(body.model, models_dir=Path(models_dir))
+            runner.load(
+                body.model,
+                models_dir=Path(models_dir),
+                model_type=model_info.get("type", "qwen-asr"),
+            )
         except Exception as exc:
             logger.exception("Failed to load model %s", body.model)
             raise HTTPException(
@@ -129,11 +133,18 @@ def create_app(models_dir: str) -> FastAPI:
                                     "message": f"Model '{session_model}' is not downloaded",
                                 })
                                 continue
+                            model_info = registry.get_model_info(session_model)
+                            model_type = (
+                                model_info.get("type", "qwen-asr")
+                                if model_info
+                                else "qwen-asr"
+                            )
                             try:
                                 runner.unload()
                                 runner.load(
                                     session_model,
                                     models_dir=Path(models_dir),
+                                    model_type=model_type,
                                 )
                             except Exception as exc:
                                 await ws.send_json({

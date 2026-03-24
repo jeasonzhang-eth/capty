@@ -1,10 +1,14 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 
 interface ModelInfo {
   readonly id: string;
   readonly name: string;
+  readonly type: string;
+  readonly repo: string;
   readonly downloaded: boolean;
   readonly size_gb: number;
+  readonly languages: readonly string[];
+  readonly description: string;
 }
 
 interface SettingsModalProps {
@@ -12,11 +16,14 @@ interface SettingsModalProps {
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
+  readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
   readonly isRecording: boolean;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (modelId: string) => void;
+  readonly onDeleteModel: (modelId: string) => void;
+  readonly onRefreshModels: () => void;
   readonly onClose: () => void;
 }
 
@@ -37,24 +44,111 @@ const labelStyle: React.CSSProperties = {
   marginBottom: "4px",
 };
 
+const tagStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "2px 6px",
+  borderRadius: "4px",
+  fontSize: "10px",
+  fontWeight: 600,
+  lineHeight: "14px",
+};
+
+function TypeTag({ type }: { readonly type: string }): React.ReactElement {
+  const isWhisper = type === "whisper";
+  return (
+    <span
+      style={{
+        ...tagStyle,
+        backgroundColor: isWhisper
+          ? "rgba(16, 163, 127, 0.15)"
+          : "rgba(99, 102, 241, 0.15)",
+        color: isWhisper ? "#10a37f" : "#6366f1",
+      }}
+    >
+      {isWhisper ? "Whisper" : "Qwen"}
+    </span>
+  );
+}
+
+function LanguageTags({
+  languages,
+}: {
+  readonly languages: readonly string[];
+}): React.ReactElement {
+  return (
+    <>
+      {languages.map((lang) => (
+        <span
+          key={lang}
+          style={{
+            ...tagStyle,
+            backgroundColor: "rgba(255, 255, 255, 0.08)",
+            color: "var(--text-muted)",
+          }}
+        >
+          {lang}
+        </span>
+      ))}
+    </>
+  );
+}
+
 export function SettingsModal({
   dataDir,
   models,
   selectedModelId,
   isDownloading,
+  downloadingModelId,
   downloadProgress,
   isRecording,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
+  onDeleteModel,
+  onRefreshModels,
   onClose,
 }: SettingsModalProps): React.ReactElement {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.target === e.currentTarget) onClose();
     },
     [onClose],
   );
+
+  const handleDelete = useCallback(
+    (modelId: string) => {
+      const model = models.find((m) => m.id === modelId);
+      if (!model) return;
+
+      if (modelId === selectedModelId) {
+        // Cannot delete active model — user must switch first
+        return;
+      }
+
+      setConfirmDeleteId(modelId);
+    },
+    [models, selectedModelId],
+  );
+
+  const confirmDelete = useCallback(() => {
+    if (confirmDeleteId) {
+      onDeleteModel(confirmDeleteId);
+      setConfirmDeleteId(null);
+    }
+  }, [confirmDeleteId, onDeleteModel]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      onRefreshModels();
+    } finally {
+      // Small delay to show the refreshing state
+      setTimeout(() => setIsRefreshing(false), 1000);
+    }
+  }, [onRefreshModels]);
 
   return (
     <div
@@ -78,7 +172,7 @@ export function SettingsModal({
           border: "1px solid var(--border)",
           borderRadius: "12px",
           padding: "24px",
-          width: "420px",
+          width: "480px",
           maxHeight: "80vh",
           overflowY: "auto",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
@@ -161,11 +255,36 @@ export function SettingsModal({
           </div>
         </div>
 
-        {/* Models */}
+        {/* Model Marketplace */}
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Models</div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "12px",
+            }}
+          >
+            <div style={sectionTitleStyle}>Models</div>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              style={{
+                padding: "4px 10px",
+                fontSize: "11px",
+                borderRadius: "5px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-secondary)",
+                cursor: isRefreshing ? "not-allowed" : "pointer",
+                opacity: isRefreshing ? 0.6 : 1,
+              }}
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
           <div style={labelStyle}>
-            Select the ASR model for transcription.
+            Browse and manage ASR models for transcription.
           </div>
           <div
             style={{
@@ -177,7 +296,8 @@ export function SettingsModal({
           >
             {models.map((model) => {
               const isSelected = model.id === selectedModelId;
-              const isCurrentDownloading = isDownloading && isSelected;
+              const isThisDownloading =
+                isDownloading && downloadingModelId === model.id;
 
               return (
                 <div
@@ -191,39 +311,95 @@ export function SettingsModal({
                       ? "1px solid var(--accent)"
                       : "1px solid var(--border)",
                     borderRadius: "8px",
+                    transition: "border-color 0.2s",
                   }}
                 >
+                  {/* Top row: name + tags + action buttons */}
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      alignItems: "center",
+                      alignItems: "flex-start",
                     }}
                   >
-                    <div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          fontSize: "13px",
-                          fontWeight: 600,
-                          color: "var(--text-primary)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          flexWrap: "wrap",
                         }}
                       >
-                        {model.name}
+                        <span
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            color: "var(--text-primary)",
+                          }}
+                        >
+                          {model.name}
+                        </span>
+                        <TypeTag type={model.type} />
                       </div>
+                      {/* Description */}
                       <div
                         style={{
                           fontSize: "11px",
                           color: "var(--text-muted)",
-                          marginTop: "2px",
+                          marginTop: "4px",
+                          lineHeight: "16px",
                         }}
                       >
-                        {model.size_gb} GB
-                        {model.downloaded && " · Downloaded"}
-                        {!model.downloaded && " · Not downloaded"}
+                        {model.description}
+                      </div>
+                      {/* Meta: size + languages */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginTop: "6px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            ...tagStyle,
+                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {model.size_gb < 1
+                            ? `${Math.round(model.size_gb * 1024)} MB`
+                            : `${model.size_gb} GB`}
+                        </span>
+                        <LanguageTags languages={model.languages} />
+                        {model.downloaded && (
+                          <span
+                            style={{
+                              ...tagStyle,
+                              backgroundColor: "rgba(34, 197, 94, 0.15)",
+                              color: "#22c55e",
+                            }}
+                          >
+                            Downloaded
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      {!model.downloaded && !isCurrentDownloading && (
+
+                    {/* Action buttons */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "6px",
+                        marginLeft: "8px",
+                        flexShrink: 0,
+                        alignItems: "center",
+                      }}
+                    >
+                      {!model.downloaded && !isThisDownloading && (
                         <button
                           onClick={() => onDownloadModel(model.id)}
                           disabled={isRecording || isDownloading}
@@ -239,6 +415,7 @@ export function SettingsModal({
                                 ? "not-allowed"
                                 : "pointer",
                             opacity: isRecording || isDownloading ? 0.5 : 1,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           Download
@@ -257,6 +434,7 @@ export function SettingsModal({
                             color: "var(--accent)",
                             cursor: isRecording ? "not-allowed" : "pointer",
                             opacity: isRecording ? 0.5 : 1,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           Use
@@ -269,16 +447,40 @@ export function SettingsModal({
                             fontSize: "11px",
                             color: "var(--accent)",
                             fontWeight: 600,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           Active
                         </span>
                       )}
+                      {model.downloaded && !isSelected && (
+                        <button
+                          onClick={() => handleDelete(model.id)}
+                          disabled={isRecording || isDownloading}
+                          style={{
+                            padding: "5px 8px",
+                            fontSize: "11px",
+                            borderRadius: "5px",
+                            border: "1px solid var(--border)",
+                            backgroundColor: "transparent",
+                            color: "var(--text-muted)",
+                            cursor:
+                              isRecording || isDownloading
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: isRecording || isDownloading ? 0.5 : 1,
+                            whiteSpace: "nowrap",
+                          }}
+                          title="Delete model"
+                        >
+                          &times;
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   {/* Download progress */}
-                  {isCurrentDownloading && (
+                  {isThisDownloading && (
                     <div style={{ marginTop: "8px" }}>
                       <div
                         style={{
@@ -328,6 +530,99 @@ export function SettingsModal({
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteId !== null && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 4000,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmDeleteId(null);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              padding: "20px",
+              width: "320px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                marginBottom: "8px",
+              }}
+            >
+              Delete Model
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-secondary)",
+                marginBottom: "16px",
+                lineHeight: "18px",
+              }}
+            >
+              Are you sure you want to delete{" "}
+              <strong>
+                {models.find((m) => m.id === confirmDeleteId)?.name}
+              </strong>
+              ? The downloaded model files will be permanently removed.
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+              }}
+            >
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "12px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "12px",
+                  borderRadius: "6px",
+                  border: "none",
+                  backgroundColor: "#ef4444",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

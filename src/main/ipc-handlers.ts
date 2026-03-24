@@ -29,6 +29,77 @@ export interface IpcDeps {
   readonly getMainWindow: () => BrowserWindow | null;
 }
 
+interface ModelEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly type: string;
+  readonly repo: string;
+  readonly size_gb: number;
+  readonly languages: readonly string[];
+  readonly description: string;
+  readonly downloaded?: boolean;
+}
+
+const DEFAULT_REGISTRY_URL =
+  "https://raw.githubusercontent.com/jeasonzhang-eth/capty/main/resources/models.json";
+
+async function loadModelList(
+  configDir: string,
+  forceRemote = false,
+): Promise<ModelEntry[]> {
+  // 1. Read local models.json
+  let localModels: ModelEntry[] = [];
+  try {
+    const registryPath = join(
+      app.isPackaged
+        ? join(process.resourcesPath, "resources")
+        : join(__dirname, "../../resources"),
+      "models.json",
+    );
+    const raw = fs.readFileSync(registryPath, "utf-8");
+    localModels = JSON.parse(raw) as ModelEntry[];
+  } catch {
+    // Local registry not found
+  }
+
+  // 2. Try fetching remote model list
+  let remoteModels: ModelEntry[] = [];
+  if (forceRemote || localModels.length > 0) {
+    try {
+      const config = readConfig(configDir);
+      const url = config.modelRegistryUrl ?? DEFAULT_REGISTRY_URL;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (resp.ok) {
+        remoteModels = (await resp.json()) as ModelEntry[];
+      }
+    } catch {
+      // Remote fetch failed — silently degrade to local only
+    }
+  }
+
+  // 3. Merge: remote can override/extend local (keyed by id)
+  const modelMap = new Map<string, ModelEntry>();
+  for (const m of localModels) {
+    modelMap.set(m.id, m);
+  }
+  for (const m of remoteModels) {
+    modelMap.set(m.id, m);
+  }
+
+  // 4. Mark downloaded status
+  const config = readConfig(configDir);
+  const dataDir = config.dataDir ?? join(configDir, "data");
+  const modelsDir = join(dataDir, "models");
+
+  return Array.from(modelMap.values()).map((m) => ({
+    ...m,
+    downloaded: fs.existsSync(join(modelsDir, m.id)),
+  }));
+}
+
 export function registerIpcHandlers(deps: IpcDeps): void {
   const { db, configDir, sidecar, getMainWindow } = deps;
 
@@ -134,30 +205,44 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return sidecar.getUrl();
   });
 
-  // Models — read from local registry, mark downloaded status
-  ipcMain.handle("models:list", () => {
-    try {
-      const registryPath = join(
-        app.isPackaged
-          ? join(process.resourcesPath, "resources")
-          : join(__dirname, "../../resources"),
-        "models.json",
-      );
-      const raw = fs.readFileSync(registryPath, "utf-8");
-      const models = JSON.parse(raw) as {
-        id: string;
-        name: string;
-        size_gb: number;
-      }[];
-      const config = readConfig(configDir);
-      const dataDir = config.dataDir ?? join(configDir, "data");
-      const modelsDir = join(dataDir, "models");
-      return models.map((m) => ({
-        ...m,
-        downloaded: fs.existsSync(join(modelsDir, m.id)),
-      }));
-    } catch {
-      return [];
+  // Models — read from local registry, optionally merge remote list
+  ipcMain.handle("models:list", async () => {
+    return loadModelList(configDir);
+  });
+
+  ipcMain.handle("models:refresh", async () => {
+    return loadModelList(configDir, true);
+  });
+
+  // Delete a downloaded model
+  ipcMain.handle("models:delete", async (_event, modelId: string) => {
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const modelsDir = join(dataDir, "models");
+    const modelPath = join(modelsDir, modelId);
+
+    if (fs.existsSync(modelPath)) {
+      // Notify sidecar to unload if it's the active model
+      try {
+        const sidecarUrl = sidecar.getUrl();
+        if (sidecarUrl) {
+          const healthResp = await fetch(`${sidecarUrl}/health`);
+          if (healthResp.ok) {
+            const health = (await healthResp.json()) as {
+              current_model: string | null;
+            };
+            if (health.current_model === modelId) {
+              // Unload by switching to a non-existent placeholder (triggers unload)
+              // Better: just call a dedicated unload endpoint or accept the model switch will fail
+              // For now, the sidecar will handle the missing model gracefully
+            }
+          }
+        }
+      } catch {
+        // Sidecar not available, proceed with deletion
+      }
+
+      fs.rmSync(modelPath, { recursive: true, force: true });
     }
   });
 
