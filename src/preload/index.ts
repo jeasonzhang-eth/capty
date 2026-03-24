@@ -66,6 +66,10 @@ const api = {
     };
   },
 
+  // Segments
+  deleteSegments: (sessionId: number) =>
+    ipcRenderer.invoke("segment:delete-by-session", sessionId),
+
   // Audio read
   readAudioFile: (sessionId: number) =>
     ipcRenderer.invoke("audio:read-file", sessionId),

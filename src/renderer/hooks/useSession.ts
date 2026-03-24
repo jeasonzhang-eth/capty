@@ -48,6 +48,7 @@ declare global {
       setConfig: (config: Record<string, unknown>) => Promise<void>;
       getSidecarUrl: () => Promise<string>;
       listModels: () => Promise<unknown[]>;
+      deleteSegments: (sessionId: number) => Promise<void>;
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
       getDataDir: () => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;

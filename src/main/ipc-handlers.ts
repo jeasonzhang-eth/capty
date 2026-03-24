@@ -11,6 +11,7 @@ import {
   getSegments,
   updateSession,
   deleteSession,
+  deleteSegmentsBySession,
 } from "./database";
 import {
   saveSegmentAudio,
@@ -71,6 +72,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle("segment:list", (_event, sessionId: number) => {
     return getSegments(db, sessionId);
+  });
+
+  ipcMain.handle("segment:delete-by-session", (_event, sessionId: number) => {
+    deleteSegmentsBySession(db, sessionId);
   });
 
   // Audio

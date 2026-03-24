@@ -101,8 +101,15 @@ export function getSegments(db: Database.Database, sessionId: number): any[] {
   return stmt.all(sessionId);
 }
 
+export function deleteSegmentsBySession(
+  db: Database.Database,
+  sessionId: number,
+): void {
+  db.prepare("DELETE FROM segments WHERE session_id = ?").run(sessionId);
+}
+
 export function deleteSession(db: Database.Database, id: number): void {
-  db.prepare("DELETE FROM segments WHERE session_id = ?").run(id);
+  deleteSegmentsBySession(db, id);
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
 }
 

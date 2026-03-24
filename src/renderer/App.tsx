@@ -60,6 +60,11 @@ function App(): React.JSX.Element {
     }, [transcription]),
   });
 
+  // Regeneration state
+  const [regeneratingSessionId, setRegeneratingSessionId] = useState<
+    number | null
+  >(null);
+
   // Model download state
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -165,6 +170,9 @@ function App(): React.JSX.Element {
   );
 
   const handleStart = useCallback(async () => {
+    // Block recording during subtitle regeneration
+    if (regeneratingSessionId !== null) return;
+
     // Stop any active playback before recording
     audioPlayer.stop();
 
@@ -223,7 +231,7 @@ function App(): React.JSX.Element {
         timerRef.current = null;
       }
     }
-  }, [session, store, transcription, audioCapture, vad]);
+  }, [session, store, transcription, audioCapture, vad, regeneratingSessionId]);
 
   const handleStop = useCallback(async () => {
     // Stop timer
@@ -296,6 +304,135 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleRegenerateSubtitles = useCallback(
+    async (sessionId: number) => {
+      if (regeneratingSessionId !== null || store.isRecording) return;
+
+      setRegeneratingSessionId(sessionId);
+
+      try {
+        // 1. Read audio file
+        const audioBuffer = await window.capty.readAudioFile(sessionId);
+        if (!audioBuffer) {
+          console.error("No audio file found for session", sessionId);
+          setRegeneratingSessionId(null);
+          return;
+        }
+
+        // 2. Delete old segments
+        await window.capty.deleteSegments(sessionId);
+
+        // 3. Clear in-memory segments if this session is currently viewed
+        if (store.currentSessionId === sessionId) {
+          store.clearSegments();
+        }
+
+        // 4. Connect to sidecar and re-transcribe
+        const sidecarUrl = await window.capty.getSidecarUrl();
+        const wsUrl = sidecarUrl.replace(/^http/, "ws") + "/ws/transcribe";
+        const ws = new WebSocket(wsUrl);
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("Connection timeout")),
+            15000,
+          );
+
+          ws.onopen = () => {
+            ws.send(
+              JSON.stringify({
+                type: "start",
+                model: store.selectedModelId,
+                language: "auto",
+              }),
+            );
+          };
+
+          ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data as string) as {
+              type: string;
+              text?: string;
+              segment_id?: number;
+              message?: string;
+            };
+
+            if (msg.type === "ready") {
+              clearTimeout(timeout);
+
+              // Skip 44-byte WAV header, send PCM data in chunks
+              const pcmData = new Uint8Array(audioBuffer, 44);
+              const chunkSize = 32000; // 1 second of 16kHz/16bit/mono
+              let offset = 0;
+
+              const sendInterval = setInterval(() => {
+                if (offset >= pcmData.length) {
+                  clearInterval(sendInterval);
+                  // Signal end of audio
+                  ws.send(JSON.stringify({ type: "segment_end" }));
+                  return;
+                }
+
+                const end = Math.min(offset + chunkSize, pcmData.length);
+                const chunk = pcmData.slice(offset, end);
+                ws.send(chunk.buffer);
+                offset = end;
+              }, 100); // ~10x real-time speed
+            } else if (msg.type === "partial") {
+              if (store.currentSessionId === sessionId) {
+                store.setPartialText(msg.text ?? "");
+              }
+            } else if (msg.type === "final") {
+              if (store.currentSessionId === sessionId) {
+                store.setPartialText("");
+              }
+              const text = msg.text ?? "";
+              if (text.trim()) {
+                // Save to DB
+                window.capty
+                  .addSegment({
+                    sessionId,
+                    startTime: 0,
+                    endTime: 0,
+                    text,
+                    audioPath: "",
+                    isFinal: true,
+                  })
+                  .then(() => {
+                    // Update in-memory if viewing this session
+                    if (store.currentSessionId === sessionId) {
+                      store.addSegment({
+                        id: Date.now(),
+                        start_time: 0,
+                        end_time: 0,
+                        text,
+                      });
+                    }
+                  });
+              }
+            } else if (msg.type === "error") {
+              console.error("Regeneration transcription error:", msg.message);
+            }
+          };
+
+          ws.onclose = () => {
+            setRegeneratingSessionId(null);
+            resolve();
+          };
+
+          ws.onerror = () => {
+            clearTimeout(timeout);
+            setRegeneratingSessionId(null);
+            reject(new Error("WebSocket connection failed"));
+          };
+        });
+      } catch (err) {
+        console.error("Failed to regenerate subtitles:", err);
+        setRegeneratingSessionId(null);
+      }
+    },
+    [regeneratingSessionId, store],
+  );
+
   // Sync transcription partial text to store
   useEffect(() => {
     store.setPartialText(transcription.partialText);
@@ -332,11 +469,13 @@ function App(): React.JSX.Element {
           sessions={store.sessions}
           currentSessionId={store.currentSessionId}
           playingSessionId={audioPlayer.playingSessionId}
+          regeneratingSessionId={regeneratingSessionId}
           isRecording={store.isRecording}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onPlaySession={handlePlaySession}
           onStopPlayback={audioPlayer.stop}
+          onRegenerateSubtitles={handleRegenerateSubtitles}
         />
         <TranscriptArea
           segments={store.segments}

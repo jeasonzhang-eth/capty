@@ -12,11 +12,13 @@ interface HistoryPanelProps {
   readonly sessions: readonly SessionSummary[];
   readonly currentSessionId: number | null;
   readonly playingSessionId: number | null;
+  readonly regeneratingSessionId: number | null;
   readonly isRecording: boolean;
   readonly onSelectSession: (id: number) => void;
   readonly onDeleteSession: (id: number) => void;
   readonly onPlaySession: (id: number) => void;
   readonly onStopPlayback: () => void;
+  readonly onRegenerateSubtitles: (id: number) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -47,11 +49,13 @@ export function HistoryPanel({
   sessions,
   currentSessionId,
   playingSessionId,
+  regeneratingSessionId,
   isRecording,
   onSelectSession,
   onDeleteSession,
   onPlaySession,
   onStopPlayback,
+  onRegenerateSubtitles,
 }: HistoryPanelProps): React.ReactElement {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -70,6 +74,13 @@ export function HistoryPanel({
   );
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const handleRegenerateClick = useCallback(() => {
+    if (contextMenu.sessionId !== null) {
+      onRegenerateSubtitles(contextMenu.sessionId);
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, onRegenerateSubtitles]);
 
   const handleDeleteClick = useCallback(() => {
     setConfirmDeleteId(contextMenu.sessionId);
@@ -224,6 +235,17 @@ export function HistoryPanel({
                 RECORDING
               </span>
             )}
+            {regeneratingSessionId === session.id && (
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "var(--accent)",
+                  fontWeight: 600,
+                }}
+              >
+                Regenerating...
+              </span>
+            )}
           </div>
         ))}
         {sessions.length === 0 && (
@@ -253,10 +275,40 @@ export function HistoryPanel({
             borderRadius: "6px",
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
             zIndex: 1000,
-            minWidth: "120px",
+            minWidth: "160px",
             padding: "4px 0",
           }}
         >
+          {(() => {
+            const targetSession = sessions.find(
+              (s) => s.id === contextMenu.sessionId,
+            );
+            const canRegenerate =
+              targetSession?.status === "completed" &&
+              regeneratingSessionId === null;
+            return (
+              canRegenerate && (
+                <div
+                  onClick={handleRegenerateClick}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    color: "var(--text-primary)",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.backgroundColor =
+                      "var(--bg-tertiary)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor = "transparent")
+                  }
+                >
+                  Regenerate Subtitles
+                </div>
+              )
+            );
+          })()}
           <div
             onClick={handleDeleteClick}
             style={{
