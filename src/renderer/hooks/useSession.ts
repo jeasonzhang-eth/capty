@@ -10,6 +10,7 @@ declare global {
         id: number,
         fields: Record<string, unknown>,
       ) => Promise<void>;
+      deleteSession: (id: number) => Promise<void>;
       addSegment: (opts: Record<string, unknown>) => Promise<number>;
       saveSegmentAudio: (
         sessionDir: string,
@@ -26,10 +27,19 @@ declare global {
       ) => Promise<string>;
       exportSrt: (sessionId: number) => Promise<string>;
       exportMarkdown: (sessionId: number) => Promise<string>;
+      downloadModel: (repo: string, destDir: string) => Promise<void>;
+      onDownloadProgress: (
+        callback: (progress: {
+          downloaded: number;
+          total: number;
+          percent: number;
+        }) => void,
+      ) => () => void;
       getConfig: () => Promise<Record<string, unknown>>;
       setConfig: (config: Record<string, unknown>) => Promise<void>;
       getSidecarUrl: () => Promise<string>;
       listModels: () => Promise<unknown[]>;
+      readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
       getDataDir: () => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
     };
@@ -62,6 +72,9 @@ export function useSession() {
     sessionDirRef.current = `${dataDir}/audio/${timestamp}`;
     fullAudioBufferRef.current = [];
 
+    // Save audio path to DB so delete can find the audio files
+    await window.capty.updateSession(sessionId, { audioPath: timestamp });
+
     setState({
       isRecording: true,
       currentSessionId: sessionId,
@@ -69,6 +82,10 @@ export function useSession() {
     });
 
     return sessionId;
+  }, []);
+
+  const feedAudio = useCallback((pcm: Int16Array) => {
+    fullAudioBufferRef.current.push(new Int16Array(pcm));
   }, []);
 
   const addSegmentResult = useCallback(
@@ -106,44 +123,49 @@ export function useSession() {
     [state.currentSessionId, state.segmentCount],
   );
 
-  const stopSession = useCallback(async () => {
-    if (!state.currentSessionId) return;
+  const stopSession = useCallback(
+    async (durationSeconds?: number) => {
+      if (!state.currentSessionId) return;
 
-    // Concatenate all audio buffers
-    const totalLength = fullAudioBufferRef.current.reduce(
-      (sum, buf) => sum + buf.length,
-      0,
-    );
-    const fullAudio = new Int16Array(totalLength);
-    let offset = 0;
-    for (const buf of fullAudioBufferRef.current) {
-      fullAudio.set(buf, offset);
-      offset += buf.length;
-    }
+      // Concatenate all audio buffers
+      const totalLength = fullAudioBufferRef.current.reduce(
+        (sum, buf) => sum + buf.length,
+        0,
+      );
+      const fullAudio = new Int16Array(totalLength);
+      let offset = 0;
+      for (const buf of fullAudioBufferRef.current) {
+        fullAudio.set(buf, offset);
+        offset += buf.length;
+      }
 
-    // Save full audio
-    await window.capty.saveFullAudio(
-      sessionDirRef.current,
-      fullAudio.buffer as ArrayBuffer,
-    );
+      // Save full audio
+      await window.capty.saveFullAudio(
+        sessionDirRef.current,
+        fullAudio.buffer as ArrayBuffer,
+      );
 
-    // Update session status
-    await window.capty.updateSession(state.currentSessionId, {
-      status: "completed",
-      endedAt: new Date().toISOString(),
-    });
+      // Update session status with duration
+      await window.capty.updateSession(state.currentSessionId, {
+        status: "completed",
+        durationSeconds: durationSeconds ?? 0,
+        endedAt: new Date().toISOString(),
+      });
 
-    fullAudioBufferRef.current = [];
-    setState({
-      isRecording: false,
-      currentSessionId: null,
-      segmentCount: 0,
-    });
-  }, [state.currentSessionId]);
+      fullAudioBufferRef.current = [];
+      setState({
+        isRecording: false,
+        currentSessionId: null,
+        segmentCount: 0,
+      });
+    },
+    [state.currentSessionId],
+  );
 
   return {
     ...state,
     startSession,
+    feedAudio,
     addSegmentResult,
     stopSession,
   };

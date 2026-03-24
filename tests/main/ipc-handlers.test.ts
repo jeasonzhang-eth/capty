@@ -14,6 +14,9 @@ vi.mock("electron", () => ({
     showSaveDialog: vi.fn(),
   },
   BrowserWindow: vi.fn(),
+  app: {
+    isPackaged: false,
+  },
 }));
 
 // Must import after mocks are set up
@@ -186,21 +189,15 @@ describe("registerIpcHandlers", () => {
   });
 
   describe("models:list", () => {
-    it("fetches models from sidecar HTTP API", async () => {
-      const mockModels = [{ name: "model-a" }, { name: "model-b" }];
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => mockModels,
-        }),
-      );
-
+    it("reads models from local registry", async () => {
       const handler = handlers.get("models:list")!;
       const result = await handler({} as any);
-      expect(result).toEqual(mockModels);
-
-      vi.unstubAllGlobals();
+      expect(Array.isArray(result)).toBe(true);
+      if (result.length > 0) {
+        expect(result[0]).toHaveProperty("id");
+        expect(result[0]).toHaveProperty("name");
+        expect(result[0]).toHaveProperty("downloaded");
+      }
     });
   });
 

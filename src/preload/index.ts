@@ -8,6 +8,7 @@ const api = {
   getSession: (id: number) => ipcRenderer.invoke("session:get", id),
   updateSession: (id: number, fields: Record<string, unknown>) =>
     ipcRenderer.invoke("session:update", id, fields),
+  deleteSession: (id: number) => ipcRenderer.invoke("session:delete", id),
 
   // Segments
   addSegment: (opts: Record<string, unknown>) =>
@@ -62,6 +63,10 @@ const api = {
       ipcRenderer.removeAllListeners("models:download-progress");
     };
   },
+
+  // Audio read
+  readAudioFile: (sessionId: number) =>
+    ipcRenderer.invoke("audio:read-file", sessionId),
 
   // Export save file
   saveFile: (defaultName: string, content: string) =>

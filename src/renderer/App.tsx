@@ -3,17 +3,20 @@ import { ControlBar } from "./components/ControlBar";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
+import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
 import { useTranscription } from "./hooks/useTranscription";
 import { useSession } from "./hooks/useSession";
+import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
 function App(): React.JSX.Element {
   const store = useAppStore();
   const audioCapture = useAudioCapture();
   const session = useSession();
+  const audioPlayer = useAudioPlayer();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
   const transcription = useTranscription({
@@ -36,22 +39,57 @@ function App(): React.JSX.Element {
 
   const vad = useVAD({
     onSpeechStart: useCallback(() => {
-      // Speech started - could stream audio in real-time in future
+      // Speech started
     }, []),
-    onSpeechEnd: useCallback(
-      (audio: Float32Array) => {
-        // Convert float32 to int16 and send via WebSocket
-        const int16 = new Int16Array(audio.length);
-        for (let i = 0; i < audio.length; i++) {
-          const s = Math.max(-1, Math.min(1, audio[i]));
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-        transcription.sendAudio(int16.buffer);
-        transcription.sendSegmentEnd();
-      },
-      [transcription],
-    ),
+    onSpeechEnd: useCallback(() => {
+      // Speech ended - signal the sidecar to transcribe accumulated audio
+      transcription.sendSegmentEnd();
+    }, [transcription]),
   });
+
+  // Model download state
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
+  const handleDownloadModel = useCallback(async () => {
+    const model = store.models.find(
+      (m: { id: string }) => m.id === store.selectedModelId,
+    );
+    if (!model || model.downloaded || isDownloading) return;
+
+    const dataDir = store.dataDir;
+    if (!dataDir) return;
+
+    setIsDownloading(true);
+    setDownloadProgress(0);
+
+    const unsubscribe = window.capty.onDownloadProgress((progress) => {
+      setDownloadProgress(progress.percent);
+    });
+
+    try {
+      const destDir = `${dataDir}/models/${model.id}`;
+      await window.capty.downloadModel(model.repo, destDir);
+
+      // Refresh models list
+      const models = await window.capty.listModels();
+      store.setModels(
+        models as {
+          id: string;
+          name: string;
+          repo: string;
+          downloaded: boolean;
+          size_gb: number;
+        }[],
+      );
+    } catch (err) {
+      console.error("Failed to download model:", err);
+    } finally {
+      unsubscribe();
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
+  }, [store, isDownloading]);
 
   // Audio level for visualization
   const [audioLevel, setAudioLevel] = useState(0);
@@ -89,6 +127,7 @@ function App(): React.JSX.Element {
             models as {
               id: string;
               name: string;
+              repo: string;
               downloaded: boolean;
               size_gb: number;
             }[],
@@ -103,41 +142,73 @@ function App(): React.JSX.Element {
     init();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handlePlaySession = useCallback(
+    (sessionId: number) => {
+      if (!store.isRecording) {
+        audioPlayer.play(sessionId);
+      }
+    },
+    [store.isRecording, audioPlayer],
+  );
+
   const handleStart = useCallback(async () => {
+    // Stop any active playback before recording
+    audioPlayer.stop();
+
+    // Immediately show recording UI (optimistic)
+    store.setRecording(true);
+    store.clearSegments();
+    store.setElapsedSeconds(0);
+    elapsedRef.current = 0;
+
+    // Start elapsed timer right away
+    timerRef.current = setInterval(() => {
+      elapsedRef.current = elapsedRef.current + 1;
+      store.setElapsedSeconds(elapsedRef.current);
+    }, 1000);
+
     try {
       const sessionId = await session.startSession(store.selectedModelId);
-      store.setRecording(true);
       store.setCurrentSessionId(sessionId);
-      store.clearSegments();
-      store.setElapsedSeconds(0);
-      elapsedRef.current = 0;
 
-      // Connect to sidecar WebSocket
-      const sidecarUrl = await window.capty.getSidecarUrl();
-      await transcription.connect(sidecarUrl, store.selectedModelId);
-
-      // Start audio capture - pipe audio through VAD
+      // Start audio capture (triggers mic permission prompt)
       await audioCapture.start((pcm: Int16Array) => {
+        session.feedAudio(pcm);
         vad.feedAudio(pcm);
+        // Stream all audio to sidecar continuously (VAD triggers segment_end)
+        transcription.sendAudio(pcm.buffer);
         // Compute audio level for visualization (RMS)
         let sum = 0;
         for (let i = 0; i < pcm.length; i++) {
           sum += (pcm[i] / 32768) * (pcm[i] / 32768);
         }
         const rms = Math.sqrt(sum / pcm.length);
-        setAudioLevel(Math.min(1, rms * 5));
+        // Scale: typical speech RMS ~0.02-0.1, map to 0-1 range
+        setAudioLevel(Math.min(1, rms * 20));
       });
 
-      // Start elapsed timer using ref to track seconds
-      timerRef.current = setInterval(() => {
-        elapsedRef.current = elapsedRef.current + 1;
-        store.setElapsedSeconds(elapsedRef.current);
-      }, 1000);
+      // Refresh history to show the new session
+      store.loadSessions();
 
-      await store.loadSessions();
+      // Connect to sidecar WebSocket in background (don't block recording)
+      window.capty
+        .getSidecarUrl()
+        .then((sidecarUrl) =>
+          transcription.connect(sidecarUrl, store.selectedModelId),
+        )
+        .catch((err: unknown) =>
+          console.warn(
+            "Sidecar not available, recording without transcription:",
+            err,
+          ),
+        );
     } catch (err) {
       console.error("Failed to start recording:", err);
       store.setRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   }, [session, store, transcription, audioCapture, vad]);
 
@@ -150,7 +221,7 @@ function App(): React.JSX.Element {
 
     audioCapture.stop();
     transcription.disconnect();
-    await session.stopSession();
+    await session.stopSession(elapsedRef.current);
 
     store.setRecording(false);
     store.setCurrentSessionId(null);
@@ -184,6 +255,27 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleDeleteSession = useCallback(
+    async (sessionId: number) => {
+      try {
+        // Stop playback if deleting the playing session
+        if (audioPlayer.playingSessionId === sessionId) {
+          audioPlayer.stop();
+        }
+        await window.capty.deleteSession(sessionId);
+        // If deleting the currently viewed session, clear it
+        if (store.currentSessionId === sessionId) {
+          store.setCurrentSessionId(null);
+          store.clearSegments();
+        }
+        await store.loadSessions();
+      } catch (err) {
+        console.error("Failed to delete session:", err);
+      }
+    },
+    [store],
+  );
+
   // Sync transcription partial text to store
   useEffect(() => {
     store.setPartialText(transcription.partialText);
@@ -211,12 +303,20 @@ function App(): React.JSX.Element {
         selectedModelId={store.selectedModelId}
         onModelChange={store.setSelectedModelId}
         onSettings={() => console.log("Settings not yet implemented")}
+        isDownloading={isDownloading}
+        downloadProgress={downloadProgress}
+        onDownloadModel={handleDownloadModel}
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel
           sessions={store.sessions}
           currentSessionId={store.currentSessionId}
+          playingSessionId={audioPlayer.playingSessionId}
+          isRecording={store.isRecording}
           onSelectSession={handleSelectSession}
+          onDeleteSession={handleDeleteSession}
+          onPlaySession={handlePlaySession}
+          onStopPlayback={audioPlayer.stop}
         />
         <TranscriptArea
           segments={store.segments}
@@ -224,6 +324,22 @@ function App(): React.JSX.Element {
           isRecording={store.isRecording}
         />
       </div>
+      {audioPlayer.playingSessionId !== null && (
+        <PlaybackBar
+          sessionTitle={
+            store.sessions.find(
+              (s: { id: number }) => s.id === audioPlayer.playingSessionId,
+            )?.title ?? "Unknown"
+          }
+          isPlaying={audioPlayer.isPlaying}
+          currentTime={audioPlayer.currentTime}
+          duration={audioPlayer.duration}
+          onPause={audioPlayer.pause}
+          onResume={audioPlayer.resume}
+          onSeek={audioPlayer.seek}
+          onStop={audioPlayer.stop}
+        />
+      )}
       <RecordingControls
         isRecording={store.isRecording}
         elapsedSeconds={store.elapsedSeconds}

@@ -7,8 +7,7 @@ dependencies = [
     "uvicorn[standard]>=0.34",
     "websockets>=14.0",
     "torch>=2.0",
-    "transformers>=4.45",
-    "accelerate>=1.0",
+    "qwen-asr>=0.0.6",
 ]
 
 [project.optional-dependencies]

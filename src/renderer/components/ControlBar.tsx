@@ -6,10 +6,18 @@ interface ControlBarProps {
   readonly devices: readonly MediaDeviceInfo[];
   readonly selectedDeviceId: string | null;
   readonly onDeviceChange: (deviceId: string) => void;
-  readonly models: readonly { id: string; name: string; downloaded: boolean }[];
+  readonly models: readonly {
+    id: string;
+    name: string;
+    downloaded: boolean;
+    size_gb: number;
+  }[];
   readonly selectedModelId: string;
   readonly onModelChange: (modelId: string) => void;
   readonly onSettings: () => void;
+  readonly isDownloading: boolean;
+  readonly downloadProgress: number;
+  readonly onDownloadModel: () => void;
 }
 
 export function ControlBar({
@@ -22,7 +30,12 @@ export function ControlBar({
   selectedModelId,
   onModelChange,
   onSettings,
+  isDownloading,
+  downloadProgress,
+  onDownloadModel,
 }: ControlBarProps): React.ReactElement {
+  const selectedModel = models.find((m) => m.id === selectedModelId);
+  const needsDownload = selectedModel && !selectedModel.downloaded;
   const statusColor = isRecording
     ? "var(--danger)"
     : sidecarReady
@@ -108,6 +121,57 @@ export function ControlBar({
           </option>
         ))}
       </select>
+
+      {isDownloading ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "11px",
+            color: "var(--text-secondary)",
+          }}
+        >
+          <div
+            style={{
+              width: "60px",
+              height: "4px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "2px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${downloadProgress}%`,
+                height: "100%",
+                backgroundColor: "var(--accent)",
+                transition: "width 0.3s",
+              }}
+            />
+          </div>
+          <span>{Math.round(downloadProgress)}%</span>
+        </div>
+      ) : needsDownload ? (
+        <button
+          onClick={onDownloadModel}
+          disabled={isRecording}
+          style={{
+            backgroundColor: "var(--accent)",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            padding: "4px 10px",
+            fontSize: "11px",
+            cursor: isRecording ? "not-allowed" : "pointer",
+            opacity: isRecording ? 0.5 : 1,
+            whiteSpace: "nowrap",
+          }}
+          title={`Download ${selectedModel.name} (${selectedModel.size_gb}GB)`}
+        >
+          Download
+        </button>
+      ) : null}
 
       <button
         onClick={onSettings}
