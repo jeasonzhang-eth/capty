@@ -272,8 +272,16 @@ function App(): React.JSX.Element {
       timerRef.current = null;
     }
 
+    // Stop audio capture first (no more audio data)
     audioCapture.stop();
-    transcription.disconnect();
+
+    // Record the end timestamp for any in-progress speech segment
+    segmentEndRef.current = getAudioSeconds();
+
+    // Gracefully disconnect: flush remaining audio with segment_end,
+    // wait for final transcription result, then close
+    await transcription.gracefulDisconnect();
+
     await session.stopSession(elapsedRef.current);
 
     store.setRecording(false);
