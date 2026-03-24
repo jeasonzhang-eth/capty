@@ -5,6 +5,7 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
+import { SettingsModal } from "./components/SettingsModal";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
@@ -18,6 +19,7 @@ function App(): React.JSX.Element {
   const session = useSession();
   const audioPlayer = useAudioPlayer();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const transcription = useTranscription({
     onFinal: useCallback(
@@ -487,6 +489,65 @@ function App(): React.JSX.Element {
     [audioCapture],
   );
 
+  const handleChangeDataDir = useCallback(async () => {
+    const dir = await window.capty.selectDirectory();
+    if (dir) {
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({ ...config, dataDir: dir });
+      store.setDataDir(dir);
+    }
+  }, [store]);
+
+  const handleSettingsSelectModel = useCallback(
+    (modelId: string) => {
+      store.setSelectedModelId(modelId);
+    },
+    [store],
+  );
+
+  const handleSettingsDownloadModel = useCallback(
+    async (modelId: string) => {
+      const model = store.models.find((m: { id: string }) => m.id === modelId);
+      if (!model || model.downloaded || isDownloading) return;
+
+      const dataDir = store.dataDir;
+      if (!dataDir) return;
+
+      // Select the model being downloaded
+      store.setSelectedModelId(modelId);
+
+      setIsDownloading(true);
+      setDownloadProgress(0);
+
+      const unsubscribe = window.capty.onDownloadProgress((progress) => {
+        setDownloadProgress(progress.percent);
+      });
+
+      try {
+        const destDir = `${dataDir}/models/${model.id}`;
+        await window.capty.downloadModel(model.repo, destDir);
+
+        const models = await window.capty.listModels();
+        store.setModels(
+          models as {
+            id: string;
+            name: string;
+            repo: string;
+            downloaded: boolean;
+            size_gb: number;
+          }[],
+        );
+      } catch (err) {
+        console.error("Failed to download model:", err);
+      } finally {
+        unsubscribe();
+        setIsDownloading(false);
+        setDownloadProgress(0);
+      }
+    },
+    [store, isDownloading],
+  );
+
   // Sync transcription partial text to store
   useEffect(() => {
     store.setPartialText(transcription.partialText);
@@ -513,7 +574,7 @@ function App(): React.JSX.Element {
         models={store.models}
         selectedModelId={store.selectedModelId}
         onModelChange={store.setSelectedModelId}
-        onSettings={() => console.log("Settings not yet implemented")}
+        onSettings={() => setShowSettings(true)}
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
         onDownloadModel={handleDownloadModel}
@@ -564,6 +625,20 @@ function App(): React.JSX.Element {
         onExport={handleExport}
         canExport={!store.isRecording && store.segments.length > 0}
       />
+      {showSettings && (
+        <SettingsModal
+          dataDir={store.dataDir}
+          models={store.models}
+          selectedModelId={store.selectedModelId}
+          isDownloading={isDownloading}
+          downloadProgress={downloadProgress}
+          isRecording={store.isRecording}
+          onChangeDataDir={handleChangeDataDir}
+          onSelectModel={handleSettingsSelectModel}
+          onDownloadModel={handleSettingsDownloadModel}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </>
   );
 }
