@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 interface ModelInfo {
   readonly id: string;
@@ -24,7 +24,7 @@ interface SettingsModalProps {
   readonly defaultHfUrl: string;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
-  readonly onDownloadModel: (modelId: string, repo: string) => void;
+  readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
@@ -114,7 +114,7 @@ function ModelCard({
   readonly downloadProgress: number;
   readonly isRecording: boolean;
   readonly isDownloading: boolean;
-  readonly onDownloadModel: (id: string, repo: string) => void;
+  readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onSelectModel: (id: string) => void;
   readonly onDelete: ((id: string) => void) | null;
 }): React.ReactElement {
@@ -215,7 +215,7 @@ function ModelCard({
         >
           {!model.downloaded && !isThisDownloading && (
             <button
-              onClick={() => onDownloadModel(model.id, model.repo)}
+              onClick={() => onDownloadModel(model)}
               disabled={isRecording || isDownloading}
               style={{
                 padding: "5px 12px",
@@ -356,6 +356,25 @@ export function SettingsModal({
   const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
   const [hfUrlSaved, setHfUrlSaved] = useState(false);
   const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
+
+  // Update search results' downloaded status when models list changes
+  // (e.g., after a download completes and models:list is refreshed)
+  useEffect(() => {
+    if (searchResults.length === 0) return;
+    const downloadedIds = new Set(
+      models.filter((m) => m.downloaded).map((m) => m.id),
+    );
+    const needsUpdate = searchResults.some(
+      (r) => !r.downloaded && downloadedIds.has(r.id),
+    );
+    if (needsUpdate) {
+      setSearchResults((prev) =>
+        prev.map((r) =>
+          downloadedIds.has(r.id) ? { ...r, downloaded: true } : r,
+        ),
+      );
+    }
+  }, [models, searchResults]);
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {

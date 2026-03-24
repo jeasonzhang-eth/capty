@@ -49,6 +49,8 @@ const api = {
   searchModels: (query: string) => ipcRenderer.invoke("models:search", query),
   deleteModel: (modelId: string) =>
     ipcRenderer.invoke("models:delete", modelId),
+  saveModelMeta: (modelId: string, meta: Record<string, unknown>) =>
+    ipcRenderer.invoke("models:save-meta", modelId, meta),
 
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),

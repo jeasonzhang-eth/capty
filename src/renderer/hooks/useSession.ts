@@ -51,6 +51,10 @@ declare global {
       listModels: () => Promise<unknown[]>;
       searchModels: (query: string) => Promise<unknown[]>;
       deleteModel: (modelId: string) => Promise<void>;
+      saveModelMeta: (
+        modelId: string,
+        meta: Record<string, unknown>,
+      ) => Promise<void>;
       deleteSegments: (sessionId: number) => Promise<void>;
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
       getAudioDir: (sessionId: number) => Promise<string | null>;

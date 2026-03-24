@@ -41,8 +41,8 @@ interface ModelEntry {
 }
 
 function loadLocalModels(configDir: string): ModelEntry[] {
-  // Read local models.json
-  let localModels: ModelEntry[] = [];
+  // Read builtin models.json
+  let builtinModels: ModelEntry[] = [];
   try {
     const registryPath = join(
       app.isPackaged
@@ -51,17 +51,44 @@ function loadLocalModels(configDir: string): ModelEntry[] {
       "models.json",
     );
     const raw = fs.readFileSync(registryPath, "utf-8");
-    localModels = JSON.parse(raw) as ModelEntry[];
+    builtinModels = JSON.parse(raw) as ModelEntry[];
   } catch {
     // Local registry not found
   }
 
-  // Mark downloaded status
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
 
-  return localModels.map((m) => ({
+  // Discover user-downloaded models via _meta.json files
+  const builtinIds = new Set(builtinModels.map((m) => m.id));
+  const userModels: ModelEntry[] = [];
+
+  if (fs.existsSync(modelsDir)) {
+    try {
+      for (const dir of fs.readdirSync(modelsDir)) {
+        if (builtinIds.has(dir)) continue;
+        const metaPath = join(modelsDir, dir, "_meta.json");
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(
+              fs.readFileSync(metaPath, "utf-8"),
+            ) as ModelEntry;
+            userModels.push(meta);
+          } catch {
+            // Invalid meta, skip
+          }
+        }
+      }
+    } catch {
+      // Cannot read models dir
+    }
+  }
+
+  // Merge: builtin first, then user-downloaded
+  const allModels = [...builtinModels, ...userModels];
+
+  return allModels.map((m) => ({
     ...m,
     downloaded: isModelDownloaded(modelsDir, m.id),
   }));
@@ -278,10 +305,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return sidecar.getUrl();
   });
 
-  // Models — read from local (builtin) registry
+  // Models — read from local (builtin) registry + user-downloaded models
   ipcMain.handle("models:list", () => {
     return loadLocalModels(configDir);
   });
+
+  // Save model metadata (for user-downloaded models from search)
+  ipcMain.handle(
+    "models:save-meta",
+    (_event, modelId: string, meta: Record<string, unknown>) => {
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+      const modelDir = join(dataDir, "models", modelId);
+      if (!fs.existsSync(modelDir)) {
+        fs.mkdirSync(modelDir, { recursive: true });
+      }
+      const metaPath = join(modelDir, "_meta.json");
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+    },
+  );
 
   // Search HuggingFace for ASR models
   ipcMain.handle("models:search", async (_event, query: string) => {

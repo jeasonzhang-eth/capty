@@ -562,14 +562,22 @@ function App(): React.JSX.Element {
   );
 
   const handleSettingsDownloadModel = useCallback(
-    async (modelId: string, repo: string) => {
+    async (model: {
+      readonly id: string;
+      readonly name: string;
+      readonly type: string;
+      readonly repo: string;
+      readonly size_gb: number;
+      readonly languages: readonly string[];
+      readonly description: string;
+    }) => {
       if (isDownloading) return;
 
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
       setIsDownloading(true);
-      setDownloadingModelId(modelId);
+      setDownloadingModelId(model.id);
       setDownloadProgress(0);
       setDownloadError(null);
 
@@ -578,10 +586,21 @@ function App(): React.JSX.Element {
       });
 
       try {
-        const destDir = `${dataDir}/models/${modelId}`;
-        await window.capty.downloadModel(repo, destDir);
+        const destDir = `${dataDir}/models/${model.id}`;
+        await window.capty.downloadModel(model.repo, destDir);
 
-        // Refresh builtin models list (to update downloaded status)
+        // Save model metadata so it's discoverable by models:list
+        await window.capty.saveModelMeta(model.id, {
+          id: model.id,
+          name: model.name,
+          type: model.type,
+          repo: model.repo,
+          size_gb: model.size_gb,
+          languages: [...model.languages],
+          description: model.description,
+        });
+
+        // Refresh models list (now includes both builtin + user-downloaded)
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
       } catch (err) {
