@@ -64,6 +64,7 @@ function App(): React.JSX.Element {
   const [regeneratingSessionId, setRegeneratingSessionId] = useState<
     number | null
   >(null);
+  const [regenerationProgress, setRegenerationProgress] = useState(0);
 
   // Model download state
   const [isDownloading, setIsDownloading] = useState(false);
@@ -309,6 +310,7 @@ function App(): React.JSX.Element {
       if (regeneratingSessionId !== null || store.isRecording) return;
 
       setRegeneratingSessionId(sessionId);
+      setRegenerationProgress(0);
 
       try {
         // 1. Read audio file
@@ -332,11 +334,22 @@ function App(): React.JSX.Element {
         const wsUrl = sidecarUrl.replace(/^http/, "ws") + "/ws/transcribe";
         const ws = new WebSocket(wsUrl);
 
+        // PCM data (skip 44-byte WAV header)
+        const pcmData = new Uint8Array(audioBuffer, 44);
+        const totalBytes = pcmData.length;
+        const chunkSize = 32000; // 1 second of 16kHz/16bit/mono
+        let sendDone = false;
+
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
             () => reject(new Error("Connection timeout")),
             15000,
           );
+
+          const cleanup = () => {
+            setRegeneratingSessionId(null);
+            setRegenerationProgress(0);
+          };
 
           ws.onopen = () => {
             ws.send(
@@ -359,23 +372,23 @@ function App(): React.JSX.Element {
             if (msg.type === "ready") {
               clearTimeout(timeout);
 
-              // Skip 44-byte WAV header, send PCM data in chunks
-              const pcmData = new Uint8Array(audioBuffer, 44);
-              const chunkSize = 32000; // 1 second of 16kHz/16bit/mono
               let offset = 0;
-
               const sendInterval = setInterval(() => {
-                if (offset >= pcmData.length) {
+                if (offset >= totalBytes) {
                   clearInterval(sendInterval);
-                  // Signal end of audio
+                  sendDone = true;
+                  setRegenerationProgress(90); // 90% = audio sent, waiting for transcription
                   ws.send(JSON.stringify({ type: "segment_end" }));
                   return;
                 }
 
-                const end = Math.min(offset + chunkSize, pcmData.length);
+                const end = Math.min(offset + chunkSize, totalBytes);
+                // Use slice() which copies data into a new ArrayBuffer
                 const chunk = pcmData.slice(offset, end);
-                ws.send(chunk.buffer);
+                ws.send(chunk);
                 offset = end;
+                // Progress: 0-90% for sending audio
+                setRegenerationProgress(Math.round((offset / totalBytes) * 90));
               }, 100); // ~10x real-time speed
             } else if (msg.type === "partial") {
               if (store.currentSessionId === sessionId) {
@@ -387,7 +400,7 @@ function App(): React.JSX.Element {
               }
               const text = msg.text ?? "";
               if (text.trim()) {
-                // Save to DB
+                // Save to DB and update in-memory store
                 window.capty
                   .addSegment({
                     sessionId,
@@ -398,7 +411,6 @@ function App(): React.JSX.Element {
                     isFinal: true,
                   })
                   .then(() => {
-                    // Update in-memory if viewing this session
                     if (store.currentSessionId === sessionId) {
                       store.addSegment({
                         id: Date.now(),
@@ -409,25 +421,37 @@ function App(): React.JSX.Element {
                     }
                   });
               }
+
+              // After final result, close connection if all audio was sent
+              if (sendDone) {
+                setRegenerationProgress(100);
+                ws.send(JSON.stringify({ type: "stop" }));
+                ws.close();
+              }
             } else if (msg.type === "error") {
               console.error("Regeneration transcription error:", msg.message);
+              if (sendDone) {
+                // Error after all audio sent — close and finish
+                ws.close();
+              }
             }
           };
 
           ws.onclose = () => {
-            setRegeneratingSessionId(null);
+            cleanup();
             resolve();
           };
 
           ws.onerror = () => {
             clearTimeout(timeout);
-            setRegeneratingSessionId(null);
+            cleanup();
             reject(new Error("WebSocket connection failed"));
           };
         });
       } catch (err) {
         console.error("Failed to regenerate subtitles:", err);
         setRegeneratingSessionId(null);
+        setRegenerationProgress(0);
       }
     },
     [regeneratingSessionId, store],
@@ -470,6 +494,7 @@ function App(): React.JSX.Element {
           currentSessionId={store.currentSessionId}
           playingSessionId={audioPlayer.playingSessionId}
           regeneratingSessionId={regeneratingSessionId}
+          regenerationProgress={regenerationProgress}
           isRecording={store.isRecording}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}

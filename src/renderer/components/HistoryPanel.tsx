@@ -13,6 +13,7 @@ interface HistoryPanelProps {
   readonly currentSessionId: number | null;
   readonly playingSessionId: number | null;
   readonly regeneratingSessionId: number | null;
+  readonly regenerationProgress: number;
   readonly isRecording: boolean;
   readonly onSelectSession: (id: number) => void;
   readonly onDeleteSession: (id: number) => void;
@@ -50,6 +51,7 @@ export function HistoryPanel({
   currentSessionId,
   playingSessionId,
   regeneratingSessionId,
+  regenerationProgress,
   isRecording,
   onSelectSession,
   onDeleteSession,
@@ -236,15 +238,36 @@ export function HistoryPanel({
               </span>
             )}
             {regeneratingSessionId === session.id && (
-              <span
-                style={{
-                  fontSize: "10px",
-                  color: "var(--accent)",
-                  fontWeight: 600,
-                }}
-              >
-                Regenerating...
-              </span>
+              <div style={{ marginTop: "4px" }}>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--accent)",
+                    fontWeight: 600,
+                    marginBottom: "3px",
+                  }}
+                >
+                  Regenerating... {regenerationProgress}%
+                </div>
+                <div
+                  style={{
+                    height: "3px",
+                    backgroundColor: "var(--border)",
+                    borderRadius: "2px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${regenerationProgress}%`,
+                      backgroundColor: "var(--accent)",
+                      borderRadius: "2px",
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                </div>
+              </div>
             )}
           </div>
         ))}
