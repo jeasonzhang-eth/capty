@@ -19,11 +19,14 @@ interface SettingsModalProps {
   readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
   readonly isRecording: boolean;
+  readonly registryUrl: string;
+  readonly defaultRegistryUrl: string;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (modelId: string) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onRefreshModels: () => void;
+  readonly onChangeRegistryUrl: (url: string) => void;
   readonly onClose: () => void;
 }
 
@@ -101,15 +104,21 @@ export function SettingsModal({
   downloadingModelId,
   downloadProgress,
   isRecording,
+  registryUrl,
+  defaultRegistryUrl,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onRefreshModels,
+  onChangeRegistryUrl,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [editingUrl, setEditingUrl] = useState(registryUrl);
+  const [urlSaved, setUrlSaved] = useState(false);
+  const urlChanged = editingUrl !== registryUrl;
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
@@ -140,12 +149,25 @@ export function SettingsModal({
     }
   }, [confirmDeleteId, onDeleteModel]);
 
+  const handleSaveUrl = useCallback(() => {
+    onChangeRegistryUrl(editingUrl);
+    setUrlSaved(true);
+    setTimeout(() => setUrlSaved(false), 2000);
+    // Auto-refresh after saving a new URL
+    setIsRefreshing(true);
+    onRefreshModels();
+    setTimeout(() => setIsRefreshing(false), 1500);
+  }, [editingUrl, onChangeRegistryUrl, onRefreshModels]);
+
+  const handleResetUrl = useCallback(() => {
+    setEditingUrl(defaultRegistryUrl);
+  }, [defaultRegistryUrl]);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
       onRefreshModels();
     } finally {
-      // Small delay to show the refreshing state
       setTimeout(() => setIsRefreshing(false), 1000);
     }
   }, [onRefreshModels]);
@@ -286,6 +308,102 @@ export function SettingsModal({
           <div style={labelStyle}>
             Browse and manage ASR models for transcription.
           </div>
+
+          {/* Model Source URL */}
+          <div
+            style={{
+              marginTop: "8px",
+              marginBottom: "12px",
+              padding: "10px 12px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "6px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                marginBottom: "6px",
+              }}
+            >
+              Model Source URL
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <input
+                type="text"
+                value={editingUrl}
+                onChange={(e) => setEditingUrl(e.target.value)}
+                placeholder="https://..."
+                style={{
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: "11px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              {urlChanged && (
+                <button
+                  onClick={handleSaveUrl}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "none",
+                    backgroundColor: "var(--accent)",
+                    color: "white",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Save
+                </button>
+              )}
+              {!urlChanged && urlSaved && (
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "#22c55e",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleResetUrl}
+                disabled={editingUrl === defaultRegistryUrl}
+                style={{
+                  padding: "5px 8px",
+                  fontSize: "10px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "transparent",
+                  color: "var(--text-muted)",
+                  cursor:
+                    editingUrl === defaultRegistryUrl
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity: editingUrl === defaultRegistryUrl ? 0.4 : 1,
+                  whiteSpace: "nowrap",
+                }}
+                title="Reset to default URL"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
           <div
             style={{
               marginTop: "8px",

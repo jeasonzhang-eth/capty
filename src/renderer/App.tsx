@@ -86,6 +86,11 @@ function App(): React.JSX.Element {
   );
   const [downloadProgress, setDownloadProgress] = useState(0);
 
+  // Model registry URL
+  const DEFAULT_REGISTRY_URL =
+    "https://raw.githubusercontent.com/jeasonzhang-eth/capty/main/resources/models.json";
+  const [registryUrl, setRegistryUrl] = useState(DEFAULT_REGISTRY_URL);
+
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
       (m: { id: string }) => m.id === store.selectedModelId,
@@ -141,8 +146,15 @@ function App(): React.JSX.Element {
         await store.loadSessions();
         await audioCapture.loadDevices();
 
-        // Restore saved microphone device
+        // Restore saved config
         const config = await window.capty.getConfig();
+
+        // Restore model registry URL
+        const savedUrl = config.modelRegistryUrl as string | null;
+        if (savedUrl) {
+          setRegistryUrl(savedUrl);
+        }
+
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
         if (savedDeviceId) {
           // Verify device still exists (may have been unplugged)
@@ -617,6 +629,15 @@ function App(): React.JSX.Element {
     }
   }, [store]);
 
+  const handleChangeRegistryUrl = useCallback(async (url: string) => {
+    setRegistryUrl(url);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      modelRegistryUrl: url || null,
+    });
+  }, []);
+
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
     audioCapture.setOnDeviceRemoved(() => {
@@ -714,11 +735,14 @@ function App(): React.JSX.Element {
           downloadingModelId={downloadingModelId}
           downloadProgress={downloadProgress}
           isRecording={store.isRecording}
+          registryUrl={registryUrl}
+          defaultRegistryUrl={DEFAULT_REGISTRY_URL}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSettingsSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
           onDeleteModel={handleDeleteModel}
           onRefreshModels={handleRefreshModels}
+          onChangeRegistryUrl={handleChangeRegistryUrl}
           onClose={() => setShowSettings(false)}
         />
       )}
