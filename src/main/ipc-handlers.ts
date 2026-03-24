@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, app } from "electron";
+import { ipcMain, dialog, BrowserWindow, app, shell } from "electron";
 import fs from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
@@ -221,6 +221,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     return join(dataDir, "audio", session.audio_path);
+  });
+
+  // Open audio folder in Finder
+  ipcMain.handle("audio:open-folder", (_event, sessionId: number) => {
+    const session = getSession(db, sessionId);
+    if (!session?.audio_path) return;
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const audioDir = join(dataDir, "audio", session.audio_path);
+    if (fs.existsSync(audioDir)) {
+      shell.openPath(audioDir);
+    }
   });
 
   // Export save file

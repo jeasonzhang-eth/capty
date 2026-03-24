@@ -54,6 +54,7 @@ declare global {
       getAudioDir: (sessionId: number) => Promise<string | null>;
       getDataDir: () => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
+      openAudioFolder: (sessionId: number) => Promise<void>;
     };
   }
 }

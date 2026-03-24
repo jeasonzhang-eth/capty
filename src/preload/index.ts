@@ -78,6 +78,8 @@ const api = {
     ipcRenderer.invoke("audio:read-file", sessionId),
   getAudioDir: (sessionId: number) =>
     ipcRenderer.invoke("audio:get-dir", sessionId),
+  openAudioFolder: (sessionId: number) =>
+    ipcRenderer.invoke("audio:open-folder", sessionId),
 
   // Export save file
   saveFile: (defaultName: string, content: string) =>

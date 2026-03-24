@@ -20,6 +20,7 @@ interface HistoryPanelProps {
   readonly onPlaySession: (id: number) => void;
   readonly onStopPlayback: () => void;
   readonly onRegenerateSubtitles: (id: number) => void;
+  readonly onOpenFolder: (id: number) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -58,6 +59,7 @@ export function HistoryPanel({
   onPlaySession,
   onStopPlayback,
   onRegenerateSubtitles,
+  onOpenFolder,
 }: HistoryPanelProps): React.ReactElement {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -83,6 +85,13 @@ export function HistoryPanel({
     }
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, [contextMenu.sessionId, onRegenerateSubtitles]);
+
+  const handleOpenFolderClick = useCallback(() => {
+    if (contextMenu.sessionId !== null) {
+      onOpenFolder(contextMenu.sessionId);
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, onOpenFolder]);
 
   const handleDeleteClick = useCallback(() => {
     setConfirmDeleteId(contextMenu.sessionId);
@@ -306,30 +315,51 @@ export function HistoryPanel({
             const targetSession = sessions.find(
               (s) => s.id === contextMenu.sessionId,
             );
-            const canRegenerate =
-              targetSession?.status === "completed" &&
-              regeneratingSessionId === null;
+            const isCompleted = targetSession?.status === "completed";
+            const canRegenerate = isCompleted && regeneratingSessionId === null;
             return (
-              canRegenerate && (
-                <div
-                  onClick={handleRegenerateClick}
-                  style={{
-                    padding: "8px 16px",
-                    fontSize: "13px",
-                    cursor: "pointer",
-                    color: "var(--text-primary)",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      "var(--bg-tertiary)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = "transparent")
-                  }
-                >
-                  Regenerate Subtitles
-                </div>
-              )
+              <>
+                {canRegenerate && (
+                  <div
+                    onClick={handleRegenerateClick}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      color: "var(--text-primary)",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor =
+                        "var(--bg-tertiary)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "transparent")
+                    }
+                  >
+                    Regenerate Subtitles
+                  </div>
+                )}
+                {isCompleted && (
+                  <div
+                    onClick={handleOpenFolderClick}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      color: "var(--text-primary)",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor =
+                        "var(--bg-tertiary)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "transparent")
+                    }
+                  >
+                    Open Folder
+                  </div>
+                )}
+              </>
             );
           })()}
           <div

@@ -639,6 +639,7 @@ function App(): React.JSX.Element {
           onPlaySession={handlePlaySession}
           onStopPlayback={audioPlayer.stop}
           onRegenerateSubtitles={handleRegenerateSubtitles}
+          onOpenFolder={(id) => window.capty.openAudioFolder(id)}
         />
         <TranscriptArea
           segments={store.segments}
