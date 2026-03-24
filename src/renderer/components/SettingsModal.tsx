@@ -58,6 +58,15 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
+type TabId = "general" | "speech-models";
+
+const TABS: readonly { readonly id: TabId; readonly label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "speech-models", label: "Speech Models" },
+];
+
+/* ─── Small reusable components ─── */
+
 function TypeTag({ type }: { readonly type: string }): React.ReactElement {
   const isWhisper = type === "whisper";
   return (
@@ -326,9 +335,125 @@ function ModelCard({
   );
 }
 
-export function SettingsModal({
+/* ─── Tab: General ─── */
+
+function GeneralTab({
   dataDir,
   configDir,
+  isRecording,
+  onChangeDataDir,
+}: {
+  readonly dataDir: string | null;
+  readonly configDir: string | null;
+  readonly isRecording: boolean;
+  readonly onChangeDataDir: () => void;
+}): React.ReactElement {
+  return (
+    <>
+      {/* Data Directory */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Data Directory</div>
+        <div style={labelStyle}>
+          Recordings, transcripts, and models are stored here.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginTop: "8px",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "6px",
+              fontSize: "13px",
+              color: "var(--text-secondary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={dataDir ?? "Not set"}
+          >
+            {dataDir ?? "Not set"}
+          </div>
+          <button
+            onClick={onChangeDataDir}
+            disabled={isRecording}
+            style={{
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--bg-tertiary)",
+              color: "var(--text-primary)",
+              cursor: isRecording ? "not-allowed" : "pointer",
+              opacity: isRecording ? 0.5 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Change
+          </button>
+        </div>
+      </div>
+
+      {/* Config Directory */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Config Directory</div>
+        <div style={labelStyle}>
+          Application configuration files are stored here.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginTop: "8px",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "6px",
+              fontSize: "13px",
+              color: "var(--text-secondary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={configDir ?? ""}
+          >
+            {configDir ?? "\u2014"}
+          </div>
+          <button
+            onClick={() => window.capty.openConfigDir()}
+            style={{
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--bg-tertiary)",
+              color: "var(--text-primary)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Open
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── Tab: Speech Models ─── */
+
+function SpeechModelsTab({
   models,
   selectedModelId,
   isDownloading,
@@ -338,14 +463,27 @@ export function SettingsModal({
   isRecording,
   hfMirrorUrl,
   defaultHfUrl,
-  onChangeDataDir,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
-  onClose,
-}: SettingsModalProps): React.ReactElement {
+}: {
+  readonly models: readonly ModelInfo[];
+  readonly selectedModelId: string;
+  readonly isDownloading: boolean;
+  readonly downloadingModelId: string | null;
+  readonly downloadProgress: number;
+  readonly downloadError: string | null;
+  readonly isRecording: boolean;
+  readonly hfMirrorUrl: string;
+  readonly defaultHfUrl: string;
+  readonly onSelectModel: (modelId: string) => void;
+  readonly onDownloadModel: (model: ModelInfo) => void;
+  readonly onDeleteModel: (modelId: string) => void;
+  readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
+  readonly onChangeHfMirrorUrl: (url: string) => void;
+}): React.ReactElement {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Search state
@@ -359,8 +497,7 @@ export function SettingsModal({
   const [hfUrlSaved, setHfUrlSaved] = useState(false);
   const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
 
-  // Update search results' downloaded status when models list changes
-  // (e.g., after a download completes and models:list is refreshed)
+  // Sync search results' downloaded status when models list changes
   useEffect(() => {
     if (searchResults.length === 0) return;
     const downloadedIds = new Set(
@@ -377,13 +514,6 @@ export function SettingsModal({
       );
     }
   }, [models, searchResults]);
-
-  const handleOverlayClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
 
   const handleDelete = useCallback(
     (modelId: string) => {
@@ -417,9 +547,8 @@ export function SettingsModal({
     setHasSearched(true);
     try {
       const results = await onSearchModels(q);
-      // Filter out models that are already in the builtin list
-      const builtinIds = new Set(models.map((m) => m.id));
-      setSearchResults(results.filter((r) => !builtinIds.has(r.id)));
+      const existingIds = new Set(models.map((m) => m.id));
+      setSearchResults(results.filter((r) => !existingIds.has(r.id)));
     } catch {
       setSearchResults([]);
     } finally {
@@ -435,375 +564,156 @@ export function SettingsModal({
   );
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 3000,
-      }}
-      onClick={handleOverlayClick}
-    >
+    <>
+      {/* HuggingFace Mirror URL */}
       <div
         style={{
-          backgroundColor: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          padding: "24px",
-          width: "520px",
-          maxHeight: "85vh",
-          overflowY: "auto",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          marginBottom: "16px",
+          padding: "10px 12px",
+          backgroundColor: "var(--bg-tertiary)",
+          borderRadius: "6px",
         }}
       >
-        {/* Header */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            marginBottom: "6px",
           }}
         >
-          <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>
-            Settings
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              fontSize: "18px",
-              cursor: "pointer",
-              padding: "4px 8px",
-            }}
-          >
-            &times;
-          </button>
+          HuggingFace Mirror (model download source)
         </div>
-
-        {/* Data Directory */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Data Directory</div>
-          <div style={labelStyle}>
-            Recordings, transcripts, and models are stored here.
-          </div>
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <input
+            type="text"
+            value={editingHfUrl}
+            onChange={(e) => setEditingHfUrl(e.target.value)}
+            placeholder={defaultHfUrl}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "8px",
+              flex: 1,
+              padding: "6px 8px",
+              fontSize: "11px",
+              backgroundColor: "var(--bg-primary)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              outline: "none",
+              fontFamily: "monospace",
             }}
-          >
-            <div
-              style={{
-                flex: 1,
-                padding: "8px 12px",
-                backgroundColor: "var(--bg-tertiary)",
-                borderRadius: "6px",
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={dataDir ?? "Not set"}
-            >
-              {dataDir ?? "Not set"}
-            </div>
+          />
+          {hfUrlChanged && (
             <button
-              onClick={onChangeDataDir}
-              disabled={isRecording}
+              onClick={handleSaveHfUrl}
               style={{
-                padding: "8px 14px",
-                fontSize: "12px",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                cursor: isRecording ? "not-allowed" : "pointer",
-                opacity: isRecording ? 0.5 : 1,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Change
-            </button>
-          </div>
-        </div>
-
-        {/* Config Directory */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Config Directory</div>
-          <div style={labelStyle}>
-            Application configuration files are stored here.
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "8px",
-            }}
-          >
-            <div
-              style={{
-                flex: 1,
-                padding: "8px 12px",
-                backgroundColor: "var(--bg-tertiary)",
-                borderRadius: "6px",
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={configDir ?? ""}
-            >
-              {configDir ?? "—"}
-            </div>
-            <button
-              onClick={() => window.capty.openConfigDir()}
-              style={{
-                padding: "8px 14px",
-                fontSize: "12px",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
+                padding: "5px 10px",
+                fontSize: "11px",
+                borderRadius: "4px",
+                border: "none",
+                backgroundColor: "var(--accent)",
+                color: "white",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
               }}
             >
-              Open
+              Save
             </button>
-          </div>
-        </div>
-
-        {/* Model Marketplace */}
-        <div style={sectionStyle}>
-          <div style={{ ...sectionTitleStyle, marginBottom: "4px" }}>
-            Models
-          </div>
-          <div style={labelStyle}>
-            Manage your models. Search HuggingFace to add more.
-          </div>
-
-          {/* HuggingFace Mirror URL */}
-          <div
-            style={{
-              marginTop: "10px",
-              marginBottom: "12px",
-              padding: "10px 12px",
-              backgroundColor: "var(--bg-tertiary)",
-              borderRadius: "6px",
-            }}
-          >
-            <div
+          )}
+          {!hfUrlChanged && hfUrlSaved && (
+            <span
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted)",
-                marginBottom: "6px",
-              }}
-            >
-              HuggingFace Mirror (model download source)
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <input
-                type="text"
-                value={editingHfUrl}
-                onChange={(e) => setEditingHfUrl(e.target.value)}
-                placeholder={defaultHfUrl}
-                style={{
-                  flex: 1,
-                  padding: "6px 8px",
-                  fontSize: "11px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  fontFamily: "monospace",
-                }}
-              />
-              {hfUrlChanged && (
-                <button
-                  onClick={handleSaveHfUrl}
-                  style={{
-                    padding: "5px 10px",
-                    fontSize: "11px",
-                    borderRadius: "4px",
-                    border: "none",
-                    backgroundColor: "var(--accent)",
-                    color: "white",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Save
-                </button>
-              )}
-              {!hfUrlChanged && hfUrlSaved && (
-                <span
-                  style={{
-                    fontSize: "11px",
-                    color: "#22c55e",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Saved
-                </span>
-              )}
-              <button
-                onClick={handleResetHfUrl}
-                disabled={editingHfUrl === defaultHfUrl}
-                style={{
-                  padding: "5px 8px",
-                  fontSize: "10px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "transparent",
-                  color: "var(--text-muted)",
-                  cursor:
-                    editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
-                  opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
-                  whiteSpace: "nowrap",
-                }}
-                title="Reset to default"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-
-          {/* Download error */}
-          {downloadError && (
-            <div
-              style={{
-                padding: "8px 12px",
-                marginBottom: "12px",
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                borderRadius: "6px",
-                fontSize: "12px",
-                color: "#ef4444",
-                lineHeight: "18px",
-              }}
-            >
-              {downloadError}
-            </div>
-          )}
-
-          {/* Search HuggingFace */}
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--text-secondary)",
-              marginBottom: "8px",
-            }}
-          >
-            Search HuggingFace
-          </div>
-          <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search ASR models, e.g. whisper, wav2vec2..."
-              style={{
-                flex: 1,
-                padding: "8px 10px",
-                fontSize: "12px",
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border)",
-                borderRadius: "6px",
-                outline: "none",
-              }}
-            />
-            <button
-              onClick={handleSearch}
-              disabled={isSearching || !searchQuery.trim()}
-              style={{
-                padding: "8px 14px",
-                fontSize: "12px",
-                borderRadius: "6px",
-                border: "none",
-                backgroundColor: "var(--accent)",
-                color: "white",
-                cursor:
-                  isSearching || !searchQuery.trim()
-                    ? "not-allowed"
-                    : "pointer",
-                opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+                color: "#22c55e",
                 whiteSpace: "nowrap",
               }}
             >
-              {isSearching ? "Searching..." : "Search"}
-            </button>
-          </div>
-
-          {/* Search results */}
-          {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                marginBottom: "16px",
-              }}
-            >
-              {searchResults.map((model) => (
-                <ModelCard
-                  key={model.id}
-                  model={model}
-                  isSelected={model.id === selectedModelId}
-                  isThisDownloading={
-                    isDownloading && downloadingModelId === model.id
-                  }
-                  downloadProgress={downloadProgress}
-                  isRecording={isRecording}
-                  isDownloading={isDownloading}
-                  onDownloadModel={onDownloadModel}
-                  onSelectModel={onSelectModel}
-                  onDelete={null}
-                />
-              ))}
-              {hasSearched && !isSearching && searchResults.length === 0 && (
-                <div
-                  style={{
-                    padding: "12px",
-                    textAlign: "center",
-                    color: "var(--text-muted)",
-                    fontSize: "12px",
-                  }}
-                >
-                  No models found. Try different keywords.
-                </div>
-              )}
-            </div>
+              Saved
+            </span>
           )}
-
-          {/* My Models */}
-          <div
+          <button
+            onClick={handleResetHfUrl}
+            disabled={editingHfUrl === defaultHfUrl}
             style={{
+              padding: "5px 8px",
+              fontSize: "10px",
+              borderRadius: "4px",
+              border: "1px solid var(--border)",
+              backgroundColor: "transparent",
+              color: "var(--text-muted)",
+              cursor:
+                editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+              opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
+              whiteSpace: "nowrap",
+            }}
+            title="Reset to default"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+
+      {/* Download error */}
+      {downloadError && (
+        <div
+          style={{
+            padding: "8px 12px",
+            marginBottom: "12px",
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "6px",
+            fontSize: "12px",
+            color: "#ef4444",
+            lineHeight: "18px",
+          }}
+        >
+          {downloadError}
+        </div>
+      )}
+
+      {/* Search HuggingFace */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Search HuggingFace</div>
+        <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search ASR models, e.g. whisper, wav2vec2..."
+            style={{
+              flex: 1,
+              padding: "8px 10px",
               fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--text-secondary)",
-              marginBottom: "8px",
+              backgroundColor: "var(--bg-tertiary)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching || !searchQuery.trim()}
+            style={{
+              padding: "8px 14px",
+              fontSize: "12px",
+              borderRadius: "6px",
+              border: "none",
+              backgroundColor: "var(--accent)",
+              color: "white",
+              cursor:
+                isSearching || !searchQuery.trim()
+                  ? "not-allowed"
+                  : "pointer",
+              opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+              whiteSpace: "nowrap",
             }}
           >
-            My Models
-          </div>
+            {isSearching ? "Searching..." : "Search"}
+          </button>
+        </div>
+
+        {/* Search results */}
+        {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
           <div
             style={{
               display: "flex",
@@ -811,7 +721,7 @@ export function SettingsModal({
               gap: "8px",
             }}
           >
-            {models.map((model) => (
+            {searchResults.map((model) => (
               <ModelCard
                 key={model.id}
                 model={model}
@@ -824,22 +734,63 @@ export function SettingsModal({
                 isDownloading={isDownloading}
                 onDownloadModel={onDownloadModel}
                 onSelectModel={onSelectModel}
-                onDelete={handleDelete}
+                onDelete={null}
               />
             ))}
-            {models.length === 0 && (
+            {hasSearched && !isSearching && searchResults.length === 0 && (
               <div
                 style={{
                   padding: "12px",
                   textAlign: "center",
                   color: "var(--text-muted)",
-                  fontSize: "13px",
+                  fontSize: "12px",
                 }}
               >
-                No models yet. Search HuggingFace above to add models.
+                No models found. Try different keywords.
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* My Models */}
+      <div>
+        <div style={sectionTitleStyle}>My Models</div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          {models.map((model) => (
+            <ModelCard
+              key={model.id}
+              model={model}
+              isSelected={model.id === selectedModelId}
+              isThisDownloading={
+                isDownloading && downloadingModelId === model.id
+              }
+              downloadProgress={downloadProgress}
+              isRecording={isRecording}
+              isDownloading={isDownloading}
+              onDownloadModel={onDownloadModel}
+              onSelectModel={onSelectModel}
+              onDelete={handleDelete}
+            />
+          ))}
+          {models.length === 0 && (
+            <div
+              style={{
+                padding: "12px",
+                textAlign: "center",
+                color: "var(--text-muted)",
+                fontSize: "13px",
+              }}
+            >
+              No models yet. Search HuggingFace above to add models.
+            </div>
+          )}
         </div>
       </div>
 
@@ -936,6 +887,169 @@ export function SettingsModal({
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/* ─── Main Settings Modal ─── */
+
+export function SettingsModal({
+  dataDir,
+  configDir,
+  models,
+  selectedModelId,
+  isDownloading,
+  downloadingModelId,
+  downloadProgress,
+  downloadError,
+  isRecording,
+  hfMirrorUrl,
+  defaultHfUrl,
+  onChangeDataDir,
+  onSelectModel,
+  onDownloadModel,
+  onDeleteModel,
+  onSearchModels,
+  onChangeHfMirrorUrl,
+  onClose,
+}: SettingsModalProps): React.ReactElement {
+  const [activeTab, setActiveTab] = useState<TabId>("general");
+
+  const handleOverlayClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) onClose();
+    },
+    [onClose],
+  );
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 3000,
+      }}
+      onClick={handleOverlayClick}
+    >
+      <div
+        style={{
+          backgroundColor: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+          borderRadius: "12px",
+          width: "520px",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 24px 0",
+          }}
+        >
+          <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>
+            Settings
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: "18px",
+              cursor: "pointer",
+              padding: "4px 8px",
+            }}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Tab Bar */}
+        <div
+          style={{
+            display: "flex",
+            gap: "0",
+            padding: "16px 24px 0",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "8px 16px",
+                fontSize: "13px",
+                fontWeight: activeTab === tab.id ? 600 : 400,
+                color:
+                  activeTab === tab.id
+                    ? "var(--accent)"
+                    : "var(--text-muted)",
+                background: "none",
+                border: "none",
+                borderBottom:
+                  activeTab === tab.id
+                    ? "2px solid var(--accent)"
+                    : "2px solid transparent",
+                cursor: "pointer",
+                marginBottom: "-1px",
+                transition: "color 0.15s, border-color 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div
+          style={{
+            padding: "20px 24px 24px",
+            overflowY: "auto",
+            flex: 1,
+          }}
+        >
+          {activeTab === "general" && (
+            <GeneralTab
+              dataDir={dataDir}
+              configDir={configDir}
+              isRecording={isRecording}
+              onChangeDataDir={onChangeDataDir}
+            />
+          )}
+          {activeTab === "speech-models" && (
+            <SpeechModelsTab
+              models={models}
+              selectedModelId={selectedModelId}
+              isDownloading={isDownloading}
+              downloadingModelId={downloadingModelId}
+              downloadProgress={downloadProgress}
+              downloadError={downloadError}
+              isRecording={isRecording}
+              hfMirrorUrl={hfMirrorUrl}
+              defaultHfUrl={defaultHfUrl}
+              onSelectModel={onSelectModel}
+              onDownloadModel={onDownloadModel}
+              onDeleteModel={onDeleteModel}
+              onSearchModels={onSearchModels}
+              onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
