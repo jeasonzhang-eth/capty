@@ -75,6 +75,15 @@ interface HFSearchResult {
   readonly pipeline_tag?: string;
 }
 
+interface HFTreeFile {
+  readonly path: string;
+  readonly size: number;
+  readonly type: string;
+}
+
+/** Files to exclude when computing download size (matching model-downloader). */
+const SIZE_SKIP_FILES = new Set([".gitattributes", "README.md"]);
+
 /** Infer our internal model type from HuggingFace tags / model ID. */
 function inferModelType(hfModel: HFSearchResult): string {
   const id = hfModel.id.toLowerCase();
@@ -86,17 +95,46 @@ function inferModelType(hfModel: HFSearchResult): string {
   return "whisper";
 }
 
-function hfModelToEntry(hfModel: HFSearchResult): ModelEntry {
+/** Fetch the total download size (in GB) for a repo via the tree API. */
+async function fetchRepoSizeGb(repo: string, baseUrl: string): Promise<number> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch(`${baseUrl}/api/models/${repo}/tree/main`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!resp.ok) return 0;
+    const files = (await resp.json()) as HFTreeFile[];
+    const totalBytes = files
+      .filter((f) => f.type === "file" && !SIZE_SKIP_FILES.has(f.path))
+      .reduce((sum, f) => sum + (f.size ?? 0), 0);
+    return Math.round((totalBytes / (1024 * 1024 * 1024)) * 100) / 100;
+  } catch {
+    clearTimeout(timeout);
+    return 0;
+  }
+}
+
+function formatSizeStr(sizeGb: number): string {
+  if (sizeGb <= 0) return "";
+  return sizeGb < 1
+    ? ` | ~${Math.round(sizeGb * 1024)} MB`
+    : ` | ~${sizeGb} GB`;
+}
+
+function hfModelToEntry(hfModel: HFSearchResult, sizeGb: number): ModelEntry {
   const type = inferModelType(hfModel);
   const id = hfModel.id.replace(/\//g, "--");
+  const sizeStr = formatSizeStr(sizeGb);
   return {
     id,
     name: hfModel.id.split("/").pop() ?? hfModel.id,
     type,
     repo: hfModel.id,
-    size_gb: 0,
+    size_gb: sizeGb,
     languages: ["multilingual"],
-    description: `HuggingFace: ${hfModel.id} (${(hfModel.downloads ?? 0).toLocaleString()} downloads)`,
+    description: `${hfModel.id} (${(hfModel.downloads ?? 0).toLocaleString()} downloads${sizeStr})`,
   };
 }
 
@@ -114,18 +152,25 @@ async function searchHuggingFaceModels(
   });
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
+  let results: HFSearchResult[];
   try {
     const resp = await fetch(`${baseUrl}/api/models?${params}`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
     if (!resp.ok) return [];
-    const results = (await resp.json()) as HFSearchResult[];
-    return results.map(hfModelToEntry);
+    results = (await resp.json()) as HFSearchResult[];
   } catch {
     clearTimeout(timeout);
     return [];
   }
+
+  // Fetch file sizes for each result in parallel via the tree API
+  const sizes = await Promise.all(
+    results.map((r) => fetchRepoSizeGb(r.id, baseUrl)),
+  );
+
+  return results.map((r, i) => hfModelToEntry(r, sizes[i]));
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
