@@ -21,17 +21,22 @@ function App(): React.JSX.Element {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Track segment boundaries from VAD
+  const segmentStartRef = useRef(0);
+  const segmentEndRef = useRef(0);
+
   const transcription = useTranscription({
     onFinal: useCallback(
       async (text: string) => {
         if (!text.trim()) return;
-        const now = store.elapsedSeconds;
+        const startTime = segmentStartRef.current;
+        const endTime = segmentEndRef.current;
         // Persist to database
         if (store.currentSessionId) {
           await window.capty.addSegment({
             sessionId: store.currentSessionId,
-            startTime: now,
-            endTime: now,
+            startTime,
+            endTime,
             text,
             audioPath: "",
             isFinal: true,
@@ -40,12 +45,12 @@ function App(): React.JSX.Element {
         // Update in-memory store
         store.addSegment({
           id: Date.now(),
-          start_time: now,
-          end_time: now,
+          start_time: startTime,
+          end_time: endTime,
           text,
         });
       },
-      [store.elapsedSeconds, store.currentSessionId],
+      [store.currentSessionId],
     ),
     onError: useCallback((msg: string) => {
       console.error("Transcription error:", msg);
@@ -54,9 +59,10 @@ function App(): React.JSX.Element {
 
   const vad = useVAD({
     onSpeechStart: useCallback(() => {
-      // Speech started
+      segmentStartRef.current = elapsedRef.current;
     }, []),
     onSpeechEnd: useCallback(() => {
+      segmentEndRef.current = elapsedRef.current;
       // Speech ended - signal the sidecar to transcribe accumulated audio
       transcription.sendSegmentEnd();
     }, [transcription]),
