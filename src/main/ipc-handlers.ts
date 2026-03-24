@@ -40,14 +40,8 @@ interface ModelEntry {
   readonly downloaded?: boolean;
 }
 
-const DEFAULT_REGISTRY_URL =
-  "https://raw.githubusercontent.com/jeasonzhang-eth/capty/main/resources/models.json";
-
-async function loadModelList(
-  configDir: string,
-  forceRemote = false,
-): Promise<ModelEntry[]> {
-  // 1. Read local models.json
+function loadLocalModels(configDir: string): ModelEntry[] {
+  // Read local models.json
   let localModels: ModelEntry[] = [];
   try {
     const registryPath = join(
@@ -62,42 +56,76 @@ async function loadModelList(
     // Local registry not found
   }
 
-  // 2. Try fetching remote model list
-  let remoteModels: ModelEntry[] = [];
-  if (forceRemote || localModels.length > 0) {
-    try {
-      const config = readConfig(configDir);
-      const url = config.modelRegistryUrl ?? DEFAULT_REGISTRY_URL;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const resp = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (resp.ok) {
-        remoteModels = (await resp.json()) as ModelEntry[];
-      }
-    } catch {
-      // Remote fetch failed — silently degrade to local only
-    }
-  }
-
-  // 3. Merge: remote can override/extend local (keyed by id)
-  const modelMap = new Map<string, ModelEntry>();
-  for (const m of localModels) {
-    modelMap.set(m.id, m);
-  }
-  for (const m of remoteModels) {
-    modelMap.set(m.id, m);
-  }
-
-  // 4. Mark downloaded status
+  // Mark downloaded status
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
 
-  return Array.from(modelMap.values()).map((m) => ({
+  return localModels.map((m) => ({
     ...m,
     downloaded: fs.existsSync(join(modelsDir, m.id)),
   }));
+}
+
+interface HFSearchResult {
+  readonly id: string;
+  readonly modelId: string;
+  readonly tags: readonly string[];
+  readonly downloads: number;
+  readonly pipeline_tag?: string;
+}
+
+/** Infer our internal model type from HuggingFace tags / model ID. */
+function inferModelType(hfModel: HFSearchResult): string {
+  const id = hfModel.id.toLowerCase();
+  const tags = hfModel.tags.map((t) => t.toLowerCase());
+
+  if (tags.includes("whisper") || id.includes("whisper")) return "whisper";
+  if (tags.includes("qwen") || id.includes("qwen")) return "qwen-asr";
+  // Default to whisper for generic ASR models (most common on HF)
+  return "whisper";
+}
+
+function hfModelToEntry(hfModel: HFSearchResult): ModelEntry {
+  const type = inferModelType(hfModel);
+  const id = hfModel.id.replace(/\//g, "--");
+  return {
+    id,
+    name: hfModel.id.split("/").pop() ?? hfModel.id,
+    type,
+    repo: hfModel.id,
+    size_gb: 0,
+    languages: ["multilingual"],
+    description: `HuggingFace: ${hfModel.id} (${(hfModel.downloads ?? 0).toLocaleString()} downloads)`,
+  };
+}
+
+async function searchHuggingFaceModels(
+  query: string,
+  mirrorUrl?: string,
+): Promise<ModelEntry[]> {
+  const baseUrl = mirrorUrl ?? "https://huggingface.co";
+  const params = new URLSearchParams({
+    search: query,
+    pipeline_tag: "automatic-speech-recognition",
+    sort: "downloads",
+    direction: "-1",
+    limit: "20",
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(`${baseUrl}/api/models?${params}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!resp.ok) return [];
+    const results = (await resp.json()) as HFSearchResult[];
+    return results.map(hfModelToEntry);
+  } catch {
+    clearTimeout(timeout);
+    return [];
+  }
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -205,13 +233,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return sidecar.getUrl();
   });
 
-  // Models — read from local registry, optionally merge remote list
-  ipcMain.handle("models:list", async () => {
-    return loadModelList(configDir);
+  // Models — read from local (builtin) registry
+  ipcMain.handle("models:list", () => {
+    return loadLocalModels(configDir);
   });
 
-  ipcMain.handle("models:refresh", async () => {
-    return loadModelList(configDir, true);
+  // Search HuggingFace for ASR models
+  ipcMain.handle("models:search", async (_event, query: string) => {
+    const config = readConfig(configDir);
+    const mirrorUrl = config.hfMirrorUrl ?? undefined;
+    const results = await searchHuggingFaceModels(query, mirrorUrl);
+    // Mark downloaded status
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const modelsDir = join(dataDir, "models");
+    return results.map((m) => ({
+      ...m,
+      downloaded: fs.existsSync(join(modelsDir, m.id)),
+    }));
   });
 
   // Delete a downloaded model

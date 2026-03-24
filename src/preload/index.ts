@@ -46,7 +46,7 @@ const api = {
 
   // Models
   listModels: () => ipcRenderer.invoke("models:list"),
-  refreshModels: () => ipcRenderer.invoke("models:refresh"),
+  searchModels: (query: string) => ipcRenderer.invoke("models:search", query),
   deleteModel: (modelId: string) =>
     ipcRenderer.invoke("models:delete", modelId),
 

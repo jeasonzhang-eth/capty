@@ -49,7 +49,7 @@ declare global {
       setConfig: (config: Record<string, unknown>) => Promise<void>;
       getSidecarUrl: () => Promise<string>;
       listModels: () => Promise<unknown[]>;
-      refreshModels: () => Promise<unknown[]>;
+      searchModels: (query: string) => Promise<unknown[]>;
       deleteModel: (modelId: string) => Promise<void>;
       deleteSegments: (sessionId: number) => Promise<void>;
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;

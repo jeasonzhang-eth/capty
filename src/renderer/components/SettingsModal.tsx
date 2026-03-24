@@ -19,16 +19,13 @@ interface SettingsModalProps {
   readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
   readonly isRecording: boolean;
-  readonly registryUrl: string;
-  readonly defaultRegistryUrl: string;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
-  readonly onDownloadModel: (modelId: string) => void;
+  readonly onDownloadModel: (modelId: string, repo: string) => void;
   readonly onDeleteModel: (modelId: string) => void;
-  readonly onRefreshModels: () => void;
-  readonly onChangeRegistryUrl: (url: string) => void;
+  readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onClose: () => void;
 }
@@ -99,6 +96,234 @@ function LanguageTags({
   );
 }
 
+function ModelCard({
+  model,
+  isSelected,
+  isThisDownloading,
+  downloadProgress,
+  isRecording,
+  isDownloading,
+  onDownloadModel,
+  onSelectModel,
+  onDelete,
+}: {
+  readonly model: ModelInfo;
+  readonly isSelected: boolean;
+  readonly isThisDownloading: boolean;
+  readonly downloadProgress: number;
+  readonly isRecording: boolean;
+  readonly isDownloading: boolean;
+  readonly onDownloadModel: (id: string, repo: string) => void;
+  readonly onSelectModel: (id: string) => void;
+  readonly onDelete: ((id: string) => void) | null;
+}): React.ReactElement {
+  return (
+    <div
+      style={{
+        padding: "12px",
+        backgroundColor: isSelected ? "var(--bg-tertiary)" : "transparent",
+        border: isSelected
+          ? "1px solid var(--accent)"
+          : "1px solid var(--border)",
+        borderRadius: "8px",
+        transition: "border-color 0.2s",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+              }}
+            >
+              {model.name}
+            </span>
+            <TypeTag type={model.type} />
+          </div>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              marginTop: "4px",
+              lineHeight: "16px",
+            }}
+          >
+            {model.description}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginTop: "6px",
+              flexWrap: "wrap",
+            }}
+          >
+            {model.size_gb > 0 && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: "rgba(255, 255, 255, 0.06)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {model.size_gb < 1
+                  ? `${Math.round(model.size_gb * 1024)} MB`
+                  : `${model.size_gb} GB`}
+              </span>
+            )}
+            <LanguageTags languages={model.languages} />
+            {model.downloaded && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: "rgba(34, 197, 94, 0.15)",
+                  color: "#22c55e",
+                }}
+              >
+                Downloaded
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "6px",
+            marginLeft: "8px",
+            flexShrink: 0,
+            alignItems: "center",
+          }}
+        >
+          {!model.downloaded && !isThisDownloading && (
+            <button
+              onClick={() => onDownloadModel(model.id, model.repo)}
+              disabled={isRecording || isDownloading}
+              style={{
+                padding: "5px 12px",
+                fontSize: "11px",
+                borderRadius: "5px",
+                border: "none",
+                backgroundColor: "var(--accent)",
+                color: "white",
+                cursor:
+                  isRecording || isDownloading ? "not-allowed" : "pointer",
+                opacity: isRecording || isDownloading ? 0.5 : 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Download
+            </button>
+          )}
+          {model.downloaded && !isSelected && (
+            <button
+              onClick={() => onSelectModel(model.id)}
+              disabled={isRecording}
+              style={{
+                padding: "5px 12px",
+                fontSize: "11px",
+                borderRadius: "5px",
+                border: "1px solid var(--accent)",
+                backgroundColor: "transparent",
+                color: "var(--accent)",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                opacity: isRecording ? 0.5 : 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Use
+            </button>
+          )}
+          {isSelected && model.downloaded && (
+            <span
+              style={{
+                padding: "5px 12px",
+                fontSize: "11px",
+                color: "var(--accent)",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Active
+            </span>
+          )}
+          {model.downloaded && !isSelected && onDelete && (
+            <button
+              onClick={() => onDelete(model.id)}
+              disabled={isRecording || isDownloading}
+              style={{
+                padding: "5px 8px",
+                fontSize: "11px",
+                borderRadius: "5px",
+                border: "1px solid var(--border)",
+                backgroundColor: "transparent",
+                color: "var(--text-muted)",
+                cursor:
+                  isRecording || isDownloading ? "not-allowed" : "pointer",
+                opacity: isRecording || isDownloading ? 0.5 : 1,
+                whiteSpace: "nowrap",
+              }}
+              title="Delete model"
+            >
+              &times;
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isThisDownloading && (
+        <div style={{ marginTop: "8px" }}>
+          <div
+            style={{
+              height: "4px",
+              backgroundColor: "var(--border)",
+              borderRadius: "2px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${downloadProgress}%`,
+                backgroundColor: "var(--accent)",
+                transition: "width 0.3s",
+                borderRadius: "2px",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              fontSize: "10px",
+              color: "var(--text-muted)",
+              textAlign: "right",
+              marginTop: "4px",
+            }}
+          >
+            {Math.round(downloadProgress)}%
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsModal({
   dataDir,
   models,
@@ -107,26 +332,23 @@ export function SettingsModal({
   downloadingModelId,
   downloadProgress,
   isRecording,
-  registryUrl,
-  defaultRegistryUrl,
   hfMirrorUrl,
   defaultHfUrl,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
-  onRefreshModels,
-  onChangeRegistryUrl,
+  onSearchModels,
   onChangeHfMirrorUrl,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Model Source URL state
-  const [editingUrl, setEditingUrl] = useState(registryUrl);
-  const [urlSaved, setUrlSaved] = useState(false);
-  const urlChanged = editingUrl !== registryUrl;
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   // HuggingFace Mirror URL state
   const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
@@ -142,17 +364,10 @@ export function SettingsModal({
 
   const handleDelete = useCallback(
     (modelId: string) => {
-      const model = models.find((m) => m.id === modelId);
-      if (!model) return;
-
-      if (modelId === selectedModelId) {
-        // Cannot delete active model — user must switch first
-        return;
-      }
-
+      if (modelId === selectedModelId) return;
       setConfirmDeleteId(modelId);
     },
-    [models, selectedModelId],
+    [selectedModelId],
   );
 
   const confirmDelete = useCallback(() => {
@@ -161,20 +376,6 @@ export function SettingsModal({
       setConfirmDeleteId(null);
     }
   }, [confirmDeleteId, onDeleteModel]);
-
-  const handleSaveUrl = useCallback(() => {
-    onChangeRegistryUrl(editingUrl);
-    setUrlSaved(true);
-    setTimeout(() => setUrlSaved(false), 2000);
-    // Auto-refresh after saving a new URL
-    setIsRefreshing(true);
-    onRefreshModels();
-    setTimeout(() => setIsRefreshing(false), 1500);
-  }, [editingUrl, onChangeRegistryUrl, onRefreshModels]);
-
-  const handleResetUrl = useCallback(() => {
-    setEditingUrl(defaultRegistryUrl);
-  }, [defaultRegistryUrl]);
 
   const handleSaveHfUrl = useCallback(() => {
     onChangeHfMirrorUrl(editingHfUrl);
@@ -186,14 +387,29 @@ export function SettingsModal({
     setEditingHfUrl(defaultHfUrl);
   }, [defaultHfUrl]);
 
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
+  const handleSearch = useCallback(async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setIsSearching(true);
+    setHasSearched(true);
     try {
-      onRefreshModels();
+      const results = await onSearchModels(q);
+      // Filter out models that are already in the builtin list
+      const builtinIds = new Set(models.map((m) => m.id));
+      setSearchResults(results.filter((r) => !builtinIds.has(r.id)));
+    } catch {
+      setSearchResults([]);
     } finally {
-      setTimeout(() => setIsRefreshing(false), 1000);
+      setIsSearching(false);
     }
-  }, [onRefreshModels]);
+  }, [searchQuery, onSearchModels, models]);
+
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") handleSearch();
+    },
+    [handleSearch],
+  );
 
   return (
     <div
@@ -217,8 +433,8 @@ export function SettingsModal({
           border: "1px solid var(--border)",
           borderRadius: "12px",
           padding: "24px",
-          width: "480px",
-          maxHeight: "80vh",
+          width: "520px",
+          maxHeight: "85vh",
           overflowY: "auto",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
         }}
@@ -302,134 +518,17 @@ export function SettingsModal({
 
         {/* Model Marketplace */}
         <div style={sectionStyle}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "12px",
-            }}
-          >
-            <div style={sectionTitleStyle}>Models</div>
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              style={{
-                padding: "4px 10px",
-                fontSize: "11px",
-                borderRadius: "5px",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-secondary)",
-                cursor: isRefreshing ? "not-allowed" : "pointer",
-                opacity: isRefreshing ? 0.6 : 1,
-              }}
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh"}
-            </button>
+          <div style={{ ...sectionTitleStyle, marginBottom: "4px" }}>
+            Models
           </div>
           <div style={labelStyle}>
-            Browse and manage ASR models for transcription.
-          </div>
-
-          {/* Model Source URL */}
-          <div
-            style={{
-              marginTop: "8px",
-              marginBottom: "12px",
-              padding: "10px 12px",
-              backgroundColor: "var(--bg-tertiary)",
-              borderRadius: "6px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                marginBottom: "6px",
-              }}
-            >
-              Model Source URL
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <input
-                type="text"
-                value={editingUrl}
-                onChange={(e) => setEditingUrl(e.target.value)}
-                placeholder="https://..."
-                style={{
-                  flex: 1,
-                  padding: "6px 8px",
-                  fontSize: "11px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  fontFamily: "monospace",
-                }}
-              />
-              {urlChanged && (
-                <button
-                  onClick={handleSaveUrl}
-                  style={{
-                    padding: "5px 10px",
-                    fontSize: "11px",
-                    borderRadius: "4px",
-                    border: "none",
-                    backgroundColor: "var(--accent)",
-                    color: "white",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Save
-                </button>
-              )}
-              {!urlChanged && urlSaved && (
-                <span
-                  style={{
-                    fontSize: "11px",
-                    color: "#22c55e",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Saved
-                </span>
-              )}
-              <button
-                onClick={handleResetUrl}
-                disabled={editingUrl === defaultRegistryUrl}
-                style={{
-                  padding: "5px 8px",
-                  fontSize: "10px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "transparent",
-                  color: "var(--text-muted)",
-                  cursor:
-                    editingUrl === defaultRegistryUrl
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity: editingUrl === defaultRegistryUrl ? 0.4 : 1,
-                  whiteSpace: "nowrap",
-                }}
-                title="Reset to default URL"
-              >
-                Reset
-              </button>
-            </div>
+            Built-in models and models discovered from HuggingFace.
           </div>
 
           {/* HuggingFace Mirror URL */}
           <div
             style={{
+              marginTop: "10px",
               marginBottom: "12px",
               padding: "10px 12px",
               backgroundColor: "var(--bg-tertiary)",
@@ -445,13 +544,7 @@ export function SettingsModal({
             >
               HuggingFace Mirror (model download source)
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <input
                 type="text"
                 value={editingHfUrl}
@@ -512,252 +605,147 @@ export function SettingsModal({
                   opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
                   whiteSpace: "nowrap",
                 }}
-                title="Reset to default URL"
+                title="Reset to default"
               >
                 Reset
               </button>
             </div>
           </div>
 
+          {/* Built-in models */}
           <div
             style={{
-              marginTop: "8px",
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              marginBottom: "8px",
+            }}
+          >
+            Built-in
+          </div>
+          <div
+            style={{
               display: "flex",
               flexDirection: "column",
               gap: "8px",
+              marginBottom: "16px",
             }}
           >
-            {models.map((model) => {
-              const isSelected = model.id === selectedModelId;
-              const isThisDownloading =
-                isDownloading && downloadingModelId === model.id;
-
-              return (
-                <div
-                  key={model.id}
-                  style={{
-                    padding: "12px",
-                    backgroundColor: isSelected
-                      ? "var(--bg-tertiary)"
-                      : "transparent",
-                    border: isSelected
-                      ? "1px solid var(--accent)"
-                      : "1px solid var(--border)",
-                    borderRadius: "8px",
-                    transition: "border-color 0.2s",
-                  }}
-                >
-                  {/* Top row: name + tags + action buttons */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: 600,
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {model.name}
-                        </span>
-                        <TypeTag type={model.type} />
-                      </div>
-                      {/* Description */}
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "var(--text-muted)",
-                          marginTop: "4px",
-                          lineHeight: "16px",
-                        }}
-                      >
-                        {model.description}
-                      </div>
-                      {/* Meta: size + languages */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          marginTop: "6px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            ...tagStyle,
-                            backgroundColor: "rgba(255, 255, 255, 0.06)",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          {model.size_gb < 1
-                            ? `${Math.round(model.size_gb * 1024)} MB`
-                            : `${model.size_gb} GB`}
-                        </span>
-                        <LanguageTags languages={model.languages} />
-                        {model.downloaded && (
-                          <span
-                            style={{
-                              ...tagStyle,
-                              backgroundColor: "rgba(34, 197, 94, 0.15)",
-                              color: "#22c55e",
-                            }}
-                          >
-                            Downloaded
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        marginLeft: "8px",
-                        flexShrink: 0,
-                        alignItems: "center",
-                      }}
-                    >
-                      {!model.downloaded && !isThisDownloading && (
-                        <button
-                          onClick={() => onDownloadModel(model.id)}
-                          disabled={isRecording || isDownloading}
-                          style={{
-                            padding: "5px 12px",
-                            fontSize: "11px",
-                            borderRadius: "5px",
-                            border: "none",
-                            backgroundColor: "var(--accent)",
-                            color: "white",
-                            cursor:
-                              isRecording || isDownloading
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity: isRecording || isDownloading ? 0.5 : 1,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Download
-                        </button>
-                      )}
-                      {model.downloaded && !isSelected && (
-                        <button
-                          onClick={() => onSelectModel(model.id)}
-                          disabled={isRecording}
-                          style={{
-                            padding: "5px 12px",
-                            fontSize: "11px",
-                            borderRadius: "5px",
-                            border: "1px solid var(--accent)",
-                            backgroundColor: "transparent",
-                            color: "var(--accent)",
-                            cursor: isRecording ? "not-allowed" : "pointer",
-                            opacity: isRecording ? 0.5 : 1,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Use
-                        </button>
-                      )}
-                      {isSelected && model.downloaded && (
-                        <span
-                          style={{
-                            padding: "5px 12px",
-                            fontSize: "11px",
-                            color: "var(--accent)",
-                            fontWeight: 600,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Active
-                        </span>
-                      )}
-                      {model.downloaded && !isSelected && (
-                        <button
-                          onClick={() => handleDelete(model.id)}
-                          disabled={isRecording || isDownloading}
-                          style={{
-                            padding: "5px 8px",
-                            fontSize: "11px",
-                            borderRadius: "5px",
-                            border: "1px solid var(--border)",
-                            backgroundColor: "transparent",
-                            color: "var(--text-muted)",
-                            cursor:
-                              isRecording || isDownloading
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity: isRecording || isDownloading ? 0.5 : 1,
-                            whiteSpace: "nowrap",
-                          }}
-                          title="Delete model"
-                        >
-                          &times;
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Download progress */}
-                  {isThisDownloading && (
-                    <div style={{ marginTop: "8px" }}>
-                      <div
-                        style={{
-                          height: "4px",
-                          backgroundColor: "var(--border)",
-                          borderRadius: "2px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: "100%",
-                            width: `${downloadProgress}%`,
-                            backgroundColor: "var(--accent)",
-                            transition: "width 0.3s",
-                            borderRadius: "2px",
-                          }}
-                        />
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--text-muted)",
-                          textAlign: "right",
-                          marginTop: "4px",
-                        }}
-                      >
-                        {Math.round(downloadProgress)}%
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {models.map((model) => (
+              <ModelCard
+                key={model.id}
+                model={model}
+                isSelected={model.id === selectedModelId}
+                isThisDownloading={
+                  isDownloading && downloadingModelId === model.id
+                }
+                downloadProgress={downloadProgress}
+                isRecording={isRecording}
+                isDownloading={isDownloading}
+                onDownloadModel={onDownloadModel}
+                onSelectModel={onSelectModel}
+                onDelete={handleDelete}
+              />
+            ))}
             {models.length === 0 && (
               <div
                 style={{
-                  padding: "16px",
+                  padding: "12px",
                   textAlign: "center",
                   color: "var(--text-muted)",
                   fontSize: "13px",
                 }}
               >
-                No models available
+                No built-in models available
+              </div>
+            )}
+          </div>
+
+          {/* Search HuggingFace */}
+          <div
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              marginBottom: "8px",
+            }}
+          >
+            Search HuggingFace
+          </div>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search ASR models, e.g. whisper, wav2vec2..."
+              style={{
+                flex: 1,
+                padding: "8px 10px",
+                fontSize: "12px",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={handleSearch}
+              disabled={isSearching || !searchQuery.trim()}
+              style={{
+                padding: "8px 14px",
+                fontSize: "12px",
+                borderRadius: "6px",
+                border: "none",
+                backgroundColor: "var(--accent)",
+                color: "white",
+                cursor:
+                  isSearching || !searchQuery.trim()
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isSearching ? "Searching..." : "Search"}
+            </button>
+          </div>
+
+          {/* Search results */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            {searchResults.map((model) => (
+              <ModelCard
+                key={model.id}
+                model={model}
+                isSelected={model.id === selectedModelId}
+                isThisDownloading={
+                  isDownloading && downloadingModelId === model.id
+                }
+                downloadProgress={downloadProgress}
+                isRecording={isRecording}
+                isDownloading={isDownloading}
+                onDownloadModel={onDownloadModel}
+                onSelectModel={onSelectModel}
+                onDelete={null}
+              />
+            ))}
+            {hasSearched && !isSearching && searchResults.length === 0 && (
+              <div
+                style={{
+                  padding: "12px",
+                  textAlign: "center",
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                No models found. Try different keywords.
               </div>
             )}
           </div>
@@ -813,7 +801,8 @@ export function SettingsModal({
             >
               Are you sure you want to delete{" "}
               <strong>
-                {models.find((m) => m.id === confirmDeleteId)?.name}
+                {models.find((m) => m.id === confirmDeleteId)?.name ??
+                  confirmDeleteId}
               </strong>
               ? The downloaded model files will be permanently removed.
             </div>

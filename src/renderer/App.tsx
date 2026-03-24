@@ -86,11 +86,8 @@ function App(): React.JSX.Element {
   );
   const [downloadProgress, setDownloadProgress] = useState(0);
 
-  // Model registry URL
-  const DEFAULT_REGISTRY_URL =
-    "https://raw.githubusercontent.com/jeasonzhang-eth/capty/main/resources/models.json";
+  // HuggingFace mirror URL
   const DEFAULT_HF_URL = "https://huggingface.co";
-  const [registryUrl, setRegistryUrl] = useState(DEFAULT_REGISTRY_URL);
   const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
 
   const handleDownloadModel = useCallback(async () => {
@@ -150,12 +147,6 @@ function App(): React.JSX.Element {
 
         // Restore saved config
         const config = await window.capty.getConfig();
-
-        // Restore model registry URL
-        const savedUrl = config.modelRegistryUrl as string | null;
-        if (savedUrl) {
-          setRegistryUrl(savedUrl);
-        }
 
         // Restore HuggingFace mirror URL
         const savedHfUrl = config.hfMirrorUrl as string | null;
@@ -570,9 +561,8 @@ function App(): React.JSX.Element {
   );
 
   const handleSettingsDownloadModel = useCallback(
-    async (modelId: string) => {
-      const model = store.models.find((m: { id: string }) => m.id === modelId);
-      if (!model || model.downloaded || isDownloading) return;
+    async (modelId: string, repo: string) => {
+      if (isDownloading) return;
 
       const dataDir = store.dataDir;
       if (!dataDir) return;
@@ -586,9 +576,10 @@ function App(): React.JSX.Element {
       });
 
       try {
-        const destDir = `${dataDir}/models/${model.id}`;
-        await window.capty.downloadModel(model.repo, destDir);
+        const destDir = `${dataDir}/models/${modelId}`;
+        await window.capty.downloadModel(repo, destDir);
 
+        // Refresh builtin models list (to update downloaded status)
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
       } catch (err) {
@@ -628,22 +619,9 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleRefreshModels = useCallback(async () => {
-    try {
-      const models = await window.capty.refreshModels();
-      store.setModels(models as Parameters<typeof store.setModels>[0]);
-    } catch (err) {
-      console.error("Failed to refresh models:", err);
-    }
-  }, [store]);
-
-  const handleChangeRegistryUrl = useCallback(async (url: string) => {
-    setRegistryUrl(url);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      modelRegistryUrl: url || null,
-    });
+  const handleSearchModels = useCallback(async (query: string) => {
+    const results = await window.capty.searchModels(query);
+    return results as Parameters<typeof store.setModels>[0];
   }, []);
 
   const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
@@ -752,16 +730,13 @@ function App(): React.JSX.Element {
           downloadingModelId={downloadingModelId}
           downloadProgress={downloadProgress}
           isRecording={store.isRecording}
-          registryUrl={registryUrl}
-          defaultRegistryUrl={DEFAULT_REGISTRY_URL}
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSettingsSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
           onDeleteModel={handleDeleteModel}
-          onRefreshModels={handleRefreshModels}
-          onChangeRegistryUrl={handleChangeRegistryUrl}
+          onSearchModels={handleSearchModels}
           onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
           onClose={() => setShowSettings(false)}
         />
