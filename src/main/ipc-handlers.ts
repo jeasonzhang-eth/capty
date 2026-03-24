@@ -42,11 +42,26 @@ interface ModelEntry {
 
 const USER_MODELS_FILE = "user-models.json";
 
+/** Read the builtin models.json shipped with the app. */
+function readBuiltinModels(): ModelEntry[] {
+  try {
+    const registryPath = join(
+      app.isPackaged
+        ? join(process.resourcesPath, "resources")
+        : join(__dirname, "../../resources"),
+      "models.json",
+    );
+    return JSON.parse(fs.readFileSync(registryPath, "utf-8")) as ModelEntry[];
+  } catch {
+    return [];
+  }
+}
+
+/** Read user-models.json — the single source of truth at runtime. */
 function readUserModels(configDir: string): ModelEntry[] {
   const filePath = join(configDir, USER_MODELS_FILE);
   try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw) as ModelEntry[];
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as ModelEntry[];
   } catch {
     return [];
   }
@@ -60,7 +75,6 @@ function writeUserModels(configDir: string, models: ModelEntry[]): void {
 
 function addUserModel(configDir: string, model: ModelEntry): void {
   const existing = readUserModels(configDir);
-  // Replace if already exists (update metadata), otherwise append
   const idx = existing.findIndex((m) => m.id === model.id);
   if (idx >= 0) {
     existing[idx] = model;
@@ -78,46 +92,37 @@ function removeUserModel(configDir: string, modelId: string): void {
   );
 }
 
-/** Infer model type from a directory name or config. */
-function inferTypeFromId(id: string): string {
-  const lower = id.toLowerCase();
-  if (lower.includes("whisper")) return "whisper";
-  if (lower.includes("qwen")) return "qwen-asr";
-  return "whisper";
-}
+/**
+ * Initialize user-models.json from builtin models.json on first run.
+ * Also picks up orphaned model directories and any new builtin models
+ * added in app updates.
+ */
+function ensureUserModels(configDir: string): void {
+  const filePath = join(configDir, USER_MODELS_FILE);
+  const exists = fs.existsSync(filePath);
 
-function loadAllModels(configDir: string): ModelEntry[] {
-  // 1. Read builtin models.json (shipped with app)
-  let builtinModels: ModelEntry[] = [];
-  try {
-    const registryPath = join(
-      app.isPackaged
-        ? join(process.resourcesPath, "resources")
-        : join(__dirname, "../../resources"),
-      "models.json",
-    );
-    const raw = fs.readFileSync(registryPath, "utf-8");
-    builtinModels = JSON.parse(raw) as ModelEntry[];
-  } catch {
-    // Local registry not found
+  if (!exists) {
+    // First run: seed from builtin registry
+    const builtin = readBuiltinModels();
+    writeUserModels(configDir, builtin);
+    return;
   }
 
-  // 2. Read user-downloaded models (local registry)
-  const userModels = readUserModels(configDir);
+  // Existing file: merge in any NEW builtin models from app updates
+  const current = readUserModels(configDir);
+  const currentIds = new Set(current.map((m) => m.id));
+  const builtin = readBuiltinModels();
+  let changed = false;
 
-  // 3. Merge: builtin first, then user models (skip duplicates)
-  const knownIds = new Set([
-    ...builtinModels.map((m) => m.id),
-    ...userModels.map((m) => m.id),
-  ]);
-  const mergedModels = [
-    ...builtinModels,
-    ...userModels.filter(
-      (m) => !new Set(builtinModels.map((b) => b.id)).has(m.id),
-    ),
-  ];
+  for (const bm of builtin) {
+    if (!currentIds.has(bm.id)) {
+      current.push(bm);
+      currentIds.add(bm.id);
+      changed = true;
+    }
+  }
 
-  // 4. Scan models directory for orphaned downloads (downloaded but not in any registry)
+  // Also scan models directory for orphaned downloads
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
@@ -125,14 +130,18 @@ function loadAllModels(configDir: string): ModelEntry[] {
   if (fs.existsSync(modelsDir)) {
     try {
       for (const dir of fs.readdirSync(modelsDir)) {
-        if (knownIds.has(dir)) continue;
+        if (currentIds.has(dir)) continue;
         if (!isModelDownloaded(modelsDir, dir)) continue;
-
-        // Found an orphaned downloaded model — infer metadata and add to user registry
+        // Infer metadata from directory name
         const repo = dir.replace(/--/g, "/");
         const name = dir.split("--").pop() ?? dir;
-        const type = inferTypeFromId(dir);
-        const orphan: ModelEntry = {
+        const lower = dir.toLowerCase();
+        const type = lower.includes("whisper")
+          ? "whisper"
+          : lower.includes("qwen")
+            ? "qwen-asr"
+            : "whisper";
+        current.push({
           id: dir,
           name,
           type,
@@ -140,17 +149,28 @@ function loadAllModels(configDir: string): ModelEntry[] {
           size_gb: 0,
           languages: ["multilingual"],
           description: repo,
-        };
-        mergedModels.push(orphan);
-        // Persist so we don't have to scan again next time
-        addUserModel(configDir, orphan);
+        });
+        changed = true;
       }
     } catch {
       // Cannot read models dir
     }
   }
 
-  return mergedModels.map((m) => ({
+  if (changed) {
+    writeUserModels(configDir, current);
+  }
+}
+
+function loadAllModels(configDir: string): ModelEntry[] {
+  ensureUserModels(configDir);
+
+  const models = readUserModels(configDir);
+  const config = readConfig(configDir);
+  const dataDir = config.dataDir ?? join(configDir, "data");
+  const modelsDir = join(dataDir, "models");
+
+  return models.map((m) => ({
     ...m,
     downloaded: isModelDownloaded(modelsDir, m.id),
   }));
