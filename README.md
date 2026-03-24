@@ -10,7 +10,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 Wh
 - **音频播放** — 历史会话支持一键播放，底部播放器提供暂停/恢复/进度拖拽/时间显示
 - **设置页面** — 支持更改数据存储目录、查看/下载/切换 ASR 模型
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
-- **多模型支持** — 可选择不同 ASR 模型（Qwen3-ASR），支持在线下载并显示进度
+- **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体（tiny/base/small/medium/large-v3-turbo），支持浏览、下载、切换、删除；远程模型列表自动刷新
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，无需联网
 
@@ -21,7 +21,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 Wh
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + qwen-asr) |
+| ML 推理 | Python sidecar (FastAPI + qwen-asr + transformers/Whisper) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 项目结构
@@ -86,6 +86,19 @@ pip install -r requirements.txt
 ```
 
 ## 更新日志
+
+### 2026-03-24 (3)
+
+- 新增模型市场：Settings 中的 Models 区域升级为模型市场 UI
+  - 模型卡片展示名称、描述、大小、语言标签、类型标签（Qwen / Whisper）
+  - 按钮状态：Download → 下载中（进度条）→ Use → Active
+  - 已下载模型支持删除（带确认弹窗，删除本地文件）
+  - 底部"Refresh"按钮支持从远程获取最新模型列表（失败时静默降级到本地）
+- 新增 Whisper 模型支持：sidecar 新增 transformers 后端
+  - 支持 Whisper Tiny / Base / Small / Medium / Large V3 Turbo 五个模型
+  - 基于 `model_type` 字段自动选择 qwen-asr 或 whisper 推理引擎
+- ControlBar 模型下拉列表显示 [Qwen] / [Whisper] 类型前缀
+- `models.json` 模型注册表扩充为 6 个模型，每个模型增加 `type`、`languages`、`description` 字段
 
 ### 2026-03-24 (2)
 
