@@ -267,9 +267,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     "models:download",
     async (_event, repo: string, destDir: string) => {
       const win = getMainWindow();
-      await downloadModel(repo, destDir, (progress) => {
-        win?.webContents.send("models:download-progress", progress);
-      });
+      const config = readConfig(configDir);
+      const mirrorUrl = config.hfMirrorUrl ?? undefined;
+      await downloadModel(
+        repo,
+        destDir,
+        (progress) => {
+          win?.webContents.send("models:download-progress", progress);
+        },
+        mirrorUrl,
+      );
     },
   );
 

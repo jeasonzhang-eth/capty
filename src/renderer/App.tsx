@@ -89,7 +89,9 @@ function App(): React.JSX.Element {
   // Model registry URL
   const DEFAULT_REGISTRY_URL =
     "https://raw.githubusercontent.com/jeasonzhang-eth/capty/main/resources/models.json";
+  const DEFAULT_HF_URL = "https://huggingface.co";
   const [registryUrl, setRegistryUrl] = useState(DEFAULT_REGISTRY_URL);
+  const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
 
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
@@ -153,6 +155,12 @@ function App(): React.JSX.Element {
         const savedUrl = config.modelRegistryUrl as string | null;
         if (savedUrl) {
           setRegistryUrl(savedUrl);
+        }
+
+        // Restore HuggingFace mirror URL
+        const savedHfUrl = config.hfMirrorUrl as string | null;
+        if (savedHfUrl) {
+          setHfMirrorUrl(savedHfUrl);
         }
 
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
@@ -638,6 +646,15 @@ function App(): React.JSX.Element {
     });
   }, []);
 
+  const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
+    setHfMirrorUrl(url);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      hfMirrorUrl: url || null,
+    });
+  }, []);
+
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
     audioCapture.setOnDeviceRemoved(() => {
@@ -737,12 +754,15 @@ function App(): React.JSX.Element {
           isRecording={store.isRecording}
           registryUrl={registryUrl}
           defaultRegistryUrl={DEFAULT_REGISTRY_URL}
+          hfMirrorUrl={hfMirrorUrl}
+          defaultHfUrl={DEFAULT_HF_URL}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSettingsSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
           onDeleteModel={handleDeleteModel}
           onRefreshModels={handleRefreshModels}
           onChangeRegistryUrl={handleChangeRegistryUrl}
+          onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
           onClose={() => setShowSettings(false)}
         />
       )}

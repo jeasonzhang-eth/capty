@@ -21,12 +21,15 @@ interface SettingsModalProps {
   readonly isRecording: boolean;
   readonly registryUrl: string;
   readonly defaultRegistryUrl: string;
+  readonly hfMirrorUrl: string;
+  readonly defaultHfUrl: string;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (modelId: string) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onRefreshModels: () => void;
   readonly onChangeRegistryUrl: (url: string) => void;
+  readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onClose: () => void;
 }
 
@@ -106,19 +109,29 @@ export function SettingsModal({
   isRecording,
   registryUrl,
   defaultRegistryUrl,
+  hfMirrorUrl,
+  defaultHfUrl,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onRefreshModels,
   onChangeRegistryUrl,
+  onChangeHfMirrorUrl,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Model Source URL state
   const [editingUrl, setEditingUrl] = useState(registryUrl);
   const [urlSaved, setUrlSaved] = useState(false);
   const urlChanged = editingUrl !== registryUrl;
+
+  // HuggingFace Mirror URL state
+  const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
+  const [hfUrlSaved, setHfUrlSaved] = useState(false);
+  const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
@@ -162,6 +175,16 @@ export function SettingsModal({
   const handleResetUrl = useCallback(() => {
     setEditingUrl(defaultRegistryUrl);
   }, [defaultRegistryUrl]);
+
+  const handleSaveHfUrl = useCallback(() => {
+    onChangeHfMirrorUrl(editingHfUrl);
+    setHfUrlSaved(true);
+    setTimeout(() => setHfUrlSaved(false), 2000);
+  }, [editingHfUrl, onChangeHfMirrorUrl]);
+
+  const handleResetHfUrl = useCallback(() => {
+    setEditingHfUrl(defaultHfUrl);
+  }, [defaultHfUrl]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -395,6 +418,98 @@ export function SettingsModal({
                       ? "not-allowed"
                       : "pointer",
                   opacity: editingUrl === defaultRegistryUrl ? 0.4 : 1,
+                  whiteSpace: "nowrap",
+                }}
+                title="Reset to default URL"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* HuggingFace Mirror URL */}
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "10px 12px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "6px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                marginBottom: "6px",
+              }}
+            >
+              HuggingFace Mirror (model download source)
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <input
+                type="text"
+                value={editingHfUrl}
+                onChange={(e) => setEditingHfUrl(e.target.value)}
+                placeholder={defaultHfUrl}
+                style={{
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: "11px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  fontFamily: "monospace",
+                }}
+              />
+              {hfUrlChanged && (
+                <button
+                  onClick={handleSaveHfUrl}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "none",
+                    backgroundColor: "var(--accent)",
+                    color: "white",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Save
+                </button>
+              )}
+              {!hfUrlChanged && hfUrlSaved && (
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "#22c55e",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleResetHfUrl}
+                disabled={editingHfUrl === defaultHfUrl}
+                style={{
+                  padding: "5px 8px",
+                  fontSize: "10px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "transparent",
+                  color: "var(--text-muted)",
+                  cursor:
+                    editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+                  opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
                   whiteSpace: "nowrap",
                 }}
                 title="Reset to default URL"
