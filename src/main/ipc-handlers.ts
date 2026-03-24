@@ -487,6 +487,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle("app:open-config-dir", () => {
+    shell.openPath(configDir);
+  });
+
   // Model download
   ipcMain.handle(
     "models:download",

@@ -4,6 +4,7 @@ import path from "path";
 export interface AppConfig {
   readonly dataDir: string | null;
   readonly selectedAudioDeviceId: string | null;
+  readonly selectedModelId: string | null;
   readonly modelRegistryUrl: string | null;
   readonly hfMirrorUrl: string | null;
 }
@@ -13,6 +14,7 @@ const CONFIG_FILENAME = "config.json";
 const DEFAULT_CONFIG: AppConfig = {
   dataDir: null,
   selectedAudioDeviceId: null,
+  selectedModelId: null,
   modelRegistryUrl: null,
   hfMirrorUrl: null,
 };

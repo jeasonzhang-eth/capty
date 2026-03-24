@@ -55,6 +55,7 @@ const api = {
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),
   selectDirectory: () => ipcRenderer.invoke("app:select-directory"),
+  openConfigDir: () => ipcRenderer.invoke("app:open-config-dir"),
 
   // Model download
   downloadModel: (repo: string, destDir: string) =>

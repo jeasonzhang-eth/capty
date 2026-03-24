@@ -177,10 +177,24 @@ function App(): React.JSX.Element {
           // Sidecar not ready yet
         }
 
-        // Load models
+        // Load models and restore selected model
         try {
           const models = await window.capty.listModels();
           store.setModels(models as Parameters<typeof store.setModels>[0]);
+
+          const savedModelId = config.selectedModelId as string | null;
+          if (savedModelId) {
+            const modelsList = models as Array<{
+              id: string;
+              downloaded: boolean;
+            }>;
+            const exists = modelsList.some(
+              (m) => m.id === savedModelId && m.downloaded,
+            );
+            if (exists) {
+              store.setSelectedModelId(savedModelId);
+            }
+          }
         } catch {
           // Models not available yet
         }
@@ -555,8 +569,11 @@ function App(): React.JSX.Element {
   }, [store]);
 
   const handleSettingsSelectModel = useCallback(
-    (modelId: string) => {
+    async (modelId: string) => {
       store.setSelectedModelId(modelId);
+      // Persist to config
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({ ...config, selectedModelId: modelId });
     },
     [store],
   );

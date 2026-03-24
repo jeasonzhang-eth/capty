@@ -534,6 +534,22 @@ export function SettingsModal({
             >
               Change
             </button>
+            <button
+              onClick={() => window.capty.openConfigDir()}
+              style={{
+                padding: "8px 14px",
+                fontSize: "12px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+              title="Open config directory"
+            >
+              Config
+            </button>
           </div>
         </div>
 
