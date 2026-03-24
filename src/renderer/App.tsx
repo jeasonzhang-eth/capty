@@ -87,6 +87,9 @@ function App(): React.JSX.Element {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // Config directory path
+  const [configDir, setConfigDir] = useState<string | null>(null);
+
   // HuggingFace mirror URL
   const DEFAULT_HF_URL = "https://huggingface.co";
   const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
@@ -143,6 +146,7 @@ function App(): React.JSX.Element {
         }
         setNeedsSetup(false);
         store.setDataDir(dataDir);
+        setConfigDir(await window.capty.getConfigDir());
         await store.loadSessions();
         await audioCapture.loadDevices();
 
@@ -568,7 +572,7 @@ function App(): React.JSX.Element {
     }
   }, [store]);
 
-  const handleSettingsSelectModel = useCallback(
+  const handleSelectModel = useCallback(
     async (modelId: string) => {
       store.setSelectedModelId(modelId);
       // Persist to config
@@ -711,7 +715,7 @@ function App(): React.JSX.Element {
         onDeviceChange={handleDeviceChange}
         models={store.models}
         selectedModelId={store.selectedModelId}
-        onModelChange={store.setSelectedModelId}
+        onModelChange={handleSelectModel}
         onSettings={() => setShowSettings(true)}
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
@@ -767,6 +771,7 @@ function App(): React.JSX.Element {
       {showSettings && (
         <SettingsModal
           dataDir={store.dataDir}
+          configDir={configDir}
           models={store.models}
           selectedModelId={store.selectedModelId}
           isDownloading={isDownloading}
@@ -777,7 +782,7 @@ function App(): React.JSX.Element {
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
           onChangeDataDir={handleChangeDataDir}
-          onSelectModel={handleSettingsSelectModel}
+          onSelectModel={handleSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
           onDeleteModel={handleDeleteModel}
           onSearchModels={handleSearchModels}

@@ -476,6 +476,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return getDataDir(configDir);
   });
 
+  ipcMain.handle("app:get-config-dir", () => {
+    return configDir;
+  });
+
   ipcMain.handle("app:select-directory", async () => {
     const win = getMainWindow();
     if (!win) {

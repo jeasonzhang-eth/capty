@@ -54,6 +54,8 @@ const api = {
 
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),
+  getConfigDir: () =>
+    ipcRenderer.invoke("app:get-config-dir") as Promise<string>,
   selectDirectory: () => ipcRenderer.invoke("app:select-directory"),
   openConfigDir: () => ipcRenderer.invoke("app:open-config-dir"),
 

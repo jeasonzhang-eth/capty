@@ -59,6 +59,7 @@ declare global {
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
       getAudioDir: (sessionId: number) => Promise<string | null>;
       getDataDir: () => Promise<string | null>;
+      getConfigDir: () => Promise<string>;
       selectDirectory: () => Promise<string | null>;
       openConfigDir: () => Promise<void>;
       openAudioFolder: (sessionId: number) => Promise<void>;

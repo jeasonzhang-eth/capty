@@ -13,6 +13,7 @@ interface ModelInfo {
 
 interface SettingsModalProps {
   readonly dataDir: string | null;
+  readonly configDir: string | null;
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
@@ -327,6 +328,7 @@ function ModelCard({
 
 export function SettingsModal({
   dataDir,
+  configDir,
   models,
   selectedModelId,
   isDownloading,
@@ -534,6 +536,39 @@ export function SettingsModal({
             >
               Change
             </button>
+          </div>
+        </div>
+
+        {/* Config Directory */}
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>Config Directory</div>
+          <div style={labelStyle}>
+            Application configuration files are stored here.
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginTop: "8px",
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                backgroundColor: "var(--bg-tertiary)",
+                borderRadius: "6px",
+                fontSize: "13px",
+                color: "var(--text-secondary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={configDir ?? ""}
+            >
+              {configDir ?? "—"}
+            </div>
             <button
               onClick={() => window.capty.openConfigDir()}
               style={{
@@ -542,13 +577,12 @@ export function SettingsModal({
                 borderRadius: "6px",
                 border: "1px solid var(--border)",
                 backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-muted)",
+                color: "var(--text-primary)",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
               }}
-              title="Open config directory"
             >
-              Config
+              Open
             </button>
           </div>
         </div>
