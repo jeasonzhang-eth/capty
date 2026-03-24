@@ -20,7 +20,7 @@ import {
 } from "./audio-files";
 import { exportTXT, exportSRT, exportMarkdown } from "./export";
 import { readConfig, writeConfig, getDataDir } from "./config";
-import { downloadModel } from "./model-downloader";
+import { downloadModel, isModelDownloaded } from "./model-downloader";
 
 export interface IpcDeps {
   readonly db: Database.Database;
@@ -63,7 +63,7 @@ function loadLocalModels(configDir: string): ModelEntry[] {
 
   return localModels.map((m) => ({
     ...m,
-    downloaded: fs.existsSync(join(modelsDir, m.id)),
+    downloaded: isModelDownloaded(modelsDir, m.id),
   }));
 }
 
@@ -293,7 +293,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const modelsDir = join(dataDir, "models");
     return results.map((m) => ({
       ...m,
-      downloaded: fs.existsSync(join(modelsDir, m.id)),
+      downloaded: isModelDownloaded(modelsDir, m.id),
     }));
   });
 

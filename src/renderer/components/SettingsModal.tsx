@@ -18,6 +18,7 @@ interface SettingsModalProps {
   readonly isDownloading: boolean;
   readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
+  readonly downloadError: string | null;
   readonly isRecording: boolean;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
@@ -331,6 +332,7 @@ export function SettingsModal({
   isDownloading,
   downloadingModelId,
   downloadProgress,
+  downloadError,
   isRecording,
   hfMirrorUrl,
   defaultHfUrl,
@@ -611,6 +613,24 @@ export function SettingsModal({
               </button>
             </div>
           </div>
+
+          {/* Download error */}
+          {downloadError && (
+            <div
+              style={{
+                padding: "8px 12px",
+                marginBottom: "12px",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "#ef4444",
+                lineHeight: "18px",
+              }}
+            >
+              {downloadError}
+            </div>
+          )}
 
           {/* Built-in models */}
           <div

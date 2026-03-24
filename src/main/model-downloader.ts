@@ -1,4 +1,11 @@
-import { createWriteStream, existsSync, mkdirSync, statSync } from "fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "fs";
 import { join } from "path";
 
 interface DownloadProgress {
@@ -18,6 +25,24 @@ interface HFModelInfo {
 /** Files to skip downloading (not needed for inference). */
 const SKIP_FILES = new Set([".gitattributes", "README.md"]);
 
+/** Default timeout for network requests (ms). */
+const REQUEST_TIMEOUT = 30_000;
+
+/** Fetch with an AbortController timeout. */
+async function fetchWithTimeout(
+  url: string,
+  opts: RequestInit = {},
+  timeoutMs = REQUEST_TIMEOUT,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Fetch the file list from the HuggingFace API for the given repo.
  * Falls back to a hardcoded list if the API call fails.
@@ -28,15 +53,19 @@ async function fetchFileList(
 ): Promise<string[]> {
   const baseUrl = mirrorUrl ?? "https://huggingface.co";
   try {
-    const response = await fetch(`${baseUrl}/api/models/${repo}`);
+    const response = await fetchWithTimeout(
+      `${baseUrl}/api/models/${repo}`,
+      {},
+      15_000,
+    );
     if (response.ok) {
       const info = (await response.json()) as HFModelInfo;
       return info.siblings
         .map((s) => s.rfilename)
         .filter((f) => !SKIP_FILES.has(f));
     }
-  } catch {
-    // API call failed, use fallback
+  } catch (err) {
+    console.error(`[model-downloader] Failed to fetch file list for ${repo}:`, err);
   }
 
   // Fallback: common model files
@@ -67,36 +96,55 @@ export async function downloadModel(
     mkdirSync(destDir, { recursive: true });
   }
 
+  console.log(`[model-downloader] Starting download: ${repo} → ${destDir}`);
+  console.log(`[model-downloader] Using base URL: ${baseUrl}`);
+
   const files = await fetchFileList(repo, mirrorUrl);
+  console.log(`[model-downloader] Files to download: ${files.join(", ")}`);
 
   // Calculate total size for progress tracking across all files
+  // Use parallel HEAD requests for speed
   let globalDownloaded = 0;
   let globalTotal = 0;
 
-  // First pass: get total sizes for meaningful progress
-  for (const file of files) {
-    const filePath = join(destDir, file);
-    const existingSize = existsSync(filePath) ? statSync(filePath).size : 0;
-
-    try {
-      const headResp = await fetch(`${resolveUrl}/${file}`, {
-        method: "HEAD",
-      });
-      if (headResp.ok) {
-        const contentLength = Number(
-          headResp.headers.get("content-length") ?? 0,
+  const headResults = await Promise.allSettled(
+    files.map(async (file) => {
+      const filePath = join(destDir, file);
+      const existingSize = existsSync(filePath) ? statSync(filePath).size : 0;
+      try {
+        const headResp = await fetchWithTimeout(
+          `${resolveUrl}/${file}`,
+          { method: "HEAD" },
+          10_000,
         );
-        globalTotal += contentLength + existingSize;
-        globalDownloaded += existingSize;
+        if (headResp.ok) {
+          const contentLength = Number(
+            headResp.headers.get("content-length") ?? 0,
+          );
+          return { contentLength, existingSize };
+        }
+      } catch {
+        // HEAD failed, skip this file's size
       }
-    } catch {
-      // File may not exist, skip
+      return { contentLength: 0, existingSize: 0 };
+    }),
+  );
+
+  for (const result of headResults) {
+    if (result.status === "fulfilled") {
+      const { contentLength, existingSize } = result.value;
+      if (contentLength > 0) {
+        globalTotal += contentLength;
+        globalDownloaded += Math.min(existingSize, contentLength);
+      }
     }
   }
 
   // If we couldn't get sizes, just use file count for progress
   const useFileProgress = globalTotal === 0;
   let filesCompleted = 0;
+  let filesDownloaded = 0;
+  let filesFailed = 0;
 
   for (const file of files) {
     const filePath = join(destDir, file);
@@ -114,15 +162,21 @@ export async function downloadModel(
     }
 
     try {
-      const response = await fetch(fileUrl, { headers });
+      // Use a longer timeout for actual downloads (large files)
+      const response = await fetchWithTimeout(fileUrl, { headers }, 60_000);
       if (!response.ok && response.status !== 416) {
         // 416 means range not satisfiable (file already complete)
+        console.warn(
+          `[model-downloader] HTTP ${response.status} for ${file}, skipping`,
+        );
+        filesFailed++;
         continue;
       }
 
       if (response.status === 416) {
         // File already complete
         filesCompleted++;
+        filesDownloaded++;
         if (useFileProgress) {
           onProgress({
             downloaded: filesCompleted,
@@ -134,7 +188,10 @@ export async function downloadModel(
       }
 
       const body = response.body;
-      if (!body) continue;
+      if (!body) {
+        filesFailed++;
+        continue;
+      }
 
       // Ensure parent dir exists for nested files
       const dir = filePath.substring(0, filePath.lastIndexOf("/"));
@@ -164,6 +221,8 @@ export async function downloadModel(
       writer.end();
 
       filesCompleted++;
+      filesDownloaded++;
+      console.log(`[model-downloader] Downloaded: ${file}`);
       if (useFileProgress) {
         onProgress({
           downloaded: filesCompleted,
@@ -171,8 +230,49 @@ export async function downloadModel(
           percent: (filesCompleted / files.length) * 100,
         });
       }
-    } catch {
-      // Skip files that don't exist (not all models have all files)
+    } catch (err) {
+      filesFailed++;
+      console.error(`[model-downloader] Failed to download ${file}:`, err);
     }
+  }
+
+  console.log(
+    `[model-downloader] Done: ${filesDownloaded} downloaded, ${filesFailed} failed`,
+  );
+
+  // If no files were actually downloaded, remove the empty directory
+  // to avoid false "downloaded" status
+  if (filesDownloaded === 0) {
+    try {
+      const entries = readdirSync(destDir);
+      if (entries.length === 0) {
+        rmSync(destDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore cleanup errors
+    }
+    throw new Error(
+      `Failed to download model ${repo}: no files could be downloaded. ` +
+        `Check your network or configure a HuggingFace mirror URL in Settings.`,
+    );
+  }
+}
+
+/** Check if a model is actually downloaded (has model weight files, not just an empty dir). */
+export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
+  const modelPath = join(modelsDir, modelId);
+  if (!existsSync(modelPath)) return false;
+  try {
+    const entries = readdirSync(modelPath);
+    // Must have at least a config file + a model weight file
+    return entries.some(
+      (e) =>
+        e.endsWith(".safetensors") ||
+        e.endsWith(".bin") ||
+        e.endsWith(".pt") ||
+        e.endsWith(".gguf"),
+    );
+  } catch {
+    return false;
   }
 }

@@ -85,6 +85,7 @@ function App(): React.JSX.Element {
     null,
   );
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // HuggingFace mirror URL
   const DEFAULT_HF_URL = "https://huggingface.co";
@@ -570,6 +571,7 @@ function App(): React.JSX.Element {
       setIsDownloading(true);
       setDownloadingModelId(modelId);
       setDownloadProgress(0);
+      setDownloadError(null);
 
       const unsubscribe = window.capty.onDownloadProgress((progress) => {
         setDownloadProgress(progress.percent);
@@ -583,7 +585,12 @@ function App(): React.JSX.Element {
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
       } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Download failed. Check network.";
         console.error("Failed to download model:", err);
+        setDownloadError(msg);
       } finally {
         unsubscribe();
         setIsDownloading(false);
@@ -729,6 +736,7 @@ function App(): React.JSX.Element {
           isDownloading={isDownloading}
           downloadingModelId={downloadingModelId}
           downloadProgress={downloadProgress}
+          downloadError={downloadError}
           isRecording={store.isRecording}
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
