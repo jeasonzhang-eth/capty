@@ -1,6 +1,6 @@
 # Capty
 
-macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 Whisper 模型。
+macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 ASR 模型（支持 Qwen3-ASR 和 OpenAI Whisper）。
 
 ## 功能
 
@@ -23,6 +23,54 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 Wh
 | 数据库 | better-sqlite3 (SQLite) |
 | ML 推理 | Python sidecar (FastAPI + qwen-asr + transformers/Whisper) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
+
+## 架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Electron Renderer (React)                          │
+│                                                     │
+│  useAudioCapture ──→ useVAD ──→ useTranscription    │
+│  (麦克风 PCM 采集)   (语音端点检测)  (WebSocket 客户端)  │
+│       │                              │    ▲         │
+│       │     16kHz PCM 二进制帧         │    │ JSON    │
+│       └──────────────────────────────▼    │ 转写结果  │
+├──────────── IPC (contextBridge) ─────────────────────┤
+│  Electron Main Process                              │
+│                                                     │
+│  SidecarManager ──→ spawn Python 子进程              │
+│  (启动/停止/健康检查)                                  │
+│                                                     │
+│  ipc-handlers.ts ──→ 模型管理、配置、数据库、文件 I/O   │
+├─────────────────────────────────────────────────────┤
+│  Python Sidecar (FastAPI + uvicorn)                 │
+│                                                     │
+│  HTTP:  /health, /models, /models/switch            │
+│  WS:    /ws/transcribe                              │
+│                                                     │
+│  ModelRunner ──→ 根据 model_type 自动选择推理后端：    │
+│     • qwen-asr  → Qwen3-ASR 模型 (qwen-asr 库)     │
+│     • whisper   → OpenAI Whisper (transformers 库)  │
+└─────────────────────────────────────────────────────┘
+```
+
+### 通信流程
+
+**录音转写**（实时）：
+
+1. `useAudioCapture` 通过 Web Audio API 采集麦克风音频，输出 16kHz 16bit PCM
+2. PCM 数据同时送入 `useVAD`（语音活动检测）和 `useTranscription`
+3. `useTranscription` 维护一个 WebSocket 连接到 Sidecar（`ws://localhost:{port}/ws/transcribe`）
+4. 录音开始时发送 `{"type": "start", "model": "xxx"}` 通知 Sidecar 加载模型
+5. 音频 PCM 数据以二进制帧持续发送到 Sidecar
+6. VAD 检测到语音停顿时，发送 `{"type": "segment_end"}`，Sidecar 对累积的音频执行转写
+7. Sidecar 返回 `{"type": "final", "text": "...", "segment_id": N}`，前端追加到字幕列表
+
+**模型管理**（Electron IPC）：
+
+1. 前端通过 `window.capty.listModels()` → IPC → 主进程读取 `user-models.json`
+2. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，通过 IPC 事件推送进度
+3. 切换模型：前端调用 `window.capty` IPC 更新 `config.json`，下次录音时 `useTranscription` 会在 WebSocket `start` 消息中携带新的 model ID，Sidecar 自动加载对应模型
 
 ## 项目结构
 
