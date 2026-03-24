@@ -94,6 +94,7 @@ pip install -r requirements.txt
   - 按钮状态：Download → 下载中（进度条）→ Use → Active
   - 已下载模型支持删除（带确认弹窗，删除本地文件）
   - 底部"Refresh"按钮支持从远程获取最新模型列表（失败时静默降级到本地）
+  - 可配置模型源 URL（Model Source URL），支持自定义远程模型注册表地址，Save 后自动刷新
 - 新增 Whisper 模型支持：sidecar 新增 transformers 后端
   - 支持 Whisper Tiny / Base / Small / Medium / Large V3 Turbo 五个模型
   - 基于 `model_type` 字段自动选择 qwen-asr 或 whisper 推理引擎
