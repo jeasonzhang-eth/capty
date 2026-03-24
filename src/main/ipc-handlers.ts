@@ -93,8 +93,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(
     "audio:save-full",
-    (_event, sessionDir: string, pcmData: ArrayBuffer) => {
-      saveFullAudio(sessionDir, Buffer.from(pcmData));
+    (_event, sessionDir: string, pcmData: ArrayBuffer, fileName?: string) => {
+      saveFullAudio(sessionDir, Buffer.from(pcmData), fileName);
     },
   );
 
@@ -194,13 +194,33 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (!session?.audio_path) return null;
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    const filePath = join(dataDir, "audio", session.audio_path, "full.wav");
-    try {
-      const buf = fs.readFileSync(filePath);
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    } catch {
-      return null;
+    const audioDir = join(dataDir, "audio", session.audio_path);
+    // Try {timestamp}.wav first, fall back to full.wav for old recordings
+    const candidates = [
+      join(audioDir, `${session.audio_path}.wav`),
+      join(audioDir, "full.wav"),
+    ];
+    for (const filePath of candidates) {
+      try {
+        const buf = fs.readFileSync(filePath);
+        return buf.buffer.slice(
+          buf.byteOffset,
+          buf.byteOffset + buf.byteLength,
+        );
+      } catch {
+        // Try next candidate
+      }
     }
+    return null;
+  });
+
+  // Get audio directory path for a session
+  ipcMain.handle("audio:get-dir", (_event, sessionId: number) => {
+    const session = getSession(db, sessionId);
+    if (!session?.audio_path) return null;
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    return join(dataDir, "audio", session.audio_path);
   });
 
   // Export save file

@@ -23,8 +23,11 @@ const api = {
     pcmData: ArrayBuffer,
   ) =>
     ipcRenderer.invoke("audio:save-segment", sessionDir, segmentIndex, pcmData),
-  saveFullAudio: (sessionDir: string, pcmData: ArrayBuffer) =>
-    ipcRenderer.invoke("audio:save-full", sessionDir, pcmData),
+  saveFullAudio: (
+    sessionDir: string,
+    pcmData: ArrayBuffer,
+    fileName?: string,
+  ) => ipcRenderer.invoke("audio:save-full", sessionDir, pcmData, fileName),
 
   // Export
   exportTxt: (sessionId: number, opts: Record<string, unknown>) =>
@@ -73,6 +76,8 @@ const api = {
   // Audio read
   readAudioFile: (sessionId: number) =>
     ipcRenderer.invoke("audio:read-file", sessionId),
+  getAudioDir: (sessionId: number) =>
+    ipcRenderer.invoke("audio:get-dir", sessionId),
 
   // Export save file
   saveFile: (defaultName: string, content: string) =>

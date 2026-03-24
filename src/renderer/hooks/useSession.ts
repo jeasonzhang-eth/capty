@@ -29,6 +29,7 @@ declare global {
       saveFullAudio: (
         sessionDir: string,
         pcmData: ArrayBuffer,
+        fileName?: string,
       ) => Promise<void>;
       exportTxt: (
         sessionId: number,
@@ -50,6 +51,7 @@ declare global {
       listModels: () => Promise<unknown[]>;
       deleteSegments: (sessionId: number) => Promise<void>;
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
+      getAudioDir: (sessionId: number) => Promise<string | null>;
       getDataDir: () => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
     };
@@ -70,6 +72,7 @@ export function useSession() {
   });
 
   const sessionDirRef = useRef<string>("");
+  const sessionTimestampRef = useRef<string>("");
   const fullAudioBufferRef = useRef<Int16Array[]>([]);
 
   const startSession = useCallback(async (model: string): Promise<number> => {
@@ -80,6 +83,7 @@ export function useSession() {
       .replace(/[:.]/g, "-")
       .slice(0, 19);
     sessionDirRef.current = `${dataDir}/audio/${timestamp}`;
+    sessionTimestampRef.current = timestamp;
     fullAudioBufferRef.current = [];
 
     // Save audio path to DB so delete can find the audio files
@@ -149,10 +153,11 @@ export function useSession() {
         offset += buf.length;
       }
 
-      // Save full audio
+      // Save full audio with timestamp-based filename
       await window.capty.saveFullAudio(
         sessionDirRef.current,
         fullAudio.buffer as ArrayBuffer,
+        `${sessionTimestampRef.current}.wav`,
       );
 
       // Update session status with duration

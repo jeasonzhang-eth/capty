@@ -61,10 +61,7 @@ function ExportMenu({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
-      ) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         onClose();
       }
     };
@@ -74,25 +71,41 @@ function ExportMenu({
     };
   }, [onClose]);
 
+  const getDefaultPath = useCallback(
+    async (ext: string): Promise<string> => {
+      const audioDir = await window.capty.getAudioDir(sessionId);
+      if (audioDir) {
+        // Extract timestamp from the audio directory path (last segment)
+        const dirName = audioDir.split("/").pop() ?? "transcript";
+        return `${audioDir}/${dirName}.${ext}`;
+      }
+      return `transcript.${ext}`;
+    },
+    [sessionId],
+  );
+
   const handleExportTxt = useCallback(async () => {
     const content = await window.capty.exportTxt(sessionId, {
       timestamps: true,
     });
-    await window.capty.saveFile("transcript.txt", content as string);
+    const defaultPath = await getDefaultPath("txt");
+    await window.capty.saveFile(defaultPath, content as string);
     onClose();
-  }, [sessionId, onClose]);
+  }, [sessionId, onClose, getDefaultPath]);
 
   const handleExportSrt = useCallback(async () => {
     const content = await window.capty.exportSrt(sessionId);
-    await window.capty.saveFile("transcript.srt", content as string);
+    const defaultPath = await getDefaultPath("srt");
+    await window.capty.saveFile(defaultPath, content as string);
     onClose();
-  }, [sessionId, onClose]);
+  }, [sessionId, onClose, getDefaultPath]);
 
   const handleExportMarkdown = useCallback(async () => {
     const content = await window.capty.exportMarkdown(sessionId);
-    await window.capty.saveFile("transcript.md", content as string);
+    const defaultPath = await getDefaultPath("md");
+    await window.capty.saveFile(defaultPath, content as string);
     onClose();
-  }, [sessionId, onClose]);
+  }, [sessionId, onClose, getDefaultPath]);
 
   const menuItemStyle: React.CSSProperties = {
     display: "block",
