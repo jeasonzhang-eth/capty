@@ -1,12 +1,20 @@
 import fs from "fs";
 import path from "path";
 
+export interface WindowBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface AppConfig {
   readonly dataDir: string | null;
   readonly selectedAudioDeviceId: string | null;
   readonly selectedModelId: string | null;
   readonly modelRegistryUrl: string | null;
   readonly hfMirrorUrl: string | null;
+  readonly windowBounds: WindowBounds | null;
 }
 
 const CONFIG_FILENAME = "config.json";
@@ -17,6 +25,7 @@ const DEFAULT_CONFIG: AppConfig = {
   selectedModelId: null,
   modelRegistryUrl: null,
   hfMirrorUrl: null,
+  windowBounds: null,
 };
 
 export function readConfig(configDir: string): AppConfig {

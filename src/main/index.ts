@@ -2,7 +2,7 @@ import { app, BrowserWindow, shell, systemPreferences } from "electron";
 import { join } from "path";
 import fs from "fs";
 import { is } from "@electron-toolkit/utils";
-import { readConfig } from "./config";
+import { readConfig, writeConfig, type WindowBounds } from "./config";
 import { createDatabase } from "./database";
 import { SidecarManager } from "./sidecar";
 import { registerIpcHandlers } from "./ipc-handlers";
@@ -12,16 +12,42 @@ let mainWindow: BrowserWindow | null = null;
 let db: Database.Database | null = null;
 let sidecar: SidecarManager | null = null;
 
-function createWindow(): BrowserWindow {
+function createWindow(configDir: string): BrowserWindow {
+  const config = readConfig(configDir);
+  const saved = config.windowBounds;
+
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: saved?.width ?? 900,
+    height: saved?.height ?? 670,
+    x: saved?.x,
+    y: saved?.y,
     show: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
     },
   });
+
+  // Save window bounds on move/resize (debounced)
+  let boundsTimer: ReturnType<typeof setTimeout> | null = null;
+  const saveBounds = (): void => {
+    if (boundsTimer) clearTimeout(boundsTimer);
+    boundsTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized())
+        return;
+      const bounds = mainWindow.getBounds();
+      const current = readConfig(configDir);
+      const wb: WindowBounds = {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      };
+      writeConfig(configDir, { ...current, windowBounds: wb });
+    }, 500);
+  };
+  mainWindow.on("resize", saveBounds);
+  mainWindow.on("move", saveBounds);
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
@@ -82,7 +108,7 @@ app.whenReady().then(() => {
   }
 
   // 7. Create BrowserWindow
-  createWindow();
+  createWindow(configDir);
 
   // 8. Start sidecar in background (don't block window)
   sidecar.start().catch((err) => {
@@ -91,7 +117,7 @@ app.whenReady().then(() => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(configDir);
     }
   });
 });
