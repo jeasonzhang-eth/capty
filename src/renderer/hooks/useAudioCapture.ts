@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 interface AudioCaptureState {
   readonly isCapturing: boolean;
@@ -17,6 +17,18 @@ export function useAudioCapture() {
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const onAudioDataRef = useRef<((pcm: Int16Array) => void) | null>(null);
+  const onDeviceRemovedRef = useRef<(() => void) | null>(null);
+
+  const refreshDevices = useCallback(async () => {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(
+      (d) =>
+        d.kind === "audioinput" &&
+        d.deviceId !== "default" &&
+        d.deviceId !== "communications",
+    );
+    return audioInputs;
+  }, []);
 
   const loadDevices = useCallback(async () => {
     // Request mic access first so enumerateDevices returns labels
@@ -26,37 +38,76 @@ export function useAudioCapture() {
     } catch {
       // Permission denied — enumerateDevices may return empty/unlabeled
     }
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const audioInputs = devices.filter(
-      (d) =>
-        d.kind === "audioinput" &&
-        d.deviceId !== "default" &&
-        d.deviceId !== "communications",
-    );
+    const audioInputs = await refreshDevices();
     setState((prev) => ({ ...prev, devices: audioInputs }));
-  }, []);
+  }, [refreshDevices]);
+
+  // Listen for device changes (plug/unplug) and update list + clear stale selection
+  useEffect(() => {
+    const handleDeviceChange = async () => {
+      const audioInputs = await refreshDevices();
+      setState((prev) => {
+        const selectedStillExists =
+          prev.selectedDeviceId === null ||
+          audioInputs.some((d) => d.deviceId === prev.selectedDeviceId);
+        if (!selectedStillExists) {
+          // Selected device was unplugged — notify and clear
+          onDeviceRemovedRef.current?.();
+          return { ...prev, devices: audioInputs, selectedDeviceId: null };
+        }
+        return { ...prev, devices: audioInputs };
+      });
+    };
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener(
+        "devicechange",
+        handleDeviceChange,
+      );
+    };
+  }, [refreshDevices]);
 
   const setSelectedDevice = useCallback((deviceId: string | null) => {
     setState((prev) => ({ ...prev, selectedDeviceId: deviceId }));
+  }, []);
+
+  const setOnDeviceRemoved = useCallback((cb: (() => void) | null) => {
+    onDeviceRemovedRef.current = cb;
   }, []);
 
   const start = useCallback(
     async (onAudioData: (pcm: Int16Array) => void) => {
       onAudioDataRef.current = onAudioData;
 
-      const constraints: MediaStreamConstraints = {
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          ...(state.selectedDeviceId
-            ? { deviceId: { exact: state.selectedDeviceId } }
-            : {}),
-        },
+      const baseAudio = {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream: MediaStream;
+      if (state.selectedDeviceId) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              ...baseAudio,
+              deviceId: { exact: state.selectedDeviceId },
+            },
+          });
+        } catch {
+          // Selected device unavailable (unplugged) — fallback to default
+          console.warn("Selected device unavailable, falling back to default");
+          setState((prev) => ({ ...prev, selectedDeviceId: null }));
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: baseAudio,
+          });
+        }
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: baseAudio,
+        });
+      }
       streamRef.current = stream;
 
       const audioContext = new AudioContext({ sampleRate: 16000 });
@@ -110,5 +161,6 @@ export function useAudioCapture() {
     stop,
     loadDevices,
     setSelectedDevice,
+    setOnDeviceRemoved,
   };
 }

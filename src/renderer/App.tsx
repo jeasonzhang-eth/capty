@@ -595,6 +595,16 @@ function App(): React.JSX.Element {
     [store, isDownloading],
   );
 
+  // When a selected device is unplugged, clear the persisted config
+  useEffect(() => {
+    audioCapture.setOnDeviceRemoved(() => {
+      window.capty.getConfig().then((config) => {
+        window.capty.setConfig({ ...config, selectedAudioDeviceId: null });
+      });
+    });
+    return () => audioCapture.setOnDeviceRemoved(null);
+  }, [audioCapture]);
+
   // Sync transcription partial text to store
   useEffect(() => {
     store.setPartialText(transcription.partialText);
