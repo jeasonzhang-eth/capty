@@ -651,55 +651,6 @@ export function SettingsModal({
             </div>
           )}
 
-          {/* All models (builtin + user-downloaded) */}
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--text-secondary)",
-              marginBottom: "8px",
-            }}
-          >
-            My Models
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              marginBottom: "16px",
-            }}
-          >
-            {models.map((model) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                isSelected={model.id === selectedModelId}
-                isThisDownloading={
-                  isDownloading && downloadingModelId === model.id
-                }
-                downloadProgress={downloadProgress}
-                isRecording={isRecording}
-                isDownloading={isDownloading}
-                onDownloadModel={onDownloadModel}
-                onSelectModel={onSelectModel}
-                onDelete={handleDelete}
-              />
-            ))}
-            {models.length === 0 && (
-              <div
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  color: "var(--text-muted)",
-                  fontSize: "13px",
-                }}
-              >
-                No models yet. Search HuggingFace below to add models.
-              </div>
-            )}
-          </div>
-
           {/* Search HuggingFace */}
           <div
             style={{
@@ -752,6 +703,57 @@ export function SettingsModal({
           </div>
 
           {/* Search results */}
+          {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                marginBottom: "16px",
+              }}
+            >
+              {searchResults.map((model) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  isSelected={model.id === selectedModelId}
+                  isThisDownloading={
+                    isDownloading && downloadingModelId === model.id
+                  }
+                  downloadProgress={downloadProgress}
+                  isRecording={isRecording}
+                  isDownloading={isDownloading}
+                  onDownloadModel={onDownloadModel}
+                  onSelectModel={onSelectModel}
+                  onDelete={null}
+                />
+              ))}
+              {hasSearched && !isSearching && searchResults.length === 0 && (
+                <div
+                  style={{
+                    padding: "12px",
+                    textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: "12px",
+                  }}
+                >
+                  No models found. Try different keywords.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* My Models */}
+          <div
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              marginBottom: "8px",
+            }}
+          >
+            My Models
+          </div>
           <div
             style={{
               display: "flex",
@@ -759,7 +761,7 @@ export function SettingsModal({
               gap: "8px",
             }}
           >
-            {searchResults.map((model) => (
+            {models.map((model) => (
               <ModelCard
                 key={model.id}
                 model={model}
@@ -772,19 +774,19 @@ export function SettingsModal({
                 isDownloading={isDownloading}
                 onDownloadModel={onDownloadModel}
                 onSelectModel={onSelectModel}
-                onDelete={null}
+                onDelete={handleDelete}
               />
             ))}
-            {hasSearched && !isSearching && searchResults.length === 0 && (
+            {models.length === 0 && (
               <div
                 style={{
                   padding: "12px",
                   textAlign: "center",
                   color: "var(--text-muted)",
-                  fontSize: "12px",
+                  fontSize: "13px",
                 }}
               >
-                No models found. Try different keywords.
+                No models yet. Search HuggingFace above to add models.
               </div>
             )}
           </div>
