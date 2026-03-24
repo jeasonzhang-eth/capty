@@ -21,9 +21,14 @@ function App(): React.JSX.Element {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Track segment boundaries from VAD
-  const segmentStartRef = useRef(0);
-  const segmentEndRef = useRef(0);
+  // Precise audio time tracking (sample-based, not wall-clock)
+  const audioSamplesRef = useRef(0); // total samples fed since recording start
+  const segmentStartRef = useRef(0); // seconds (from audio samples)
+  const segmentEndRef = useRef(0); // seconds (from audio samples)
+  const SAMPLE_RATE = 16000;
+
+  const getAudioSeconds = (): number =>
+    Math.round(audioSamplesRef.current / SAMPLE_RATE);
 
   const transcription = useTranscription({
     onFinal: useCallback(
@@ -59,10 +64,10 @@ function App(): React.JSX.Element {
 
   const vad = useVAD({
     onSpeechStart: useCallback(() => {
-      segmentStartRef.current = elapsedRef.current;
+      segmentStartRef.current = getAudioSeconds();
     }, []),
     onSpeechEnd: useCallback(() => {
-      segmentEndRef.current = elapsedRef.current;
+      segmentEndRef.current = getAudioSeconds();
       // Speech ended - signal the sidecar to transcribe accumulated audio
       transcription.sendSegmentEnd();
     }, [transcription]),
@@ -206,6 +211,7 @@ function App(): React.JSX.Element {
     store.clearSegments();
     store.setElapsedSeconds(0);
     elapsedRef.current = 0;
+    audioSamplesRef.current = 0;
 
     // Start elapsed timer right away
     timerRef.current = setInterval(() => {
@@ -219,6 +225,7 @@ function App(): React.JSX.Element {
 
       // Start audio capture (triggers mic permission prompt)
       await audioCapture.start((pcm: Int16Array) => {
+        audioSamplesRef.current += pcm.length;
         session.feedAudio(pcm);
         vad.feedAudio(pcm);
         // Stream all audio to sidecar continuously (VAD triggers segment_end)
@@ -361,8 +368,12 @@ function App(): React.JSX.Element {
         // PCM data (skip 44-byte WAV header)
         const pcmData = new Uint8Array(audioBuffer, 44);
         const totalBytes = pcmData.length;
-        const chunkSize = 32000; // 1 second of 16kHz/16bit/mono
-        let sendDone = false;
+        const bytesPerSecond = 32000; // 16kHz * 16bit * mono = 32000 bytes/sec
+        const chunkSize = bytesPerSecond; // send 1 second per chunk
+        const segmentInterval = bytesPerSecond * 10; // send segment_end every ~10s
+        let segmentStartByte = 0; // track start of current segment
+        let pendingFinals = 0; // how many segment_ends sent but no final received yet
+        let allSent = false;
 
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
@@ -397,20 +408,40 @@ function App(): React.JSX.Element {
               clearTimeout(timeout);
 
               let offset = 0;
+              let bytesSinceLastSegment = 0;
+
               const sendInterval = setInterval(() => {
                 if (offset >= totalBytes) {
                   clearInterval(sendInterval);
-                  sendDone = true;
-                  setRegenerationProgress(90); // 90% = audio sent, waiting for transcription
-                  ws.send(JSON.stringify({ type: "segment_end" }));
+                  // Send final segment_end for remaining audio
+                  if (bytesSinceLastSegment > 0) {
+                    pendingFinals++;
+                    ws.send(JSON.stringify({ type: "segment_end" }));
+                  }
+                  allSent = true;
+                  setRegenerationProgress(90);
+                  // If no pending finals (empty remaining), close now
+                  if (pendingFinals === 0) {
+                    setRegenerationProgress(100);
+                    ws.send(JSON.stringify({ type: "stop" }));
+                    ws.close();
+                  }
                   return;
                 }
 
                 const end = Math.min(offset + chunkSize, totalBytes);
-                // Use slice() which copies data into a new ArrayBuffer
                 const chunk = pcmData.slice(offset, end);
                 ws.send(chunk);
+                bytesSinceLastSegment += end - offset;
                 offset = end;
+
+                // Send segment_end every ~10 seconds of audio
+                if (bytesSinceLastSegment >= segmentInterval) {
+                  pendingFinals++;
+                  ws.send(JSON.stringify({ type: "segment_end" }));
+                  bytesSinceLastSegment = 0;
+                }
+
                 // Progress: 0-90% for sending audio
                 setRegenerationProgress(Math.round((offset / totalBytes) * 90));
               }, 100); // ~10x real-time speed
@@ -419,17 +450,27 @@ function App(): React.JSX.Element {
                 store.setPartialText(msg.text ?? "");
               }
             } else if (msg.type === "final") {
+              pendingFinals = Math.max(0, pendingFinals - 1);
+
               if (store.currentSessionId === sessionId) {
                 store.setPartialText("");
               }
               const text = msg.text ?? "";
               if (text.trim()) {
+                const startTime = Math.round(segmentStartByte / bytesPerSecond);
+                const endTime = Math.round(
+                  Math.min(segmentStartByte + segmentInterval, totalBytes) /
+                    bytesPerSecond,
+                );
+                // Move start for next segment
+                segmentStartByte += segmentInterval;
+
                 // Save to DB and update in-memory store
                 window.capty
                   .addSegment({
                     sessionId,
-                    startTime: 0,
-                    endTime: 0,
+                    startTime,
+                    endTime,
                     text,
                     audioPath: "",
                     isFinal: true,
@@ -438,24 +479,24 @@ function App(): React.JSX.Element {
                     if (store.currentSessionId === sessionId) {
                       store.addSegment({
                         id: Date.now(),
-                        start_time: 0,
-                        end_time: 0,
+                        start_time: startTime,
+                        end_time: endTime,
                         text,
                       });
                     }
                   });
               }
 
-              // After final result, close connection if all audio was sent
-              if (sendDone) {
+              // Close connection when all audio sent and all finals received
+              if (allSent && pendingFinals === 0) {
                 setRegenerationProgress(100);
                 ws.send(JSON.stringify({ type: "stop" }));
                 ws.close();
               }
             } else if (msg.type === "error") {
               console.error("Regeneration transcription error:", msg.message);
-              if (sendDone) {
-                // Error after all audio sent — close and finish
+              pendingFinals = Math.max(0, pendingFinals - 1);
+              if (allSent && pendingFinals === 0) {
                 ws.close();
               }
             }
