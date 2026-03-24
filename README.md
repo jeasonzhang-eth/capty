@@ -144,23 +144,74 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 ## 开发
 
 ```bash
-# 安装依赖
+# 安装前端依赖
 npm install
 
-# 启动开发模式
+# 启动开发模式（Electron + Sidecar 一起启动）
 npm run dev
 
-# 构建
+# 仅构建
 npm run build
 ```
 
-Sidecar 需要 Python 环境：
+### Sidecar（Python ASR 后端）
+
+Sidecar 是一个独立的 FastAPI 服务，负责 ASR 模型加载和语音转写。Electron 主进程会自动启动它，但开发和调试时可以单独运行。
+
+#### 环境安装
 
 ```bash
-cd src/sidecar
+cd sidecar
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"
+```
+
+#### 单独启动
+
+```bash
+# 基本启动（需指定模型目录）
+capty-sidecar --models-dir /path/to/your/models --port 8765
+
+# 或直接用 Python 模块
+python -m capty_sidecar.main --models-dir /path/to/your/models --port 8765
+
+# 开启 debug 日志
+capty-sidecar --models-dir /path/to/your/models --port 8765 --log-level debug
+```
+
+`--models-dir` 指向数据目录下的 `models/` 文件夹，例如 `~/Desktop/capty/models`。
+
+#### 调试
+
+启动后可通过 HTTP 接口验证：
+
+```bash
+# 健康检查
+curl http://localhost:8765/health
+
+# 查看已注册的模型
+curl http://localhost:8765/models
+
+# 切换模型
+curl -X POST http://localhost:8765/models/switch \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3-asr-0.6b"}'
+```
+
+WebSocket 转写端点为 `ws://localhost:8765/ws/transcribe`，协议流程：
+
+1. 发送 `{"type": "start", "model": "qwen3-asr-0.6b"}` 开始会话
+2. 发送二进制帧（16kHz 16bit PCM 音频数据）
+3. 发送 `{"type": "segment_end"}` 触发转写，服务端返回 `{"type": "final", "text": "..."}`
+4. 发送 `{"type": "stop"}` 结束会话
+
+#### 运行测试
+
+```bash
+cd sidecar
+source .venv/bin/activate
+pytest
 ```
 
 ## 更新日志
