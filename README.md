@@ -63,6 +63,84 @@ src/
     └── model_runner.py
 ```
 
+## 数据存储
+
+Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userData）和**数据目录**（用户可在 Settings 中自定义）。
+
+### 配置目录
+
+位置：`~/Library/Application Support/capty/`（macOS）
+
+```
+~/Library/Application Support/capty/
+├── config.json          # 应用配置（见下方字段说明）
+├── user-models.json     # 模型注册表（单一数据源）
+├── Cache/               # ← Electron/Chromium 自动生成，以下均可忽略
+├── Code Cache/
+├── GPUCache/
+├── Cookies
+├── Local Storage/
+├── Session Storage/
+└── ...
+```
+
+其中 Electron/Chromium 自动生成的缓存文件（`Cache`、`GPUCache`、`Cookies`、`Local Storage` 等）由框架维护，无需关注。
+
+#### config.json 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `dataDir` | `string \| null` | 用户数据目录路径，首次启动时通过 SetupWizard 设置 |
+| `selectedAudioDeviceId` | `string \| null` | 上次选择的麦克风设备 ID，重启后自动恢复 |
+| `selectedModelId` | `string \| null` | 当前激活的 ASR 模型 ID |
+| `hfMirrorUrl` | `string \| null` | HuggingFace 镜像地址，`null` 时使用官方 `https://huggingface.co` |
+| `modelRegistryUrl` | `string \| null` | 预留字段，远程模型注册表 URL |
+| `windowBounds` | `{x, y, width, height} \| null` | 窗口位置和大小，移动/缩放后自动保存，重启时恢复 |
+
+#### user-models.json
+
+模型注册表，运行时的唯一数据源。首次启动时从内置 `resources/models.json` 复制生成，之后所有变更（下载、删除、搜索安装）都写入此文件。每条记录包含：
+
+| 字段 | 说明 |
+|------|------|
+| `id` | 模型唯一标识，同时也是 `models/` 下的目录名 |
+| `name` | 显示名称 |
+| `type` | 模型类型：`qwen-asr` 或 `whisper` |
+| `repo` | HuggingFace 仓库路径，如 `Qwen/Qwen3-ASR-0.6B` |
+| `size_gb` | 模型大小（GB），首次启动时从磁盘计算回填 |
+| `languages` | 支持的语言列表 |
+| `description` | 模型描述 |
+
+### 数据目录
+
+位置：用户自定义（默认 `~/Library/Application Support/capty/data/`）
+
+```
+<dataDir>/
+├── capty.db             # SQLite 数据库（会话 + 字幕段落）
+├── audio/               # 录音音频文件
+│   ├── 2026-03-24T04-42-25/   # 每个会话一个目录（以时间戳命名）
+│   │   ├── full.wav            # 完整录音文件
+│   │   ├── seg_000.wav         # 分段音频（按 VAD 切分）
+│   │   ├── seg_001.wav
+│   │   └── ...
+│   └── ...
+└── models/              # 已下载的 ASR 模型
+    ├── qwen3-asr-0.6b/         # 内置模型（目录名 = model id）
+    │   ├── config.json
+    │   ├── model.safetensors
+    │   ├── tokenizer.json
+    │   └── ...
+    ├── whisper-tiny/
+    └── Qwen--Qwen3-ASR-1.7B/   # 从 HuggingFace 搜索下载的模型
+```
+
+| 路径 | 说明 |
+|------|------|
+| `capty.db` | SQLite 数据库，存储会话元数据（时间、时长、模型名）和转写字幕段落（时间戳 + 文本） |
+| `audio/<session>/` | 每次录音的音频目录，`full.wav` 是完整录音，`seg_NNN.wav` 是 VAD 分段 |
+| `models/<model-id>/` | 已下载的模型文件，目录名对应 `user-models.json` 中的 `id` 字段 |
+
 ## 开发
 
 ```bash
