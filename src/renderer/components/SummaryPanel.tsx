@@ -1,4 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { marked } from "marked";
 import type { LlmProvider } from "./SettingsModal";
 
@@ -21,6 +27,10 @@ interface SummaryPanelProps {
   readonly selectedLlmProviderId: string | null;
   readonly onSummarize: (providerId: string) => void;
 }
+
+const MIN_WIDTH = 220;
+const MAX_WIDTH = 600;
+const DEFAULT_WIDTH = 320;
 
 // Configure marked for safe rendering
 marked.setOptions({ breaks: true, gfm: true });
@@ -66,17 +76,78 @@ export function SummaryPanel({
   const canSummarize =
     currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
 
+  // Reversed summaries: newest first
+  const reversedSummaries = useMemo(
+    () => [...summaries].reverse(),
+    [summaries],
+  );
+
+  // Resizable width
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(DEFAULT_WIDTH);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      isDragging.current = true;
+      startX.current = e.clientX;
+      startWidth.current = panelWidth;
+      e.preventDefault();
+    },
+    [panelWidth],
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent): void => {
+      if (!isDragging.current) return;
+      // Dragging left edge: moving left increases width
+      const delta = startX.current - e.clientX;
+      const newWidth = Math.min(
+        MAX_WIDTH,
+        Math.max(MIN_WIDTH, startWidth.current + delta),
+      );
+      setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = (): void => {
+      isDragging.current = false;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   return (
     <div
       style={{
-        width: "320px",
-        minWidth: "280px",
-        borderLeft: "1px solid var(--border)",
+        width: `${panelWidth}px`,
+        minWidth: `${MIN_WIDTH}px`,
+        maxWidth: `${MAX_WIDTH}px`,
         display: "flex",
         flexDirection: "column",
         backgroundColor: "var(--bg-primary)",
+        position: "relative",
       }}
     >
+      {/* Drag handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: "4px",
+          cursor: "col-resize",
+          zIndex: 10,
+          borderLeft: "1px solid var(--border)",
+        }}
+      />
       {/* Header */}
       <div
         style={{
@@ -233,8 +304,8 @@ export function SummaryPanel({
             </div>
           )}
 
-        {/* Summaries list */}
-        {summaries.map((summary) => (
+        {/* Summaries list (newest first) */}
+        {reversedSummaries.map((summary) => (
           <SummaryCard key={summary.id} summary={summary} />
         ))}
       </div>
