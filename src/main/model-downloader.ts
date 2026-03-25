@@ -273,7 +273,8 @@ export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
         e.endsWith(".safetensors") ||
         e.endsWith(".bin") ||
         e.endsWith(".pt") ||
-        e.endsWith(".gguf"),
+        e.endsWith(".gguf") ||
+        e.endsWith(".npz"),
     );
   } catch {
     return false;

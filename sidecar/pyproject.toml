@@ -6,9 +6,9 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "websockets>=14.0",
-    "torch>=2.0",
-    "qwen-asr>=0.0.6",
-    "transformers>=4.40",
+    "mlx-qwen3-asr>=0.1.0",
+    "mlx-whisper>=0.4.0",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

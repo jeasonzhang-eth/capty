@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -20,6 +21,9 @@ SAMPLE_RATE = 16000
 BYTES_PER_SECOND = SAMPLE_RATE * 2  # 16-bit PCM = 2 bytes/sample
 MAX_CHUNK_SECONDS = 30  # Max audio duration per transcription call
 MAX_CHUNK_BYTES = MAX_CHUNK_SECONDS * BYTES_PER_SECOND
+
+# Concurrency control
+MAX_CONCURRENT = 3  # Max concurrent transcription tasks
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +83,7 @@ def create_app(models_dir: str) -> FastAPI:
                 body.model,
                 models_dir=Path(models_dir),
                 model_type=model_info.get("type", "qwen-asr"),
+                mlx_repo=model_info.get("mlx_repo"),
             )
         except Exception as exc:
             logger.exception("Failed to load model %s", body.model)
@@ -101,6 +106,87 @@ def create_app(models_dir: str) -> FastAPI:
         audio_buffer = bytearray()
         session_model: Optional[str] = None
         segment_counter: int = 0
+
+        # Concurrency state
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        pending_results: dict[int, str | None] = {}  # seg_id → text (None = pending)
+        next_to_send: int = 1  # next segment_id to send
+        result_event = asyncio.Event()
+        active_tasks: set[asyncio.Task] = set()
+        sender_task: Optional[asyncio.Task] = None
+
+        async def result_sender():
+            """Send results in segment order: 1, 2, 3..."""
+            nonlocal next_to_send
+            try:
+                while True:
+                    # Send all ready results in order
+                    while next_to_send in pending_results and pending_results[next_to_send] is not None:
+                        text = pending_results.pop(next_to_send)
+                        await ws.send_json({
+                            "type": "final",
+                            "text": text,
+                            "segment_id": next_to_send,
+                        })
+                        next_to_send += 1
+
+                    result_event.clear()
+                    await result_event.wait()
+            except asyncio.CancelledError:
+                # Drain any remaining results before exiting
+                while next_to_send in pending_results and pending_results[next_to_send] is not None:
+                    text = pending_results.pop(next_to_send)
+                    try:
+                        await ws.send_json({
+                            "type": "final",
+                            "text": text,
+                            "segment_id": next_to_send,
+                        })
+                    except Exception:
+                        break
+                    next_to_send += 1
+
+        async def transcribe_segment(seg_id: int, pcm_data: bytes):
+            """Transcribe a single segment with concurrency limiting."""
+            try:
+                async with semaphore:
+                    # Split long audio into manageable chunks (max 30s each)
+                    chunks: list[bytes] = []
+                    if len(pcm_data) > MAX_CHUNK_BYTES:
+                        offset = 0
+                        while offset < len(pcm_data):
+                            end = min(offset + MAX_CHUNK_BYTES, len(pcm_data))
+                            chunks.append(pcm_data[offset:end])
+                            offset = end
+                        logger.info(
+                            "Split %d bytes into %d chunks for segment %d",
+                            len(pcm_data),
+                            len(chunks),
+                            seg_id,
+                        )
+                    else:
+                        chunks.append(pcm_data)
+
+                    all_texts: list[str] = []
+                    for chunk in chunks:
+                        text = await runner.transcribe(chunk)
+                        if text:
+                            all_texts.append(text)
+
+                    combined = " ".join(all_texts)
+                    pending_results[seg_id] = combined
+                    result_event.set()
+            except Exception as exc:
+                logger.exception("Transcription error for segment %d", seg_id)
+                pending_results[seg_id] = ""
+                result_event.set()
+                try:
+                    await ws.send_json({
+                        "type": "error",
+                        "message": f"Transcription error (segment {seg_id}): {exc}",
+                    })
+                except Exception:
+                    pass
 
         try:
             while True:
@@ -128,6 +214,16 @@ def create_app(models_dir: str) -> FastAPI:
                         language = msg.get("language", "auto")
                         audio_buffer.clear()
 
+                        # Reset concurrency state
+                        segment_counter = 0
+                        next_to_send = 1
+                        pending_results.clear()
+                        for t in active_tasks:
+                            t.cancel()
+                        active_tasks.clear()
+                        if sender_task and not sender_task.done():
+                            sender_task.cancel()
+
                         # Load model if needed
                         if session_model and (
                             not runner.is_loaded()
@@ -145,12 +241,18 @@ def create_app(models_dir: str) -> FastAPI:
                                 if model_info
                                 else "qwen-asr"
                             )
+                            mlx_repo = (
+                                model_info.get("mlx_repo")
+                                if model_info
+                                else None
+                            )
                             try:
                                 runner.unload()
                                 runner.load(
                                     session_model,
                                     models_dir=Path(models_dir),
                                     model_type=model_type,
+                                    mlx_repo=mlx_repo,
                                 )
                             except Exception as exc:
                                 await ws.send_json({
@@ -165,6 +267,9 @@ def create_app(models_dir: str) -> FastAPI:
                                 "message": "No model loaded",
                             })
                             continue
+
+                        # Start the result sender coroutine
+                        sender_task = asyncio.create_task(result_sender())
 
                         await ws.send_json({
                             "type": "ready",
@@ -190,50 +295,30 @@ def create_app(models_dir: str) -> FastAPI:
                         pcm_data = bytes(audio_buffer)
                         audio_buffer.clear()
                         segment_counter += 1
+                        seg_id = segment_counter
 
-                        # Split long audio into manageable chunks (max 30s each)
-                        # Prevents excessive memory/time for long segments and
-                        # respects Whisper's 30-second input limit.
-                        chunks: list[bytes] = []
-                        if len(pcm_data) > MAX_CHUNK_BYTES:
-                            offset = 0
-                            while offset < len(pcm_data):
-                                end = min(offset + MAX_CHUNK_BYTES, len(pcm_data))
-                                chunks.append(pcm_data[offset:end])
-                                offset = end
-                            logger.info(
-                                "Split %d bytes into %d chunks for transcription",
-                                len(pcm_data),
-                                len(chunks),
-                            )
-                        else:
-                            chunks.append(pcm_data)
+                        # Mark as pending
+                        pending_results[seg_id] = None
 
-                        try:
-                            all_texts: list[str] = []
-                            for chunk in chunks:
-                                async for result in runner.transcribe_stream(chunk):
-                                    if result.get("type") == "partial":
-                                        await ws.send_json(result)
-                                    elif result.get("type") == "final":
-                                        text = result.get("text", "")
-                                        if text:
-                                            all_texts.append(text)
-                            combined = " ".join(all_texts)
-                            await ws.send_json({
-                                "type": "final",
-                                "text": combined,
-                                "segment_id": segment_counter,
-                            })
-                        except Exception as exc:
-                            logger.exception("Transcription error")
-                            await ws.send_json({
-                                "type": "error",
-                                "message": f"Transcription error: {exc}",
-                            })
+                        # Launch concurrent transcription task
+                        task = asyncio.create_task(
+                            transcribe_segment(seg_id, pcm_data)
+                        )
+                        active_tasks.add(task)
+                        task.add_done_callback(active_tasks.discard)
 
                     elif msg_type == "stop":
                         audio_buffer.clear()
+                        # Wait for all active transcriptions to finish
+                        if active_tasks:
+                            await asyncio.gather(*active_tasks, return_exceptions=True)
+                        # Give sender a moment to drain remaining results
+                        if sender_task and not sender_task.done():
+                            sender_task.cancel()
+                            try:
+                                await sender_task
+                            except asyncio.CancelledError:
+                                pass
                         await ws.close()
                         break
 
@@ -254,5 +339,11 @@ def create_app(models_dir: str) -> FastAPI:
                 })
             except Exception:
                 pass
+        finally:
+            # Cleanup
+            for t in active_tasks:
+                t.cancel()
+            if sender_task and not sender_task.done():
+                sender_task.cancel()
 
     return app

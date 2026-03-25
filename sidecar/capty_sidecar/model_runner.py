@@ -1,11 +1,11 @@
-"""Model runner: loads and runs ASR inference using qwen-asr or whisper."""
+"""Model runner: loads and runs ASR inference using MLX (GPU-accelerated)."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -24,11 +24,11 @@ def _pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
 
 
 class ModelRunner:
-    """Manages ASR model loading, inference, and unloading."""
+    """Manages ASR model loading, inference, and unloading (MLX backend)."""
 
     def __init__(self) -> None:
-        self._model = None
-        self._processor = None  # Used by Whisper
+        self._session = None  # mlx-qwen3-asr Session
+        self._whisper_model_path: Optional[str] = None  # mlx-whisper model path or HF repo
         self._model_id: Optional[str] = None
         self._model_type: Optional[str] = None
 
@@ -41,6 +41,7 @@ class ModelRunner:
         model_id: str,
         models_dir: Path | str,
         model_type: str = "qwen-asr",
+        mlx_repo: Optional[str] = None,
     ) -> None:
         """Load model from a local directory.
 
@@ -52,6 +53,9 @@ class ModelRunner:
             Parent directory containing model subdirectories.
         model_type:
             Either ``"qwen-asr"`` or ``"whisper"``.
+        mlx_repo:
+            For Whisper models, the mlx-community HF repo ID (e.g. ``"mlx-community/whisper-tiny"``).
+            If provided and local dir lacks MLX weights, this is used as the model path for mlx-whisper.
 
         Raises ``FileNotFoundError`` if the model directory does not exist.
         """
@@ -66,7 +70,7 @@ class ModelRunner:
         )
 
         if model_type == "whisper":
-            self._load_whisper(model_path)
+            self._load_whisper(model_path, mlx_repo)
         else:
             self._load_qwen_asr(model_path)
 
@@ -75,43 +79,35 @@ class ModelRunner:
         logger.info("Model %s loaded successfully", model_id)
 
     def _load_qwen_asr(self, model_path: Path) -> None:
-        import torch
-        from qwen_asr import Qwen3ASRModel
+        from mlx_qwen3_asr import Session
 
-        self._model = Qwen3ASRModel.from_pretrained(
-            str(model_path),
-            dtype=torch.float32,
-            device_map="cpu",
-            max_new_tokens=4096,
-        )
-        # Suppress "Setting pad_token_id to eos_token_id" warning on every generate()
-        gen_cfg = getattr(self._model, "generation_config", None)
-        if gen_cfg and gen_cfg.pad_token_id is None:
-            gen_cfg.pad_token_id = gen_cfg.eos_token_id
-        self._processor = None
+        self._session = Session(model=str(model_path))
+        self._whisper_model_path = None
 
-    def _load_whisper(self, model_path: Path) -> None:
-        import torch
-        from transformers import WhisperForConditionalGeneration, WhisperProcessor
+    def _load_whisper(self, model_path: Path, mlx_repo: Optional[str] = None) -> None:
+        # Check if local directory has MLX weights
+        has_mlx_weights = any(model_path.glob("*.npz")) or (model_path / "weights.npz").exists()
 
-        self._processor = WhisperProcessor.from_pretrained(str(model_path))
-        self._model = WhisperForConditionalGeneration.from_pretrained(
-            str(model_path),
-            torch_dtype=torch.float32,
-        )
-        self._model.to("cpu")
-        # Suppress "Setting pad_token_id to eos_token_id" warning on every generate()
-        if self._model.generation_config.pad_token_id is None:
-            self._model.generation_config.pad_token_id = self._model.generation_config.eos_token_id
+        if has_mlx_weights:
+            self._whisper_model_path = str(model_path)
+        elif mlx_repo:
+            # Use HF repo identifier; mlx-whisper will auto-download to cache
+            self._whisper_model_path = mlx_repo
+        else:
+            # Fallback to local path (mlx-whisper may attempt conversion)
+            self._whisper_model_path = str(model_path)
+
+        self._session = None
+        logger.info("Whisper model path: %s", self._whisper_model_path)
 
     def is_loaded(self) -> bool:
         """Return ``True`` if a model is currently loaded."""
-        return self._model is not None
+        return self._session is not None or self._whisper_model_path is not None
 
     def unload(self) -> None:
         """Free model from memory."""
-        self._model = None
-        self._processor = None
+        self._session = None
+        self._whisper_model_path = None
         self._model_id = None
         self._model_type = None
         logger.info("Model unloaded")
@@ -128,79 +124,58 @@ class ModelRunner:
     # Inference
     # ------------------------------------------------------------------
 
-    async def transcribe_stream(
+    async def transcribe(
         self,
         audio_pcm: bytes,
         sample_rate: int = DEFAULT_SAMPLE_RATE,
-    ) -> AsyncGenerator[dict, None]:
-        """Async generator that yields partial and final transcription dicts.
+    ) -> str:
+        """Transcribe audio and return text.
 
-        Each yielded dict has the shape:
-            ``{"type": "partial" | "final", "text": str}``
-
+        Runs inference in a thread pool to avoid blocking the event loop.
         Raises ``RuntimeError`` if no model is loaded.
         """
         if not self.is_loaded():
             raise RuntimeError("No model loaded")
 
         if self._model_type == "whisper":
-            async for message in self._run_whisper_inference(audio_pcm, sample_rate):
-                yield message
-        else:
-            async for message in self._run_qwen_inference(audio_pcm, sample_rate):
-                yield message
+            return await self._run_whisper_inference(audio_pcm, sample_rate)
+        return await self._run_qwen_inference(audio_pcm, sample_rate)
 
     async def _run_qwen_inference(
         self,
         audio_pcm: bytes,
         sample_rate: int,
-    ) -> AsyncGenerator[dict, None]:
-        """Run model inference using qwen-asr, yielding results."""
+    ) -> str:
+        """Run inference using mlx-qwen3-asr Session."""
         audio_float = _pcm_bytes_to_float32(audio_pcm)
 
-        # Run inference in a thread pool to avoid blocking the event loop
+        session = self._session
         loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(
+        result = await loop.run_in_executor(
             None,
-            lambda: self._model.transcribe(
-                audio=(audio_float, sample_rate),
-            ),
+            lambda: session.transcribe((audio_float, sample_rate)),
         )
 
-        text = results[0].text if results else ""
-        if text:
-            yield {"type": "partial", "text": text}
-        yield {"type": "final", "text": text}
+        return result.text if result else ""
 
     async def _run_whisper_inference(
         self,
         audio_pcm: bytes,
         sample_rate: int,
-    ) -> AsyncGenerator[dict, None]:
-        """Run model inference using Whisper (transformers), yielding results."""
-        import torch
+    ) -> str:
+        """Run inference using mlx-whisper."""
+        import mlx_whisper
 
         audio_float = _pcm_bytes_to_float32(audio_pcm)
+        model_path = self._whisper_model_path
 
         loop = asyncio.get_event_loop()
-
-        def _infer() -> str:
-            input_features = self._processor(
+        result = await loop.run_in_executor(
+            None,
+            lambda: mlx_whisper.transcribe(
                 audio_float,
-                sampling_rate=sample_rate,
-                return_tensors="pt",
-            ).input_features
+                path_or_hf_repo=model_path,
+            ),
+        )
 
-            with torch.no_grad():
-                predicted_ids = self._model.generate(input_features)
-
-            transcription = self._processor.batch_decode(
-                predicted_ids, skip_special_tokens=True
-            )
-            return transcription[0] if transcription else ""
-
-        text = await loop.run_in_executor(None, _infer)
-
-        if text:
-            yield {"type": "partial", "text": text}
-        yield {"type": "final", "text": text}
+        return result.get("text", "") if result else ""

@@ -31,7 +31,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + qwen-asr + transformers/Whisper) |
+| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 架构
@@ -59,8 +59,9 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 │  WS:    /ws/transcribe                              │
 │                                                     │
 │  ModelRunner ──→ 根据 model_type 自动选择推理后端：    │
-│     • qwen-asr  → Qwen3-ASR 模型 (qwen-asr 库)     │
-│     • whisper   → OpenAI Whisper (transformers 库)  │
+│     • qwen-asr  → Qwen3-ASR 模型 (mlx-qwen3-asr)   │
+│     • whisper   → OpenAI Whisper (mlx-whisper)      │
+│  ※ 全部通过 MLX 在 Apple GPU 上加速推理              │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -281,6 +282,23 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26
+
+- **MLX GPU 加速推理** — 将 PyTorch CPU 推理替换为 MLX GPU 推理，利用 Apple Silicon GPU 大幅加速
+  - Qwen-ASR 模型使用 `mlx-qwen3-asr` 库（`Session` API）
+  - Whisper 模型使用 `mlx-whisper` 库，自动从 `mlx-community` 下载 MLX 格式权重
+  - 完全移除 PyTorch (~2GB)、transformers、qwen-asr 依赖，安装体积大幅减小
+  - 预期 3-10x 推理加速（Apple Silicon GPU vs CPU）
+- **并发转录** — WebSocket handler 从阻塞式改为并发式
+  - `segment_end` 触发后立即接收下一个 segment，不再等待转录完成
+  - 最多 3 个 segment 并发转录（`Semaphore` 控制），避免 GPU 内存溢出
+  - 结果按 segment_id 顺序发送（即使 segment 3 先完成，也等 1、2 先发送）
+- **Whisper MLX 权重迁移** — `models.json` 和 `model_registry.py` 添加 `mlx_repo` 字段
+  - 新下载直接从 `mlx-community` 仓库获取 MLX 格式权重
+  - 已下载的 PyTorch 权重会 fallback 到 `mlx_repo` HF 标识符，`mlx-whisper` 自动下载到缓存
+  - TypeScript 侧 `isModelDownloaded()` 增加 `.npz` 文件检测（MLX 权重格式）
+  - 应用更新时自动为已有 Whisper 模型回填 `mlx_repo` 字段
 
 ### 2026-03-25 (10)
 
