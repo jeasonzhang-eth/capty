@@ -7,7 +7,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **实时录音转写** — 捕获系统麦克风音频，全量音频流式传输至 ASR 模型，VAD 检测语音停顿后触发转录
 - **会话管理** — 每次录音自动创建会话，历史列表按时间分组（Today / Yesterday / Previous 7 Days / Previous 30 Days / Older），支持折叠/展开，右键重命名（行内编辑，同步重命名磁盘音频目录和主音频文件）/ 删除（含确认弹窗，同时清理音频文件）
 - **重新生成字幕** — 对已完成的会话右键选择重新转录，从保存的音频文件重新生成字幕（含进度条），解决 sidecar 故障导致的字幕缺失
-- **音频播放** — 历史会话支持一键播放，底部播放器提供暂停/恢复/进度拖拽/时间显示、快进快退 10 秒、倍速播放（0.5x–2.0x 循环切换）、全局键盘快捷键（Space 播放暂停、左右箭头跳转）
+- **音频播放** — 历史会话支持一键播放，底部播放器提供 wavesurfer.js 波形可视化（替代纯色进度条）、暂停/恢复/波形点击跳转/时间显示、快进快退 10 秒、倍速播放（0.5x–2.0x 循环切换）、全局键盘快捷键（Space 播放暂停、左右箭头跳转）、Regions 插件标注字幕段落（点击跳转到对应段落）
 - **歌词式字幕同步** — 基于 react-lrc 的专业字幕同步，播放时自动高亮当前段落并居中显示（首尾行也能居中）；用户手动滚动后 5 秒自动恢复跟随；点击任意段落跳转到对应音频位置；非播放时行为不变
 - **LLM 多维分析** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），SummaryPanel 支持多 Tab 切换不同分析维度：
   - 内置 3 种类型：Summary（结构化摘要）、Questions（深入追问）、Context（背景推测）
@@ -29,7 +29,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 层 | 技术 |
 |---|------|
 | 桌面框架 | Electron 33 + electron-vite |
-| 前端 | React 18 + TypeScript + Zustand + react-lrc |
+| 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
 | ML 推理 | Python sidecar (FastAPI + qwen-asr + transformers/Whisper) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
@@ -281,6 +281,17 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-25 (8)
+
+- 集成 wavesurfer.js 替换 PlaybackBar 进度条为波形播放器
+  - 使用 wavesurfer.js v7 `media` 选项绑定已有 HTMLAudioElement，仅负责波形渲染
+  - 柱状波形风格（barWidth: 2, barGap: 1, barRadius: 2），高度 32px
+  - 已播放部分显示 accent 蓝色，未播放部分显示 border 灰色
+  - 点击波形任意位置跳转到对应时间
+  - Regions 插件标注字幕段落（半透明蓝色区域），点击 Region 跳转到段落起始时间
+  - 切换会话时波形和 Regions 自动重建，停止播放时正确销毁
+  - 现有控件不变：play/pause、skip ±10s、倍速切换、键盘快捷键
 
 ### 2026-03-25 (7)
 

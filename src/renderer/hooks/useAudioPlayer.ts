@@ -140,6 +140,7 @@ export function useAudioPlayer() {
 
   return {
     ...state,
+    audioRef,
     play,
     pause,
     resume,

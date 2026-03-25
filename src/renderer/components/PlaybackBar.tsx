@@ -1,6 +1,17 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
+import WaveSurfer from "wavesurfer.js";
+import RegionsPlugin, {
+  type Region,
+} from "wavesurfer.js/dist/plugins/regions";
 
 const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as const;
+
+interface Segment {
+  readonly id: number;
+  readonly start_time: number;
+  readonly end_time: number;
+  readonly text: string;
+}
 
 interface PlaybackBarProps {
   readonly sessionTitle: string;
@@ -8,6 +19,8 @@ interface PlaybackBarProps {
   readonly currentTime: number;
   readonly duration: number;
   readonly playbackRate: number;
+  readonly audioRef: React.RefObject<HTMLAudioElement | null>;
+  readonly segments: readonly Segment[];
   readonly onPause: () => void;
   readonly onResume: () => void;
   readonly onSeek: (time: number) => void;
@@ -40,6 +53,8 @@ export function PlaybackBar({
   currentTime,
   duration,
   playbackRate,
+  audioRef,
+  segments,
   onPause,
   onResume,
   onSeek,
@@ -48,17 +63,68 @@ export function PlaybackBar({
   onSkipForward,
   onPlaybackRateChange,
 }: PlaybackBarProps): React.ReactElement {
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const waveformRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WaveSurfer | null>(null);
+  const regionsRef = useRef<RegionsPlugin | null>(null);
 
-  const handleProgressClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (duration <= 0) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const ratio = (e.clientX - rect.left) / rect.width;
-      onSeek(Math.max(0, Math.min(duration, ratio * duration)));
-    },
-    [duration, onSeek],
-  );
+  // Create / destroy wavesurfer instance when audio element changes
+  useEffect(() => {
+    const container = waveformRef.current;
+    const audioEl = audioRef.current;
+    if (!container || !audioEl) return;
+
+    const regions = RegionsPlugin.create();
+    regionsRef.current = regions;
+
+    const ws = WaveSurfer.create({
+      container,
+      media: audioEl,
+      height: 32,
+      waveColor: "#475569",
+      progressColor: "#60a5fa",
+      cursorColor: "#60a5fa",
+      cursorWidth: 1,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 2,
+      normalize: true,
+      plugins: [regions],
+    });
+
+    wsRef.current = ws;
+
+    // Region click -> seek to region start
+    regions.on("region-clicked", (region: Region, e: MouseEvent) => {
+      e.stopPropagation();
+      onSeek(region.start);
+    });
+
+    return () => {
+      ws.destroy();
+      wsRef.current = null;
+      regionsRef.current = null;
+    };
+  }, [audioRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync regions when segments change
+  useEffect(() => {
+    const regions = regionsRef.current;
+    if (!regions) return;
+
+    // Clear existing regions
+    regions.clearRegions();
+
+    // Add new regions for each segment
+    segments.forEach((seg) => {
+      regions.addRegion({
+        start: seg.start_time,
+        end: seg.end_time,
+        color: "rgba(96, 165, 250, 0.08)",
+        drag: false,
+        resize: false,
+      });
+    });
+  }, [segments]);
 
   const handleCycleRate = useCallback(() => {
     const currentIdx = PLAYBACK_RATES.indexOf(
@@ -162,28 +228,16 @@ export function PlaybackBar({
         {formatTime(currentTime)}
       </span>
 
-      {/* Progress bar */}
+      {/* Waveform container */}
       <div
-        onClick={handleProgressClick}
+        ref={waveformRef}
         style={{
           flex: 1,
-          height: "4px",
-          backgroundColor: "var(--bg-tertiary)",
-          borderRadius: "2px",
+          minWidth: 0,
+          height: "32px",
           cursor: "pointer",
-          position: "relative",
         }}
-      >
-        <div
-          style={{
-            width: `${progress}%`,
-            height: "100%",
-            backgroundColor: "var(--accent)",
-            borderRadius: "2px",
-            transition: "width 0.1s linear",
-          }}
-        />
-      </div>
+      />
 
       {/* Duration */}
       <span

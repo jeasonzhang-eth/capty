@@ -979,6 +979,8 @@ function App(): React.JSX.Element {
           currentTime={audioPlayer.currentTime}
           duration={audioPlayer.duration}
           playbackRate={audioPlayer.playbackRate}
+          audioRef={audioPlayer.audioRef}
+          segments={store.segments}
           onPause={audioPlayer.pause}
           onResume={audioPlayer.resume}
           onSeek={audioPlayer.seek}
