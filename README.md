@@ -19,6 +19,8 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
+- **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
+- **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -154,6 +156,9 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `llmProviders` | `LlmProvider[]` | 已配置的 LLM provider 列表（含 id / name / baseUrl / apiKey / model） |
 | `selectedLlmProviderId` | `string \| null` | 上次使用的 LLM provider ID，SummaryPanel 默认选中 |
 | `promptTypes` | `PromptType[]` | 用户自定义/编辑的 prompt 类型列表，与内置默认合并后使用；每条含 id / label / systemPrompt / isBuiltin |
+| `zoomFactor` | `number \| null` | 界面缩放比例，`null` 时使用默认值 1.0；通过 Cmd/Ctrl + =/- 调整 |
+| `historyPanelWidth` | `number \| null` | HistoryPanel 宽度（px），`null` 时使用默认值 240，范围 160-400 |
+| `summaryPanelWidth` | `number \| null` | SummaryPanel 宽度（px），`null` 时使用默认值 320，范围 220-600 |
 
 #### user-models.json
 
@@ -273,6 +278,17 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-25 (3)
+
+- 新增界面缩放功能
+  - Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置（范围 0.5x – 3.0x）
+  - 缩放比例持久化到 config.json，重启后自动恢复
+- HistoryPanel 宽度支持拖拽调节（160px – 400px），右边缘拖动即可
+- 面板宽度持久化
+  - HistoryPanel 和 SummaryPanel 拖拽后的宽度自动保存到 config.json
+  - 重启后恢复上次的面板宽度设置
+- config.json 新增 3 个字段：`zoomFactor`、`historyPanelWidth`、`summaryPanelWidth`
 
 ### 2026-03-25 (2)
 

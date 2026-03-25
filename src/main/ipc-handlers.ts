@@ -482,6 +482,26 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     removeUserModel(configDir, modelId);
   });
 
+  // Layout persistence
+  ipcMain.handle(
+    "layout:save",
+    (
+      _event,
+      opts: { historyPanelWidth?: number; summaryPanelWidth?: number },
+    ) => {
+      const current = readConfig(configDir);
+      writeConfig(configDir, {
+        ...current,
+        ...(opts.historyPanelWidth !== undefined && {
+          historyPanelWidth: opts.historyPanelWidth,
+        }),
+        ...(opts.summaryPanelWidth !== undefined && {
+          summaryPanelWidth: opts.summaryPanelWidth,
+        }),
+      });
+    },
+  );
+
   // App
   ipcMain.handle("app:get-data-dir", () => {
     return getDataDir(configDir);

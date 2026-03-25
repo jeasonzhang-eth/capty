@@ -110,6 +110,18 @@ function App(): React.JSX.Element {
   const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
   const [activePromptType, setActivePromptType] = useState("summarize");
 
+  // Layout persistence state
+  const DEFAULT_HISTORY_WIDTH = 240;
+  const DEFAULT_SUMMARY_WIDTH = 320;
+  const [historyPanelWidth, setHistoryPanelWidth] = useState(
+    DEFAULT_HISTORY_WIDTH,
+  );
+  const [summaryPanelWidth, setSummaryPanelWidth] = useState(
+    DEFAULT_SUMMARY_WIDTH,
+  );
+  const [zoomFactor, setZoomFactor] = useState(1.0);
+  const layoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
       (m: { id: string }) => m.id === store.selectedModelId,
@@ -168,6 +180,22 @@ function App(): React.JSX.Element {
 
         // Restore saved config
         const config = await window.capty.getConfig();
+
+        // Restore layout settings
+        const savedHistoryWidth = config.historyPanelWidth as number | null;
+        if (savedHistoryWidth !== null) {
+          setHistoryPanelWidth(savedHistoryWidth);
+        }
+        const savedSummaryWidth = config.summaryPanelWidth as number | null;
+        if (savedSummaryWidth !== null) {
+          setSummaryPanelWidth(savedSummaryWidth);
+        }
+
+        // Restore zoom factor
+        const savedZoom = await window.capty.getZoomFactor();
+        if (savedZoom && savedZoom !== 1.0) {
+          setZoomFactor(savedZoom);
+        }
 
         // Restore HuggingFace mirror URL
         const savedHfUrl = config.hfMirrorUrl as string | null;
@@ -791,6 +819,54 @@ function App(): React.JSX.Element {
     setPromptTypes(effective as PromptType[]);
   }, []);
 
+  // Layout width change handlers (debounced save)
+  const handleHistoryWidthChange = useCallback((newWidth: number) => {
+    setHistoryPanelWidth(newWidth);
+    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
+    layoutTimerRef.current = setTimeout(() => {
+      window.capty.saveLayout({ historyPanelWidth: newWidth });
+    }, 500);
+  }, []);
+
+  const handleSummaryWidthChange = useCallback((newWidth: number) => {
+    setSummaryPanelWidth(newWidth);
+    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
+    layoutTimerRef.current = setTimeout(() => {
+      window.capty.saveLayout({ summaryPanelWidth: newWidth });
+    }, 500);
+  }, []);
+
+  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        setZoomFactor((prev) => {
+          const next = Math.min(3.0, Math.round((prev + 0.1) * 10) / 10);
+          window.capty.setZoomFactor(next);
+          return next;
+        });
+      } else if (e.key === "-") {
+        e.preventDefault();
+        setZoomFactor((prev) => {
+          const next = Math.max(0.5, Math.round((prev - 0.1) * 10) / 10);
+          window.capty.setZoomFactor(next);
+          return next;
+        });
+      } else if (e.key === "0") {
+        e.preventDefault();
+        setZoomFactor(1.0);
+        window.capty.setZoomFactor(1.0);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
     audioCapture.setOnDeviceRemoved(() => {
@@ -840,6 +916,8 @@ function App(): React.JSX.Element {
           regeneratingSessionId={regeneratingSessionId}
           regenerationProgress={regenerationProgress}
           isRecording={store.isRecording}
+          width={historyPanelWidth}
+          onWidthChange={handleHistoryWidthChange}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onPlaySession={handlePlaySession}
@@ -862,6 +940,8 @@ function App(): React.JSX.Element {
           selectedLlmProviderId={selectedLlmProviderId}
           promptTypes={promptTypes}
           activePromptType={activePromptType}
+          initialWidth={summaryPanelWidth}
+          onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}
           onSavePromptTypes={handleSavePromptTypes}

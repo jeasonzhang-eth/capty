@@ -56,6 +56,12 @@ declare global {
         meta: Record<string, unknown>,
       ) => Promise<void>;
       deleteSegments: (sessionId: number) => Promise<void>;
+      setZoomFactor: (factor: number) => Promise<void>;
+      getZoomFactor: () => Promise<number>;
+      saveLayout: (opts: {
+        historyPanelWidth?: number;
+        summaryPanelWidth?: number;
+      }) => Promise<void>;
       readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
       getAudioDir: (sessionId: number) => Promise<string | null>;
       getDataDir: () => Promise<string | null>;

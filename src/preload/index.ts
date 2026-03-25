@@ -52,6 +52,18 @@ const api = {
   saveModelMeta: (modelId: string, meta: Record<string, unknown>) =>
     ipcRenderer.invoke("models:save-meta", modelId, meta),
 
+  // Zoom
+  setZoomFactor: (factor: number) =>
+    ipcRenderer.invoke("app:set-zoom-factor", factor),
+  getZoomFactor: () =>
+    ipcRenderer.invoke("app:get-zoom-factor") as Promise<number>,
+
+  // Layout
+  saveLayout: (opts: {
+    historyPanelWidth?: number;
+    summaryPanelWidth?: number;
+  }) => ipcRenderer.invoke("layout:save", opts),
+
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),
   getConfigDir: () =>

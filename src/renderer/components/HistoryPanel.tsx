@@ -8,6 +8,9 @@ interface SessionSummary {
   readonly status: string;
 }
 
+const HISTORY_MIN_WIDTH = 160;
+const HISTORY_MAX_WIDTH = 400;
+
 interface HistoryPanelProps {
   readonly sessions: readonly SessionSummary[];
   readonly currentSessionId: number | null;
@@ -15,6 +18,8 @@ interface HistoryPanelProps {
   readonly regeneratingSessionId: number | null;
   readonly regenerationProgress: number;
   readonly isRecording: boolean;
+  readonly width: number;
+  readonly onWidthChange: (width: number) => void;
   readonly onSelectSession: (id: number) => void;
   readonly onDeleteSession: (id: number) => void;
   readonly onPlaySession: (id: number) => void;
@@ -54,6 +59,8 @@ export function HistoryPanel({
   regeneratingSessionId,
   regenerationProgress,
   isRecording,
+  width,
+  onWidthChange,
   onSelectSession,
   onDeleteSession,
   onPlaySession,
@@ -61,6 +68,44 @@ export function HistoryPanel({
   onRegenerateSubtitles,
   onOpenFolder,
 }: HistoryPanelProps): React.ReactElement {
+  // Drag handle for resizing
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(width);
+
+  const handleDragMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      isDragging.current = true;
+      startX.current = e.clientX;
+      startWidth.current = width;
+      e.preventDefault();
+    },
+    [width],
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent): void => {
+      if (!isDragging.current) return;
+      const delta = e.clientX - startX.current;
+      const newWidth = Math.min(
+        HISTORY_MAX_WIDTH,
+        Math.max(HISTORY_MIN_WIDTH, startWidth.current + delta),
+      );
+      onWidthChange(newWidth);
+    };
+
+    const handleMouseUp = (): void => {
+      isDragging.current = false;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [onWidthChange]);
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -135,15 +180,31 @@ export function HistoryPanel({
   return (
     <div
       style={{
-        width: "240px",
+        width: `${width}px`,
+        minWidth: `${HISTORY_MIN_WIDTH}px`,
+        maxWidth: `${HISTORY_MAX_WIDTH}px`,
         backgroundColor: "var(--bg-secondary)",
         borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
         flexShrink: 0,
         overflow: "hidden",
+        position: "relative",
       }}
     >
+      {/* Right-edge drag handle */}
+      <div
+        onMouseDown={handleDragMouseDown}
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: "4px",
+          cursor: "col-resize",
+          zIndex: 10,
+        }}
+      />
       <div
         style={{
           padding: "12px 16px",

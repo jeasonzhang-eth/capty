@@ -58,6 +58,9 @@ export interface AppConfig {
   readonly llmProviders: LlmProvider[];
   readonly selectedLlmProviderId: string | null;
   readonly promptTypes: PromptType[];
+  readonly zoomFactor: number | null;
+  readonly historyPanelWidth: number | null;
+  readonly summaryPanelWidth: number | null;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -90,6 +93,9 @@ const DEFAULT_CONFIG: AppConfig = {
   llmProviders: [],
   selectedLlmProviderId: null,
   promptTypes: [],
+  zoomFactor: null,
+  historyPanelWidth: null,
+  summaryPanelWidth: null,
 };
 
 export function readConfig(configDir: string): AppConfig {

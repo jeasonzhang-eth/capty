@@ -1,4 +1,10 @@
-import { app, BrowserWindow, shell, systemPreferences } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  systemPreferences,
+} from "electron";
 import { join } from "path";
 import fs from "fs";
 import { is } from "@electron-toolkit/utils";
@@ -50,6 +56,10 @@ function createWindow(configDir: string): BrowserWindow {
   mainWindow.on("move", saveBounds);
 
   mainWindow.on("ready-to-show", () => {
+    const cfg = readConfig(configDir);
+    if (cfg.zoomFactor !== null && cfg.zoomFactor > 0) {
+      mainWindow!.webContents.setZoomFactor(cfg.zoomFactor);
+    }
     mainWindow!.show();
   });
 
@@ -100,17 +110,37 @@ app.whenReady().then(() => {
     getMainWindow: () => mainWindow,
   });
 
-  // 6. Request microphone permission on macOS
+  // 6. Zoom IPC handlers
+  let zoomTimer: ReturnType<typeof setTimeout> | null = null;
+  ipcMain.handle("app:set-zoom-factor", (_event, factor: number) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.setZoomFactor(factor);
+    }
+    if (zoomTimer) clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(() => {
+      const current = readConfig(configDir);
+      writeConfig(configDir, { ...current, zoomFactor: factor });
+    }, 500);
+  });
+
+  ipcMain.handle("app:get-zoom-factor", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      return mainWindow.webContents.getZoomFactor();
+    }
+    return 1.0;
+  });
+
+  // 7. Request microphone permission on macOS
   if (process.platform === "darwin") {
     systemPreferences.askForMediaAccess("microphone").catch(() => {
       // User denied or error — app can still run without mic
     });
   }
 
-  // 7. Create BrowserWindow
+  // 8. Create BrowserWindow
   createWindow(configDir);
 
-  // 8. Start sidecar in background (don't block window)
+  // 9. Start sidecar in background (don't block window)
   sidecar.start().catch((err) => {
     console.error("[sidecar] Failed to start:", err);
   });

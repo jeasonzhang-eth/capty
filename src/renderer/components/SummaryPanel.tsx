@@ -35,6 +35,8 @@ interface SummaryPanelProps {
   readonly selectedLlmProviderId: string | null;
   readonly promptTypes: readonly PromptType[];
   readonly activePromptType: string;
+  readonly initialWidth: number;
+  readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (providerId: string, promptType: string) => void;
   readonly onChangePromptType: (promptType: string) => void;
   readonly onSavePromptTypes: (types: PromptType[]) => void;
@@ -70,6 +72,8 @@ export function SummaryPanel({
   selectedLlmProviderId,
   promptTypes,
   activePromptType,
+  initialWidth,
+  onWidthChange,
   onSummarize,
   onChangePromptType,
   onSavePromptTypes,
@@ -109,10 +113,10 @@ export function SummaryPanel({
   const [newPrompt, setNewPrompt] = useState("");
 
   // Resizable width
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const [panelWidth, setPanelWidth] = useState(initialWidth);
   const isDragging = useRef(false);
   const startX = useRef(0);
-  const startWidth = useRef(DEFAULT_WIDTH);
+  const startWidth = useRef(initialWidth);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -136,7 +140,10 @@ export function SummaryPanel({
     };
 
     const handleMouseUp = (): void => {
-      isDragging.current = false;
+      if (isDragging.current) {
+        isDragging.current = false;
+        onWidthChange(panelWidth);
+      }
     };
 
     document.addEventListener("mousemove", handleMouseMove);
@@ -145,7 +152,7 @@ export function SummaryPanel({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, []);
+  }, [onWidthChange, panelWidth]);
 
   const openEdit = useCallback((pt: PromptType) => {
     setEditingType(pt);
@@ -538,7 +545,11 @@ export function SummaryPanel({
               }}
             />
             <div
-              style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
+              style={{
+                display: "flex",
+                gap: "8px",
+                justifyContent: "flex-end",
+              }}
             >
               {editingType.isBuiltin && (
                 <button
@@ -684,7 +695,11 @@ export function SummaryPanel({
               }}
             />
             <div
-              style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
+              style={{
+                display: "flex",
+                gap: "8px",
+                justifyContent: "flex-end",
+              }}
             >
               <button
                 onClick={() => {
