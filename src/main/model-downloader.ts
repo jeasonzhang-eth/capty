@@ -110,6 +110,9 @@ export async function downloadModel(
   let globalDownloaded = 0;
   let globalTotal = 0;
 
+  // Track per-file sizes from HEAD (to detect missing sizes during download)
+  const headFileSizes: number[] = [];
+
   const headResults = await Promise.allSettled(
     files.map(async (file) => {
       const filePath = join(destDir, file);
@@ -136,20 +139,22 @@ export async function downloadModel(
   for (const result of headResults) {
     if (result.status === "fulfilled") {
       const { contentLength, existingSize } = result.value;
+      headFileSizes.push(contentLength);
       if (contentLength > 0) {
         globalTotal += contentLength;
         globalDownloaded += Math.min(existingSize, contentLength);
       }
+    } else {
+      headFileSizes.push(0);
     }
   }
 
-  // If we couldn't get sizes, just use file count for progress
-  const useFileProgress = globalTotal === 0;
   let filesCompleted = 0;
   let filesDownloaded = 0;
   let filesFailed = 0;
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     const filePath = join(destDir, file);
     const fileUrl = `${resolveUrl}/${file}`;
 
@@ -180,14 +185,20 @@ export async function downloadModel(
         // File already complete
         filesCompleted++;
         filesDownloaded++;
-        if (useFileProgress) {
-          onProgress({
-            downloaded: filesCompleted,
-            total: files.length,
-            percent: (filesCompleted / files.length) * 100,
-          });
-        }
         continue;
+      }
+
+      // If HEAD missed this file's size, get it from the GET response
+      // and add to globalTotal so progress percentage stays sane
+      if (headFileSizes[i] === 0) {
+        const getContentLength = Number(
+          response.headers.get("content-length") ?? 0,
+        );
+        if (getContentLength > 0) {
+          const fullSize = getContentLength + startByte;
+          globalTotal += fullSize;
+          globalDownloaded += startByte;
+        }
       }
 
       const body = response.body;
@@ -212,12 +223,11 @@ export async function downloadModel(
         if (done) break;
         writer.write(Buffer.from(value));
         globalDownloaded += value.byteLength;
-        if (!useFileProgress) {
+        if (globalTotal > 0) {
           onProgress({
             downloaded: globalDownloaded,
             total: globalTotal,
-            percent:
-              globalTotal > 0 ? (globalDownloaded / globalTotal) * 100 : 0,
+            percent: Math.min((globalDownloaded / globalTotal) * 100, 100),
           });
         }
       }
@@ -226,17 +236,15 @@ export async function downloadModel(
       filesCompleted++;
       filesDownloaded++;
       console.log(`[model-downloader] Downloaded: ${file}`);
-      if (useFileProgress) {
-        onProgress({
-          downloaded: filesCompleted,
-          total: files.length,
-          percent: (filesCompleted / files.length) * 100,
-        });
-      }
     } catch (err) {
       filesFailed++;
       console.error(`[model-downloader] Failed to download ${file}:`, err);
     }
+  }
+
+  // Final progress update
+  if (filesDownloaded > 0) {
+    onProgress({ downloaded: globalTotal, total: globalTotal, percent: 100 });
   }
 
   console.log(

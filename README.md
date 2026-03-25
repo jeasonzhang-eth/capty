@@ -301,6 +301,12 @@ pytest
   - TypeScript 侧 `isModelDownloaded()` 增加 `.npz` 文件检测（MLX 权重格式）
   - 应用更新时自动为已有 Whisper 模型回填 `mlx_repo` 字段
 
+### 2026-03-26 (2)
+
+- 修复模型下载进度条显示异常百分比（如 1897321312%）
+  - 原因：HuggingFace CDN 重定向导致 HEAD 请求对大文件返回 0 大小，但 `globalTotal` 不为 0（小文件 HEAD 成功），下载累积字节远超预计总量
+  - 修复：下载时从 GET 响应获取实际 content-length 补充到 `globalTotal`，并 `Math.min` 限制百分比上限为 100%
+
 ### 2026-03-25 (10)
 
 - 消除 sidecar 日志中反复出现的 `Setting pad_token_id to eos_token_id` 警告
