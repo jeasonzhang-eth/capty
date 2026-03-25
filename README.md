@@ -8,11 +8,13 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **会话管理** — 每次录音自动创建会话，历史列表展示所有会话，支持右键删除（含确认弹窗，同时清理音频文件）
 - **重新生成字幕** — 对已完成的会话右键选择重新转录，从保存的音频文件重新生成字幕（含进度条），解决 sidecar 故障导致的字幕缺失
 - **音频播放** — 历史会话支持一键播放，底部播放器提供暂停/恢复/进度拖拽/时间显示
-- **设置页面** — 支持更改数据存储目录、查看/下载/切换 ASR 模型
+- **LLM 摘要** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），一键生成转写内容的结构化摘要，支持 Markdown 渲染；SummaryPanel 可选择 provider、拖拽调整宽度
+- **设置页面** — 三个 Tab：General（数据目录、配置目录）、Speech Models（模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
-- **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体（tiny/base/small/medium/large-v3-turbo），支持浏览、下载、切换、删除；远程模型列表自动刷新
+- **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
-- **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，无需联网
+- **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
+- **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
 
@@ -143,8 +145,9 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `selectedAudioDeviceId` | `string \| null` | 上次选择的麦克风设备 ID，重启后自动恢复 |
 | `selectedModelId` | `string \| null` | 当前激活的 ASR 模型 ID |
 | `hfMirrorUrl` | `string \| null` | HuggingFace 镜像地址，`null` 时使用官方 `https://huggingface.co` |
-| `modelRegistryUrl` | `string \| null` | 预留字段，远程模型注册表 URL |
 | `windowBounds` | `{x, y, width, height} \| null` | 窗口位置和大小，移动/缩放后自动保存，重启时恢复 |
+| `llmProviders` | `LlmProvider[]` | 已配置的 LLM provider 列表（含 id / name / baseUrl / apiKey / model） |
+| `selectedLlmProviderId` | `string \| null` | 上次使用的 LLM provider ID，SummaryPanel 默认选中 |
 
 #### user-models.json
 
@@ -267,12 +270,28 @@ pytest
 
 ### 2026-03-25
 
+- 新增 LLM 摘要功能（SummaryPanel）
+  - 接入 OpenAI 兼容 API，对转写内容一键生成结构化摘要
+  - 内置 OpenAI / DeepSeek / OpenRouter 三个预设 provider，也可添加自定义 provider
+  - 摘要内容以 Markdown 渲染（标题、列表、代码块、表格等）
+  - Provider 可在 Settings > Language Models 中配置 API Key / Model，支持 Test 连通性测试
 - LLM Provider 选择从 Settings 移至 SummaryPanel
-  - Settings > Language Models 页面移除 "Use" / "Active" 按钮，仅负责配置和测试 provider
+  - Settings > Language Models 页面仅负责配置和测试 provider，移除 "Use" / "Active" 按钮
   - SummaryPanel 顶部新增 provider 下拉选择器，点击 Summarize 前选择使用哪个 provider
   - 自动记忆上次使用的 provider，下次打开时默认选中
 - Summary 列表改为最新生成的排在最前面
 - SummaryPanel 宽度支持拖拽调节（220px – 600px），左边缘拖动即可
+- Settings 重构为三个 Tab：General / Speech Models / Language Models
+- 新增 Config Directory 显示（General Tab），可一键打开配置文件目录
+- 窗口位置和大小自动保存到 config，重启后恢复
+- 模型注册表重构为 `user-models.json` 单一数据源
+  - 首次启动从内置 `models.json` 自动初始化
+  - 应用更新时自动合并新增的内置模型
+  - 自动扫描 models 目录发现孤儿模型并注册
+- 模型市场改为 HuggingFace 实时搜索（替代静态远程列表）
+  - 搜索结果通过 tree API 获取精确下载大小
+  - 支持配置 HuggingFace 镜像地址（Settings > Speech Models）
+- 模型列表按类型分组、按大小排序
 
 ### 2026-03-24 (3)
 
@@ -296,6 +315,9 @@ pytest
   - 重新生成期间禁止录音，防止冲突
 - 新增设置页面（SettingsModal）：支持更改数据存储目录、查看/下载/切换 ASR 模型
 - 新增麦克风选择记忆：选择的麦克风设备 ID 持久化到 config.json，重启后自动恢复；外接麦克风拔出时自动回退到默认设备
+- 新增会话右键"打开文件夹"选项，在 Finder 中打开对应音频目录
+- 音频文件名改用时间戳命名，导出默认保存到音频目录
+- 修复录音中途点停止时剩余音频未转录的问题
 - 修复字幕时间戳始终为 0 的问题：录音时改用音频采样计数器（audioSamplesRef）替代 1 秒精度的定时器，VAD 回调直接从实际处理的 PCM 采样数计算时间
 
 ### 2026-03-24
