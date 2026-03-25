@@ -93,7 +93,16 @@ const api = {
   saveFile: (defaultName: string, content: string) =>
     ipcRenderer.invoke("export:save-file", defaultName, content),
 
-  // LLM Summarization
+  // LLM
+  testLlmProvider: (provider: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  }) =>
+    ipcRenderer.invoke("llm:test", provider) as Promise<{
+      success: boolean;
+      model: string;
+    }>,
   summarize: (sessionId: number) =>
     ipcRenderer.invoke("llm:summarize", sessionId),
   listSummaries: (sessionId: number) =>

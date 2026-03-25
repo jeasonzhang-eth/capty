@@ -949,6 +949,10 @@ function LanguageModelsTab({
     apiKey: "",
     model: "",
   });
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; message: string }>
+  >({});
 
   const save = useCallback(
     (next: LlmProvider[], nextSelectedId: string | null) => {
@@ -1057,6 +1061,45 @@ function LanguageModelsTab({
     },
     [providers, save],
   );
+
+  const handleTest = useCallback(async (provider: LlmProvider) => {
+    setTestingId(provider.id);
+    setTestResults((prev) => {
+      const next = { ...prev };
+      delete next[provider.id];
+      return next;
+    });
+    try {
+      const result = await window.capty.testLlmProvider({
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+      });
+      setTestResults((prev) => ({
+        ...prev,
+        [provider.id]: {
+          ok: true,
+          message: `Connection OK (model: ${result.model})`,
+        },
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setTestResults((prev) => ({
+        ...prev,
+        [provider.id]: { ok: false, message: msg },
+      }));
+    } finally {
+      setTestingId(null);
+      // Auto-clear result after 5 seconds
+      setTimeout(() => {
+        setTestResults((prev) => {
+          const next = { ...prev };
+          delete next[provider.id];
+          return next;
+        });
+      }, 5000);
+    }
+  }, []);
 
   const availablePresets = PRESET_PROVIDERS.filter(
     (preset) => !providers.some((p) => p.id === preset.id),
@@ -1243,6 +1286,26 @@ function LanguageModelsTab({
                       Active
                     </span>
                   )}
+                  {isConfigured && (
+                    <button
+                      onClick={() => handleTest(provider)}
+                      disabled={testingId === provider.id}
+                      style={{
+                        padding: "5px 10px",
+                        fontSize: "11px",
+                        borderRadius: "5px",
+                        border: "1px solid var(--border)",
+                        backgroundColor: "transparent",
+                        color: "var(--text-muted)",
+                        cursor:
+                          testingId === provider.id ? "not-allowed" : "pointer",
+                        opacity: testingId === provider.id ? 0.6 : 1,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {testingId === provider.id ? "Testing..." : "Test"}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEdit(provider)}
                     style={{
@@ -1278,6 +1341,26 @@ function LanguageModelsTab({
                   )}
                 </div>
               </div>
+
+              {/* Test result */}
+              {testResults[provider.id] && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    padding: "6px 10px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    lineHeight: "16px",
+                    backgroundColor: testResults[provider.id].ok
+                      ? "rgba(34, 197, 94, 0.1)"
+                      : "rgba(239, 68, 68, 0.1)",
+                    color: testResults[provider.id].ok ? "#22c55e" : "#ef4444",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {testResults[provider.id].message}
+                </div>
+              )}
 
               {/* Edit form */}
               {isEditing && (

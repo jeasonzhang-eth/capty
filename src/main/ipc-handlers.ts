@@ -656,6 +656,46 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
   });
 
+  // LLM Provider Test
+  ipcMain.handle(
+    "llm:test",
+    async (
+      _event,
+      provider: { baseUrl: string; apiKey: string; model: string },
+    ) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+        const resp = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${provider.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: provider.model,
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${body}`);
+        }
+        const data = (await resp.json()) as {
+          model?: string;
+        };
+        return { success: true, model: data.model ?? provider.model };
+      } catch (err) {
+        clearTimeout(timeout);
+        throw err;
+      }
+    },
+  );
+
   ipcMain.handle("summary:list", (_event, sessionId: number) => {
     return getSummaries(db, sessionId);
   });
