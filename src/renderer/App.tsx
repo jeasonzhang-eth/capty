@@ -491,6 +491,15 @@ function App(): React.JSX.Element {
         );
         let receivedFinals = 0;
 
+        // Monotonic progress: only moves forward, never backwards
+        let highWaterMark = 0;
+        const updateProgress = (p: number): void => {
+          if (p > highWaterMark) {
+            highWaterMark = p;
+            setRegenerationProgress(p);
+          }
+        };
+
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
             () => reject(new Error("Connection timeout")),
@@ -537,7 +546,7 @@ function App(): React.JSX.Element {
                   allSent = true;
                   // If no pending finals (empty remaining), close now
                   if (pendingFinals === 0) {
-                    setRegenerationProgress(100);
+                    updateProgress(100);
                     ws.send(JSON.stringify({ type: "stop" }));
                     ws.close();
                   }
@@ -558,7 +567,7 @@ function App(): React.JSX.Element {
                 }
 
                 // Progress: 0-30% for sending audio (this phase is fast)
-                setRegenerationProgress(Math.round((offset / totalBytes) * 30));
+                updateProgress(Math.round((offset / totalBytes) * 30));
               }, 100); // ~10x real-time speed
             } else if (msg.type === "partial") {
               if (store.currentSessionId === sessionId) {
@@ -604,13 +613,13 @@ function App(): React.JSX.Element {
               }
 
               // Progress: 30-100% for transcription results
-              setRegenerationProgress(
+              updateProgress(
                 30 + Math.round((receivedFinals / totalExpectedFinals) * 70),
               );
 
               // Close connection when all audio sent and all finals received
               if (allSent && pendingFinals === 0) {
-                setRegenerationProgress(100);
+                updateProgress(100);
                 ws.send(JSON.stringify({ type: "stop" }));
                 ws.close();
               }
