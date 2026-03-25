@@ -96,6 +96,7 @@ src/
 │   │   ├── RecordingControls.tsx
 │   │   ├── PlaybackBar.tsx
 │   │   ├── SettingsModal.tsx
+│   │   ├── SummaryPanel.tsx
 │   │   └── SetupWizard.tsx
 │   ├── hooks/           # 自定义 Hooks
 │   │   ├── useAudioCapture.ts
@@ -263,6 +264,15 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-25
+
+- LLM Provider 选择从 Settings 移至 SummaryPanel
+  - Settings > Language Models 页面移除 "Use" / "Active" 按钮，仅负责配置和测试 provider
+  - SummaryPanel 顶部新增 provider 下拉选择器，点击 Summarize 前选择使用哪个 provider
+  - 自动记忆上次使用的 provider，下次打开时默认选中
+- Summary 列表改为最新生成的排在最前面
+- SummaryPanel 宽度支持拖拽调节（220px – 600px），左边缘拖动即可
 
 ### 2026-03-24 (3)
 
