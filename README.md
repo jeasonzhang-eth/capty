@@ -288,7 +288,7 @@ pytest
 - **MLX GPU 加速推理** — 将 PyTorch CPU 推理替换为 MLX GPU 推理，利用 Apple Silicon GPU 大幅加速
   - Qwen-ASR 模型使用 `mlx-qwen3-asr` 库（`Session` API）
   - Whisper 模型使用 `mlx-whisper` 库，自动从 `mlx-community` 下载 MLX 格式权重
-  - 完全移除 PyTorch (~2GB)、transformers、qwen-asr 依赖，安装体积大幅减小
+  - 移除 transformers、qwen-asr 依赖（torch 仍被 mlx-whisper 间接依赖）
   - 预期 3-10x 推理加速（Apple Silicon GPU vs CPU）
 - **并发转录** — WebSocket handler 从阻塞式改为并发式
   - `segment_end` 触发后立即接收下一个 segment，不再等待转录完成
