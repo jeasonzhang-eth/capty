@@ -84,6 +84,10 @@ class ModelRunner:
             device_map="cpu",
             max_new_tokens=4096,
         )
+        # Suppress "Setting pad_token_id to eos_token_id" warning on every generate()
+        gen_cfg = getattr(self._model, "generation_config", None)
+        if gen_cfg and gen_cfg.pad_token_id is None:
+            gen_cfg.pad_token_id = gen_cfg.eos_token_id
         self._processor = None
 
     def _load_whisper(self, model_path: Path) -> None:
@@ -96,6 +100,9 @@ class ModelRunner:
             torch_dtype=torch.float32,
         )
         self._model.to("cpu")
+        # Suppress "Setting pad_token_id to eos_token_id" warning on every generate()
+        if self._model.generation_config.pad_token_id is None:
+            self._model.generation_config.pad_token_id = self._model.generation_config.eos_token_id
 
     def is_loaded(self) -> bool:
         """Return ``True`` if a model is currently loaded."""

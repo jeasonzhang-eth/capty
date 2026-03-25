@@ -282,6 +282,11 @@ pytest
 
 ## 更新日志
 
+### 2026-03-25 (10)
+
+- 消除 sidecar 日志中反复出现的 `Setting pad_token_id to eos_token_id` 警告
+  - 模型加载时显式设置 `pad_token_id = eos_token_id`，Qwen-ASR 和 Whisper 均已修复
+
 ### 2026-03-25 (9)
 
 - 修复实时转录延迟和长音频转录问题
