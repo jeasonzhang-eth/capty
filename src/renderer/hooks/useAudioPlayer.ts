@@ -5,6 +5,7 @@ interface AudioPlayerState {
   readonly isPlaying: boolean;
   readonly currentTime: number;
   readonly duration: number;
+  readonly playbackRate: number;
 }
 
 export function useAudioPlayer() {
@@ -13,6 +14,7 @@ export function useAudioPlayer() {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
+    playbackRate: 1.0,
   });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -32,12 +34,13 @@ export function useAudioPlayer() {
 
   const stop = useCallback(() => {
     cleanup();
-    setState({
+    setState((prev) => ({
       playingSessionId: null,
       isPlaying: false,
       currentTime: 0,
       duration: 0,
-    });
+      playbackRate: prev.playbackRate,
+    }));
   }, [cleanup]);
 
   const play = useCallback(
@@ -67,16 +70,20 @@ export function useAudioPlayer() {
         stop();
       });
 
-      setState({
+      setState((prev) => ({
         playingSessionId: sessionId,
         isPlaying: true,
         currentTime: 0,
         duration: 0,
-      });
+        playbackRate: prev.playbackRate,
+      }));
+
+      // Apply preserved playback rate
+      audio.playbackRate = state.playbackRate;
 
       await audio.play();
     },
-    [cleanup, stop],
+    [cleanup, stop, state.playbackRate],
   );
 
   const pause = useCallback(() => {
@@ -98,6 +105,32 @@ export function useAudioPlayer() {
     }
   }, []);
 
+  const setPlaybackRate = useCallback((rate: number) => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = rate;
+    }
+    setState((prev) => ({ ...prev, playbackRate: rate }));
+  }, []);
+
+  const skipForward = useCallback((seconds: number) => {
+    if (audioRef.current) {
+      const newTime = Math.min(
+        audioRef.current.currentTime + seconds,
+        audioRef.current.duration || Infinity,
+      );
+      audioRef.current.currentTime = newTime;
+      setState((prev) => ({ ...prev, currentTime: newTime }));
+    }
+  }, []);
+
+  const skipBackward = useCallback((seconds: number) => {
+    if (audioRef.current) {
+      const newTime = Math.max(audioRef.current.currentTime - seconds, 0);
+      audioRef.current.currentTime = newTime;
+      setState((prev) => ({ ...prev, currentTime: newTime }));
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -112,5 +145,8 @@ export function useAudioPlayer() {
     resume,
     seek,
     stop,
+    setPlaybackRate,
+    skipForward,
+    skipBackward,
   };
 }

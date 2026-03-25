@@ -942,6 +942,14 @@ function App(): React.JSX.Element {
           segments={store.segments}
           partialText={store.partialText}
           isRecording={store.isRecording}
+          playbackTime={
+            audioPlayer.playingSessionId !== null
+              ? audioPlayer.currentTime
+              : null
+          }
+          onSeekToTime={
+            audioPlayer.playingSessionId !== null ? audioPlayer.seek : null
+          }
         />
         <SummaryPanel
           summaries={summaries}
@@ -970,10 +978,14 @@ function App(): React.JSX.Element {
           isPlaying={audioPlayer.isPlaying}
           currentTime={audioPlayer.currentTime}
           duration={audioPlayer.duration}
+          playbackRate={audioPlayer.playbackRate}
           onPause={audioPlayer.pause}
           onResume={audioPlayer.resume}
           onSeek={audioPlayer.seek}
           onStop={audioPlayer.stop}
+          onSkipBackward={() => audioPlayer.skipBackward(10)}
+          onSkipForward={() => audioPlayer.skipForward(10)}
+          onPlaybackRateChange={audioPlayer.setPlaybackRate}
         />
       )}
       <RecordingControls
