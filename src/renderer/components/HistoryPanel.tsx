@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from "react";
 
 interface SessionSummary {
   readonly id: number;
@@ -50,6 +56,55 @@ interface ContextMenuState {
   readonly x: number;
   readonly y: number;
   readonly sessionId: number | null;
+}
+
+interface SessionGroup {
+  readonly label: string;
+  readonly sessions: readonly SessionSummary[];
+}
+
+function groupSessionsByDate(
+  sessions: readonly SessionSummary[],
+): SessionGroup[] {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+  const prev7Start = new Date(todayStart.getTime() - 7 * 86400000);
+  const prev30Start = new Date(todayStart.getTime() - 30 * 86400000);
+
+  const buckets: Record<string, SessionSummary[]> = {
+    Today: [],
+    Yesterday: [],
+    "Previous 7 Days": [],
+    "Previous 30 Days": [],
+    Older: [],
+  };
+  const order = [
+    "Today",
+    "Yesterday",
+    "Previous 7 Days",
+    "Previous 30 Days",
+    "Older",
+  ];
+
+  for (const session of sessions) {
+    const d = new Date(session.started_at);
+    if (d >= todayStart) {
+      buckets["Today"].push(session);
+    } else if (d >= yesterdayStart) {
+      buckets["Yesterday"].push(session);
+    } else if (d >= prev7Start) {
+      buckets["Previous 7 Days"].push(session);
+    } else if (d >= prev30Start) {
+      buckets["Previous 30 Days"].push(session);
+    } else {
+      buckets["Older"].push(session);
+    }
+  }
+
+  return order
+    .filter((label) => buckets[label].length > 0)
+    .map((label) => ({ label, sessions: buckets[label] }));
 }
 
 export function HistoryPanel({
@@ -105,6 +160,65 @@ export function HistoryPanel({
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [onWidthChange]);
+
+  // Group sessions by date
+  const groups = useMemo(() => groupSessionsByDate(sessions), [sessions]);
+
+  // Collapsed state: all groups except "Today" start collapsed
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () =>
+      new Set(groups.filter((g) => g.label !== "Today").map((g) => g.label)),
+  );
+
+  // When groups change (new sessions added), ensure new non-Today groups start collapsed
+  useEffect(() => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      for (const g of groups) {
+        // Only auto-collapse groups the user hasn't interacted with yet
+        // If a group is new and not "Today", collapse it
+        if (g.label !== "Today" && !prev.has(g.label)) {
+          // Check if this is truly a new group - don't re-collapse if user expanded it
+          // We skip this to avoid fighting user intent
+        }
+      }
+      // Remove labels for groups that no longer exist
+      for (const label of prev) {
+        if (!groups.some((g) => g.label === label)) {
+          next.delete(label);
+        }
+      }
+      return next;
+    });
+  }, [groups]);
+
+  // Auto-expand the group containing the current session
+  useEffect(() => {
+    if (currentSessionId === null) return;
+    for (const group of groups) {
+      if (group.sessions.some((s) => s.id === currentSessionId)) {
+        setCollapsedGroups((prev) => {
+          if (!prev.has(group.label)) return prev;
+          const next = new Set(prev);
+          next.delete(group.label);
+          return next;
+        });
+        break;
+      }
+    }
+  }, [currentSessionId, groups]);
+
+  const toggleGroup = useCallback((label: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  }, []);
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -216,131 +330,195 @@ export function HistoryPanel({
         History ({sessions.length})
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {sessions.map((session) => (
-          <div
-            key={session.id}
-            onClick={() => onSelectSession(session.id)}
-            onContextMenu={(e) => handleContextMenu(e, session.id)}
-            style={{
-              padding: "10px 16px",
-              cursor: "pointer",
-              borderBottom: "1px solid var(--border)",
-              borderLeft:
-                session.id === currentSessionId
-                  ? "3px solid var(--accent)"
-                  : "3px solid transparent",
-              backgroundColor:
-                session.id === currentSessionId
-                  ? "var(--bg-tertiary)"
-                  : "transparent",
-            }}
-          >
-            <div
-              style={{ fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}
-            >
-              {session.title}
-            </div>
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span>{formatDate(session.started_at)}</span>
-              <span
-                style={{ display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                <span>{formatDuration(session.duration_seconds)}</span>
-                {session.status === "completed" && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (playingSessionId === session.id) {
-                        onStopPlayback();
-                      } else if (!isRecording) {
-                        onPlaySession(session.id);
-                      }
-                    }}
-                    disabled={isRecording && playingSessionId !== session.id}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color:
-                        playingSessionId === session.id
-                          ? "var(--accent)"
-                          : "var(--text-muted)",
-                      fontSize: "12px",
-                      cursor:
-                        isRecording && playingSessionId !== session.id
-                          ? "not-allowed"
-                          : "pointer",
-                      padding: "0 2px",
-                      opacity:
-                        isRecording && playingSessionId !== session.id
-                          ? 0.4
-                          : 1,
-                    }}
-                    title={
-                      playingSessionId === session.id
-                        ? "Stop"
-                        : isRecording
-                          ? "Cannot play while recording"
-                          : "Play"
-                    }
-                  >
-                    {playingSessionId === session.id ? "\u25A0" : "\u25B6"}
-                  </button>
-                )}
-              </span>
-            </div>
-            {session.status === "recording" && (
-              <span
+        {groups.map((group) => {
+          const isCollapsed = collapsedGroups.has(group.label);
+          return (
+            <div key={group.label}>
+              {/* Group header */}
+              <div
+                onClick={() => toggleGroup(group.label)}
                 style={{
-                  fontSize: "10px",
-                  color: "var(--danger)",
-                  fontWeight: 600,
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                  borderBottom: "1px solid var(--border)",
+                  backgroundColor: "var(--bg-tertiary)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  userSelect: "none",
                 }}
               >
-                RECORDING
-              </span>
-            )}
-            {regeneratingSessionId === session.id && (
-              <div style={{ marginTop: "4px" }}>
-                <div
+                <span
                   style={{
                     fontSize: "10px",
-                    color: "var(--accent)",
-                    fontWeight: 600,
-                    marginBottom: "3px",
+                    color: "var(--text-muted)",
+                    display: "inline-block",
+                    width: "10px",
+                    textAlign: "center",
                   }}
                 >
-                  Regenerating... {regenerationProgress}%
-                </div>
-                <div
+                  {isCollapsed ? "\u25B6" : "\u25BC"}
+                </span>
+                <span
                   style={{
-                    height: "3px",
-                    backgroundColor: "var(--border)",
-                    borderRadius: "2px",
-                    overflow: "hidden",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
                   }}
                 >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${regenerationProgress}%`,
-                      backgroundColor: "var(--accent)",
-                      borderRadius: "2px",
-                      transition: "width 0.2s ease",
-                    }}
-                  />
-                </div>
+                  {group.label}
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  ({group.sessions.length})
+                </span>
               </div>
-            )}
-          </div>
-        ))}
+              {/* Session items */}
+              {!isCollapsed &&
+                group.sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    onClick={() => onSelectSession(session.id)}
+                    onContextMenu={(e) => handleContextMenu(e, session.id)}
+                    style={{
+                      padding: "10px 16px",
+                      cursor: "pointer",
+                      borderBottom: "1px solid var(--border)",
+                      borderLeft:
+                        session.id === currentSessionId
+                          ? "3px solid var(--accent)"
+                          : "3px solid transparent",
+                      backgroundColor:
+                        session.id === currentSessionId
+                          ? "var(--bg-tertiary)"
+                          : "transparent",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {session.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--text-muted)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span>{formatDate(session.started_at)}</span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <span>{formatDuration(session.duration_seconds)}</span>
+                        {session.status === "completed" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (playingSessionId === session.id) {
+                                onStopPlayback();
+                              } else if (!isRecording) {
+                                onPlaySession(session.id);
+                              }
+                            }}
+                            disabled={
+                              isRecording && playingSessionId !== session.id
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color:
+                                playingSessionId === session.id
+                                  ? "var(--accent)"
+                                  : "var(--text-muted)",
+                              fontSize: "12px",
+                              cursor:
+                                isRecording && playingSessionId !== session.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                              padding: "0 2px",
+                              opacity:
+                                isRecording && playingSessionId !== session.id
+                                  ? 0.4
+                                  : 1,
+                            }}
+                            title={
+                              playingSessionId === session.id
+                                ? "Stop"
+                                : isRecording
+                                  ? "Cannot play while recording"
+                                  : "Play"
+                            }
+                          >
+                            {playingSessionId === session.id
+                              ? "\u25A0"
+                              : "\u25B6"}
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                    {session.status === "recording" && (
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--danger)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        RECORDING
+                      </span>
+                    )}
+                    {regeneratingSessionId === session.id && (
+                      <div style={{ marginTop: "4px" }}>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--accent)",
+                            fontWeight: 600,
+                            marginBottom: "3px",
+                          }}
+                        >
+                          Regenerating... {regenerationProgress}%
+                        </div>
+                        <div
+                          style={{
+                            height: "3px",
+                            backgroundColor: "var(--border)",
+                            borderRadius: "2px",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${regenerationProgress}%`,
+                              backgroundColor: "var(--accent)",
+                              borderRadius: "2px",
+                              transition: "width 0.2s ease",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          );
+        })}
         {sessions.length === 0 && (
           <div
             style={{
