@@ -8,7 +8,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **会话管理** — 每次录音自动创建会话，历史列表按时间分组（Today / Yesterday / Previous 7 Days / Previous 30 Days / Older），支持折叠/展开，右键重命名（行内编辑，同步重命名磁盘音频目录和主音频文件）/ 删除（含确认弹窗，同时清理音频文件）
 - **重新生成字幕** — 对已完成的会话右键选择重新转录，从保存的音频文件重新生成字幕（含进度条），解决 sidecar 故障导致的字幕缺失
 - **音频播放** — 历史会话支持一键播放，底部播放器提供暂停/恢复/进度拖拽/时间显示、快进快退 10 秒、倍速播放（0.5x–2.0x 循环切换）、全局键盘快捷键（Space 播放暂停、左右箭头跳转）
-- **歌词式字幕同步** — 播放时 TranscriptArea 自动高亮当前段落（左侧蓝色边框 + 半透明背景），自动滚动到视口中央；点击任意段落跳转到对应音频位置；非播放时行为不变
+- **歌词式字幕同步** — 基于 react-lrc 的专业字幕同步，播放时自动高亮当前段落并居中显示（首尾行也能居中）；用户手动滚动后 5 秒自动恢复跟随；点击任意段落跳转到对应音频位置；非播放时行为不变
 - **LLM 多维分析** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），SummaryPanel 支持多 Tab 切换不同分析维度：
   - 内置 3 种类型：Summary（结构化摘要）、Questions（深入追问）、Context（背景推测）
   - 每个 Tab 的生成结果独立存储和展示，支持 Markdown 渲染
@@ -29,7 +29,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 层 | 技术 |
 |---|------|
 | 桌面框架 | Electron 33 + electron-vite |
-| 前端 | React 18 + TypeScript + Zustand |
+| 前端 | React 18 + TypeScript + Zustand + react-lrc |
 | 数据库 | better-sqlite3 (SQLite) |
 | ML 推理 | Python sidecar (FastAPI + qwen-asr + transformers/Whisper) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
@@ -114,6 +114,8 @@ src/
 │   │   ├── useTranscription.ts
 │   │   ├── useSession.ts
 │   │   └── useAudioPlayer.ts
+│   ├── utils/
+│   │   └── lrcConverter.ts  # Segment[] → LRC 格式转换
 │   └── stores/
 │       └── appStore.ts  # Zustand 状态管理
 └── sidecar/             # Python ML 后端
@@ -279,6 +281,16 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-25 (7)
+
+- 集成 react-lrc 实现专业歌词式字幕同步
+  - 播放模式使用 react-lrc `<Lrc>` 组件替换手写滚动逻辑
+  - `verticalSpace` 属性实现活跃行真正居中（首尾行也能居中）
+  - 用户手动滚动后 5 秒自动恢复跟随（`recoverAutoScrollInterval`）
+  - 段落间隙无空档：当前行从 start 持续到下一行 start
+  - 新增 `lrcConverter.ts` 工具函数，将 Segment[] 动态转换为 LRC 格式
+  - 录音模式和空闲模式完全不受影响
 
 ### 2026-03-25 (6)
 
