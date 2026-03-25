@@ -71,25 +71,47 @@ declare global {
       summarize: (
         sessionId: number,
         providerId: string,
+        promptType: string,
       ) => Promise<{
         id: number;
         session_id: number;
         content: string;
         model_name: string;
         provider_id: string;
+        prompt_type: string;
         created_at: string;
       }>;
-      listSummaries: (sessionId: number) => Promise<
+      listSummaries: (
+        sessionId: number,
+        promptType?: string,
+      ) => Promise<
         {
           id: number;
           session_id: number;
           content: string;
           model_name: string;
           provider_id: string;
+          prompt_type: string;
           created_at: string;
         }[]
       >;
       deleteSummary: (summaryId: number) => Promise<void>;
+      listPromptTypes: () => Promise<
+        {
+          id: string;
+          label: string;
+          systemPrompt: string;
+          isBuiltin: boolean;
+        }[]
+      >;
+      savePromptTypes: (
+        types: {
+          id: string;
+          label: string;
+          systemPrompt: string;
+          isBuiltin: boolean;
+        }[],
+      ) => Promise<void>;
     };
   }
 }

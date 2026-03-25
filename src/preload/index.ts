@@ -103,12 +103,21 @@ const api = {
       success: boolean;
       model: string;
     }>,
-  summarize: (sessionId: number, providerId: string) =>
-    ipcRenderer.invoke("llm:summarize", sessionId, providerId),
-  listSummaries: (sessionId: number) =>
-    ipcRenderer.invoke("summary:list", sessionId),
+  summarize: (sessionId: number, providerId: string, promptType: string) =>
+    ipcRenderer.invoke("llm:summarize", sessionId, providerId, promptType),
+  listSummaries: (sessionId: number, promptType?: string) =>
+    ipcRenderer.invoke("summary:list", sessionId, promptType),
   deleteSummary: (summaryId: number) =>
     ipcRenderer.invoke("summary:delete", summaryId),
+  listPromptTypes: () => ipcRenderer.invoke("prompt-types:list"),
+  savePromptTypes: (
+    types: {
+      id: string;
+      label: string;
+      systemPrompt: string;
+      isBuiltin: boolean;
+    }[],
+  ) => ipcRenderer.invoke("prompt-types:save", types),
 };
 
 if (process.contextIsolated) {

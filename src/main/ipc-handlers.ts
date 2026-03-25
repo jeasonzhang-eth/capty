@@ -22,7 +22,15 @@ import {
   deleteSessionAudio,
 } from "./audio-files";
 import { exportTXT, exportSRT, exportMarkdown } from "./export";
-import { readConfig, writeConfig, getDataDir, LlmProvider } from "./config";
+import {
+  readConfig,
+  writeConfig,
+  getDataDir,
+  LlmProvider,
+  PromptType,
+  getEffectivePromptTypes,
+  DEFAULT_PROMPT_TYPES,
+} from "./config";
 import {
   calcDirSizeGb,
   downloadModel,
@@ -566,7 +574,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   // LLM Summarization
   ipcMain.handle(
     "llm:summarize",
-    async (_event, sessionId: number, providerId: string) => {
+    async (
+      _event,
+      sessionId: number,
+      providerId: string,
+      promptType: string,
+    ) => {
       const config = readConfig(configDir);
       if (!providerId) {
         throw new Error("No LLM provider selected");
@@ -580,6 +593,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (!provider.apiKey) {
         throw new Error("API key not configured for selected provider");
       }
+
+      // Resolve the system prompt from prompt type
+      const effectiveTypes = getEffectivePromptTypes(config);
+      const pType = effectiveTypes.find((t) => t.id === promptType);
+      const systemPrompt =
+        pType?.systemPrompt ??
+        DEFAULT_PROMPT_TYPES.find((t) => t.id === "summarize")!.systemPrompt;
 
       // Gather all segments for this session
       const segments = getSegments(db, sessionId);
@@ -606,8 +626,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
             messages: [
               {
                 role: "system",
-                content:
-                  "You are a voice transcript summarization assistant. Please summarize the following voice transcript, extract key points, and generate a structured summary. Respond in the same language as the transcript.",
+                content: systemPrompt,
               },
               {
                 role: "user",
@@ -646,6 +665,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           content,
           modelName: actualModel,
           providerId: provider.id,
+          promptType: promptType || "summarize",
         });
 
         // Return the new summary record
@@ -655,6 +675,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           content,
           model_name: actualModel,
           provider_id: provider.id,
+          prompt_type: promptType || "summarize",
           created_at: new Date().toISOString(),
         };
       } catch (err) {
@@ -704,12 +725,26 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
-  ipcMain.handle("summary:list", (_event, sessionId: number) => {
-    return getSummaries(db, sessionId);
-  });
+  ipcMain.handle(
+    "summary:list",
+    (_event, sessionId: number, promptType?: string) => {
+      return getSummaries(db, sessionId, promptType);
+    },
+  );
 
   ipcMain.handle("summary:delete", (_event, summaryId: number) => {
     deleteSummary(db, summaryId);
+  });
+
+  // Prompt Types
+  ipcMain.handle("prompt-types:list", () => {
+    const config = readConfig(configDir);
+    return getEffectivePromptTypes(config);
+  });
+
+  ipcMain.handle("prompt-types:save", (_event, types: PromptType[]) => {
+    const config = readConfig(configDir);
+    writeConfig(configDir, { ...config, promptTypes: types });
   });
 
   // Export save file

@@ -6,7 +6,7 @@ import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
 import { SettingsModal, LlmProvider } from "./components/SettingsModal";
-import { SummaryPanel, Summary } from "./components/SummaryPanel";
+import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
@@ -106,6 +106,10 @@ function App(): React.JSX.Element {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
+  // Prompt type state
+  const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
+  const [activePromptType, setActivePromptType] = useState("summarize");
+
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
       (m: { id: string }) => m.id === store.selectedModelId,
@@ -179,6 +183,14 @@ function App(): React.JSX.Element {
         const savedLlmId = config.selectedLlmProviderId as string | null;
         if (savedLlmId) {
           setSelectedLlmProviderId(savedLlmId);
+        }
+
+        // Load prompt types
+        try {
+          const types = await window.capty.listPromptTypes();
+          setPromptTypes(types as PromptType[]);
+        } catch {
+          // Prompt types not available
         }
 
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
@@ -357,15 +369,18 @@ function App(): React.JSX.Element {
             text: s.text,
           })),
         );
-        // Load summaries for this session
-        const sessionSummaries = await window.capty.listSummaries(sessionId);
+        // Load summaries for this session filtered by active prompt type
+        const sessionSummaries = await window.capty.listSummaries(
+          sessionId,
+          activePromptType,
+        );
         setSummaries(sessionSummaries as Summary[]);
         setGenerateError(null);
       } catch (err) {
         console.error("Failed to load session:", err);
       }
     },
-    [store],
+    [store, activePromptType],
   );
 
   const handleDeleteSession = useCallback(
@@ -720,7 +735,7 @@ function App(): React.JSX.Element {
   );
 
   const handleSummarize = useCallback(
-    async (providerId: string) => {
+    async (providerId: string, promptType: string) => {
       if (!store.currentSessionId || isGeneratingSummary) return;
       setIsGeneratingSummary(true);
       setGenerateError(null);
@@ -728,6 +743,7 @@ function App(): React.JSX.Element {
         const result = await window.capty.summarize(
           store.currentSessionId,
           providerId,
+          promptType,
         );
         setSummaries((prev) => [...prev, result as Summary]);
         // Remember last used provider
@@ -738,8 +754,7 @@ function App(): React.JSX.Element {
           selectedLlmProviderId: providerId,
         });
       } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : "Failed to generate summary";
+        const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
         setGenerateError(msg);
       } finally {
@@ -748,6 +763,33 @@ function App(): React.JSX.Element {
     },
     [store.currentSessionId, isGeneratingSummary],
   );
+
+  const handleChangePromptType = useCallback(
+    async (promptType: string) => {
+      setActivePromptType(promptType);
+      setGenerateError(null);
+      // Reload summaries for new prompt type
+      if (store.currentSessionId) {
+        try {
+          const sessionSummaries = await window.capty.listSummaries(
+            store.currentSessionId,
+            promptType,
+          );
+          setSummaries(sessionSummaries as Summary[]);
+        } catch {
+          setSummaries([]);
+        }
+      }
+    },
+    [store.currentSessionId],
+  );
+
+  const handleSavePromptTypes = useCallback(async (types: PromptType[]) => {
+    await window.capty.savePromptTypes(types);
+    // Reload effective prompt types from backend
+    const effective = await window.capty.listPromptTypes();
+    setPromptTypes(effective as PromptType[]);
+  }, []);
 
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
@@ -818,7 +860,11 @@ function App(): React.JSX.Element {
           hasSegments={store.segments.length > 0}
           llmProviders={llmProviders}
           selectedLlmProviderId={selectedLlmProviderId}
+          promptTypes={promptTypes}
+          activePromptType={activePromptType}
           onSummarize={handleSummarize}
+          onChangePromptType={handleChangePromptType}
+          onSavePromptTypes={handleSavePromptTypes}
         />
       </div>
       {audioPlayer.playingSessionId !== null && (

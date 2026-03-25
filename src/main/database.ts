@@ -18,6 +18,7 @@ export interface AddSummaryOpts {
   readonly content: string;
   readonly modelName: string;
   readonly providerId: string;
+  readonly promptType: string;
 }
 
 export interface UpdateSessionFields {
@@ -62,10 +63,20 @@ function initTables(db: Database.Database): void {
       content TEXT NOT NULL,
       model_name TEXT NOT NULL,
       provider_id TEXT NOT NULL,
+      prompt_type TEXT NOT NULL DEFAULT 'summarize',
       created_at DATETIME DEFAULT (datetime('now')),
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     )
   `);
+
+  // Migrate: add prompt_type column for existing databases
+  try {
+    db.exec(
+      "ALTER TABLE summaries ADD COLUMN prompt_type TEXT NOT NULL DEFAULT 'summarize'",
+    );
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 export function createDatabase(dbPath: string): Database.Database {
@@ -176,18 +187,29 @@ export function addSummary(
   opts: AddSummaryOpts,
 ): number {
   const stmt = db.prepare(
-    "INSERT INTO summaries (session_id, content, model_name, provider_id) VALUES (?, ?, ?, ?)",
+    "INSERT INTO summaries (session_id, content, model_name, provider_id, prompt_type) VALUES (?, ?, ?, ?, ?)",
   );
   const result = stmt.run(
     opts.sessionId,
     opts.content,
     opts.modelName,
     opts.providerId,
+    opts.promptType,
   );
   return result.lastInsertRowid as number;
 }
 
-export function getSummaries(db: Database.Database, sessionId: number): any[] {
+export function getSummaries(
+  db: Database.Database,
+  sessionId: number,
+  promptType?: string,
+): any[] {
+  if (promptType) {
+    const stmt = db.prepare(
+      "SELECT * FROM summaries WHERE session_id = ? AND prompt_type = ? ORDER BY created_at ASC",
+    );
+    return stmt.all(sessionId, promptType);
+  }
   const stmt = db.prepare(
     "SELECT * FROM summaries WHERE session_id = ? ORDER BY created_at ASC",
   );

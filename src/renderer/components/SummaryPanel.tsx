@@ -8,12 +8,20 @@ import React, {
 import { marked } from "marked";
 import type { LlmProvider } from "./SettingsModal";
 
+export interface PromptType {
+  readonly id: string;
+  readonly label: string;
+  readonly systemPrompt: string;
+  readonly isBuiltin: boolean;
+}
+
 export interface Summary {
   readonly id: number;
   readonly session_id: number;
   readonly content: string;
   readonly model_name: string;
   readonly provider_id: string;
+  readonly prompt_type: string;
   readonly created_at: string;
 }
 
@@ -25,7 +33,11 @@ interface SummaryPanelProps {
   readonly hasSegments: boolean;
   readonly llmProviders: readonly LlmProvider[];
   readonly selectedLlmProviderId: string | null;
-  readonly onSummarize: (providerId: string) => void;
+  readonly promptTypes: readonly PromptType[];
+  readonly activePromptType: string;
+  readonly onSummarize: (providerId: string, promptType: string) => void;
+  readonly onChangePromptType: (promptType: string) => void;
+  readonly onSavePromptTypes: (types: PromptType[]) => void;
 }
 
 const MIN_WIDTH = 220;
@@ -56,7 +68,11 @@ export function SummaryPanel({
   hasSegments,
   llmProviders,
   selectedLlmProviderId,
+  promptTypes,
+  activePromptType,
   onSummarize,
+  onChangePromptType,
+  onSavePromptTypes,
 }: SummaryPanelProps): React.ReactElement {
   // Only show configured providers in the dropdown
   const configuredProviders = useMemo(
@@ -73,7 +89,7 @@ export function SummaryPanel({
   );
 
   const hasProvider = configuredProviders.length > 0 && localProviderId !== "";
-  const canSummarize =
+  const canGenerate =
     currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
 
   // Reversed summaries: newest first
@@ -81,6 +97,16 @@ export function SummaryPanel({
     () => [...summaries].reverse(),
     [summaries],
   );
+
+  // Edit modal state
+  const [editingType, setEditingType] = useState<PromptType | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+
+  // Add new tab state
+  const [isAdding, setIsAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newPrompt, setNewPrompt] = useState("");
 
   // Resizable width
   const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
@@ -101,7 +127,6 @@ export function SummaryPanel({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent): void => {
       if (!isDragging.current) return;
-      // Dragging left edge: moving left increases width
       const delta = startX.current - e.clientX;
       const newWidth = Math.min(
         MAX_WIDTH,
@@ -121,6 +146,60 @@ export function SummaryPanel({
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, []);
+
+  const openEdit = useCallback((pt: PromptType) => {
+    setEditingType(pt);
+    setEditLabel(pt.label);
+    setEditPrompt(pt.systemPrompt);
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!editingType) return;
+    const updated = promptTypes.map((pt) =>
+      pt.id === editingType.id
+        ? { ...pt, label: editLabel, systemPrompt: editPrompt }
+        : pt,
+    );
+    onSavePromptTypes(updated as PromptType[]);
+    setEditingType(null);
+  }, [editingType, editLabel, editPrompt, promptTypes, onSavePromptTypes]);
+
+  const handleResetEdit = useCallback(() => {
+    if (!editingType) return;
+    // Remove the override so it falls back to default
+    const filtered = promptTypes.filter((pt) => pt.id !== editingType.id);
+    onSavePromptTypes(filtered as PromptType[]);
+    setEditingType(null);
+  }, [editingType, promptTypes, onSavePromptTypes]);
+
+  const handleDeleteType = useCallback(
+    (typeId: string) => {
+      const filtered = promptTypes.filter((pt) => pt.id !== typeId);
+      onSavePromptTypes(filtered as PromptType[]);
+      if (activePromptType === typeId) {
+        onChangePromptType("summarize");
+      }
+    },
+    [promptTypes, onSavePromptTypes, activePromptType, onChangePromptType],
+  );
+
+  const handleAddNew = useCallback(() => {
+    if (!newLabel.trim() || !newPrompt.trim()) return;
+    const id = `custom-${Date.now()}`;
+    const newType: PromptType = {
+      id,
+      label: newLabel.trim(),
+      systemPrompt: newPrompt.trim(),
+      isBuiltin: false,
+    };
+    onSavePromptTypes([...promptTypes, newType] as PromptType[]);
+    setIsAdding(false);
+    setNewLabel("");
+    setNewPrompt("");
+    onChangePromptType(id);
+  }, [newLabel, newPrompt, promptTypes, onSavePromptTypes, onChangePromptType]);
+
+  const activeType = promptTypes.find((pt) => pt.id === activePromptType);
 
   return (
     <div
@@ -148,10 +227,91 @@ export function SummaryPanel({
           borderLeft: "1px solid var(--border)",
         }}
       />
-      {/* Header */}
+
+      {/* Tab bar */}
       <div
         style={{
-          padding: "12px 16px",
+          display: "flex",
+          alignItems: "center",
+          borderBottom: "1px solid var(--border)",
+          overflowX: "auto",
+          flexShrink: 0,
+        }}
+      >
+        {promptTypes.map((pt) => (
+          <div
+            key={pt.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "2px",
+              flexShrink: 0,
+            }}
+          >
+            <button
+              onClick={() => onChangePromptType(pt.id)}
+              style={{
+                padding: "8px 12px",
+                fontSize: "12px",
+                fontWeight: activePromptType === pt.id ? 600 : 400,
+                color:
+                  activePromptType === pt.id
+                    ? "var(--accent)"
+                    : "var(--text-muted)",
+                backgroundColor: "transparent",
+                border: "none",
+                borderBottom:
+                  activePromptType === pt.id
+                    ? "2px solid var(--accent)"
+                    : "2px solid transparent",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {pt.label}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openEdit(pt);
+              }}
+              title="Edit prompt"
+              style={{
+                padding: "2px 4px",
+                fontSize: "10px",
+                color: "var(--text-muted)",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+                opacity: 0.6,
+                flexShrink: 0,
+              }}
+            >
+              ✎
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => setIsAdding(true)}
+          title="Add custom tab"
+          style={{
+            padding: "8px 10px",
+            fontSize: "14px",
+            color: "var(--text-muted)",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          +
+        </button>
+      </div>
+
+      {/* Header: provider + generate button */}
+      <div
+        style={{
+          padding: "8px 16px",
           borderBottom: "1px solid var(--border)",
         }}
       >
@@ -162,32 +322,50 @@ export function SummaryPanel({
             alignItems: "center",
           }}
         >
-          <span
-            style={{
-              fontSize: "14px",
-              fontWeight: 600,
-              color: "var(--text-primary)",
-            }}
-          >
-            Summary
-          </span>
+          {configuredProviders.length > 0 && (
+            <select
+              value={localProviderId}
+              onChange={(e) => setLocalProviderId(e.target.value)}
+              disabled={isGenerating}
+              style={{
+                flex: 1,
+                padding: "4px 8px",
+                fontSize: "11px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                cursor: isGenerating ? "not-allowed" : "pointer",
+                outline: "none",
+                marginRight: "8px",
+              }}
+            >
+              {configuredProviders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.model})
+                </option>
+              ))}
+            </select>
+          )}
           <button
-            onClick={() => onSummarize(localProviderId)}
-            disabled={!canSummarize}
+            onClick={() => onSummarize(localProviderId, activePromptType)}
+            disabled={!canGenerate}
             style={{
               padding: "5px 12px",
               fontSize: "11px",
               borderRadius: "5px",
               border: "none",
-              backgroundColor: canSummarize
+              backgroundColor: canGenerate
                 ? "var(--accent)"
                 : "var(--bg-tertiary)",
-              color: canSummarize ? "white" : "var(--text-muted)",
-              cursor: canSummarize ? "pointer" : "not-allowed",
-              opacity: canSummarize ? 1 : 0.6,
+              color: canGenerate ? "white" : "var(--text-muted)",
+              cursor: canGenerate ? "pointer" : "not-allowed",
+              opacity: canGenerate ? 1 : 0.6,
               display: "flex",
               alignItems: "center",
               gap: "6px",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
             {isGenerating && (
@@ -203,35 +381,9 @@ export function SummaryPanel({
                 }}
               />
             )}
-            {isGenerating ? "Generating..." : "Summarize"}
+            {isGenerating ? "Generating..." : "Generate"}
           </button>
         </div>
-        {configuredProviders.length > 0 && (
-          <div style={{ marginTop: "8px" }}>
-            <select
-              value={localProviderId}
-              onChange={(e) => setLocalProviderId(e.target.value)}
-              disabled={isGenerating}
-              style={{
-                width: "100%",
-                padding: "4px 8px",
-                fontSize: "11px",
-                borderRadius: "4px",
-                border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                cursor: isGenerating ? "not-allowed" : "pointer",
-                outline: "none",
-              }}
-            >
-              {configuredProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.model})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -270,7 +422,7 @@ export function SummaryPanel({
               padding: "24px 0",
             }}
           >
-            Select a session to view summaries
+            Select a session to view results
           </div>
         )}
 
@@ -300,7 +452,8 @@ export function SummaryPanel({
                 padding: "24px 0",
               }}
             >
-              Click Summarize to generate a summary
+              Click Generate to create{" "}
+              {activeType?.label?.toLowerCase() ?? "content"}
             </div>
           )}
 
@@ -315,6 +468,265 @@ export function SummaryPanel({
           />
         ))}
       </div>
+
+      {/* Edit prompt modal */}
+      {editingType && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg-primary)",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              padding: "16px",
+              width: "100%",
+              maxHeight: "90%",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              overflow: "auto",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+              }}
+            >
+              Edit: {editingType.label}
+            </div>
+            <input
+              value={editLabel}
+              onChange={(e) => setEditLabel(e.target.value)}
+              placeholder="Tab label"
+              style={{
+                padding: "6px 8px",
+                fontSize: "12px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
+            <textarea
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+              placeholder="System prompt"
+              rows={6}
+              style={{
+                padding: "6px 8px",
+                fontSize: "12px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                outline: "none",
+                resize: "vertical",
+                fontFamily: "inherit",
+              }}
+            />
+            <div
+              style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
+            >
+              {editingType.isBuiltin && (
+                <button
+                  onClick={handleResetEdit}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "var(--bg-tertiary)",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    marginRight: "auto",
+                  }}
+                >
+                  Reset Default
+                </button>
+              )}
+              {!editingType.isBuiltin && (
+                <button
+                  onClick={() => {
+                    handleDeleteType(editingType.id);
+                    setEditingType(null);
+                  }}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    backgroundColor: "rgba(239,68,68,0.1)",
+                    color: "#ef4444",
+                    cursor: "pointer",
+                    marginRight: "auto",
+                  }}
+                >
+                  Delete
+                </button>
+              )}
+              <button
+                onClick={() => setEditingType(null)}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={!editLabel.trim() || !editPrompt.trim()}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  borderRadius: "4px",
+                  border: "none",
+                  backgroundColor: "var(--accent)",
+                  color: "white",
+                  cursor:
+                    editLabel.trim() && editPrompt.trim()
+                      ? "pointer"
+                      : "not-allowed",
+                  opacity: editLabel.trim() && editPrompt.trim() ? 1 : 0.6,
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add new tab modal */}
+      {isAdding && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg-primary)",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              padding: "16px",
+              width: "100%",
+              maxHeight: "90%",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              overflow: "auto",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+              }}
+            >
+              New Tab
+            </div>
+            <input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="Tab name (e.g. Action Items)"
+              style={{
+                padding: "6px 8px",
+                fontSize: "12px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
+            <textarea
+              value={newPrompt}
+              onChange={(e) => setNewPrompt(e.target.value)}
+              placeholder="System prompt for this tab..."
+              rows={6}
+              style={{
+                padding: "6px 8px",
+                fontSize: "12px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                outline: "none",
+                resize: "vertical",
+                fontFamily: "inherit",
+              }}
+            />
+            <div
+              style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
+            >
+              <button
+                onClick={() => {
+                  setIsAdding(false);
+                  setNewLabel("");
+                  setNewPrompt("");
+                }}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddNew}
+                disabled={!newLabel.trim() || !newPrompt.trim()}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  borderRadius: "4px",
+                  border: "none",
+                  backgroundColor: "var(--accent)",
+                  color: "white",
+                  cursor:
+                    newLabel.trim() && newPrompt.trim()
+                      ? "pointer"
+                      : "not-allowed",
+                  opacity: newLabel.trim() && newPrompt.trim() ? 1 : 0.6,
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inline CSS for spinner animation + markdown styles */}
       <style>{`

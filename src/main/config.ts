@@ -17,6 +17,37 @@ export interface LlmProvider {
   readonly isPreset: boolean;
 }
 
+export interface PromptType {
+  readonly id: string;
+  readonly label: string;
+  readonly systemPrompt: string;
+  readonly isBuiltin: boolean;
+}
+
+export const DEFAULT_PROMPT_TYPES: readonly PromptType[] = [
+  {
+    id: "summarize",
+    label: "Summary",
+    systemPrompt:
+      "You are a voice transcript summarization assistant. Please summarize the following voice transcript, extract key points, and generate a structured summary. Respond in the same language as the transcript.",
+    isBuiltin: true,
+  },
+  {
+    id: "questions",
+    label: "Questions",
+    systemPrompt:
+      "You are an analytical assistant. Based on the following voice transcript, generate insightful follow-up questions that could deepen understanding, challenge assumptions, or explore related topics. Respond in the same language as the transcript.",
+    isBuiltin: true,
+  },
+  {
+    id: "context",
+    label: "Context",
+    systemPrompt:
+      "You are a context analysis assistant. Based on the following voice transcript, infer and explain the background knowledge, context, and assumptions needed to fully understand this conversation. Identify domain-specific terms, implicit references, and prerequisite knowledge. Respond in the same language as the transcript.",
+    isBuiltin: true,
+  },
+];
+
 export interface AppConfig {
   readonly dataDir: string | null;
   readonly selectedAudioDeviceId: string | null;
@@ -26,6 +57,25 @@ export interface AppConfig {
   readonly windowBounds: WindowBounds | null;
   readonly llmProviders: LlmProvider[];
   readonly selectedLlmProviderId: string | null;
+  readonly promptTypes: PromptType[];
+}
+
+export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
+  const userTypes = config.promptTypes;
+  const userIds = new Set(userTypes.map((t) => t.id));
+
+  const result: PromptType[] = DEFAULT_PROMPT_TYPES.map((builtin) => {
+    const override = userTypes.find((u) => u.id === builtin.id);
+    return override ? { ...override, isBuiltin: true } : { ...builtin };
+  });
+
+  for (const ut of userTypes) {
+    if (!DEFAULT_PROMPT_TYPES.some((b) => b.id === ut.id)) {
+      result.push({ ...ut, isBuiltin: false });
+    }
+  }
+
+  return result;
 }
 
 const CONFIG_FILENAME = "config.json";
@@ -39,6 +89,7 @@ const DEFAULT_CONFIG: AppConfig = {
   windowBounds: null,
   llmProviders: [],
   selectedLlmProviderId: null,
+  promptTypes: [],
 };
 
 export function readConfig(configDir: string): AppConfig {
