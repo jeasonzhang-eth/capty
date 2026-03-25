@@ -92,6 +92,18 @@ export function SummaryPanel({
         : configuredProviders[0]?.id) ?? "",
   );
 
+  // Sync localProviderId when providers load asynchronously
+  useEffect(() => {
+    if (configuredProviders.length > 0 && localProviderId === "") {
+      const id =
+        selectedLlmProviderId &&
+        configuredProviders.some((p) => p.id === selectedLlmProviderId)
+          ? selectedLlmProviderId
+          : configuredProviders[0]?.id;
+      if (id) setLocalProviderId(id);
+    }
+  }, [configuredProviders, selectedLlmProviderId, localProviderId]);
+
   const hasProvider = configuredProviders.length > 0 && localProviderId !== "";
   const canGenerate =
     currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
