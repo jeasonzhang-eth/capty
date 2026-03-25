@@ -8,7 +8,12 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **会话管理** — 每次录音自动创建会话，历史列表展示所有会话，支持右键删除（含确认弹窗，同时清理音频文件）
 - **重新生成字幕** — 对已完成的会话右键选择重新转录，从保存的音频文件重新生成字幕（含进度条），解决 sidecar 故障导致的字幕缺失
 - **音频播放** — 历史会话支持一键播放，底部播放器提供暂停/恢复/进度拖拽/时间显示
-- **LLM 摘要** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），一键生成转写内容的结构化摘要，支持 Markdown 渲染；SummaryPanel 可选择 provider、拖拽调整宽度
+- **LLM 多维分析** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），SummaryPanel 支持多 Tab 切换不同分析维度：
+  - 内置 3 种类型：Summary（结构化摘要）、Questions（深入追问）、Context（背景推测）
+  - 每个 Tab 的生成结果独立存储和展示，支持 Markdown 渲染
+  - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
+  - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
+  - SummaryPanel 可选择 provider、拖拽调整宽度
 - **设置页面** — 三个 Tab：General（数据目录、配置目录）、Speech Models（模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
@@ -148,6 +153,7 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `windowBounds` | `{x, y, width, height} \| null` | 窗口位置和大小，移动/缩放后自动保存，重启时恢复 |
 | `llmProviders` | `LlmProvider[]` | 已配置的 LLM provider 列表（含 id / name / baseUrl / apiKey / model） |
 | `selectedLlmProviderId` | `string \| null` | 上次使用的 LLM provider ID，SummaryPanel 默认选中 |
+| `promptTypes` | `PromptType[]` | 用户自定义/编辑的 prompt 类型列表，与内置默认合并后使用；每条含 id / label / systemPrompt / isBuiltin |
 
 #### user-models.json
 
@@ -267,6 +273,16 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-25 (2)
+
+- SummaryPanel 重构为多 Tab 系统
+  - 内置 3 个分析维度：Summary（结构化摘要）、Questions（深入追问）、Context（背景推测）
+  - Tab 栏横向排列，点击切换，每个 Tab 独立存储和展示生成结果
+  - 点击 Tab 旁编辑按钮可修改提示词，内置类型支持 Reset 恢复默认
+  - "+" 按钮可添加自定义 Tab（自定义名称 + 提示词），可编辑可删除
+  - 自定义 Tab 和编辑后的提示词持久化到 config.json，重启后保留
+  - 数据库 summaries 表新增 `prompt_type` 列，兼容旧数据（默认归入 Summary）
 
 ### 2026-03-25
 
