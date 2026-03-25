@@ -479,10 +479,17 @@ function App(): React.JSX.Element {
         const totalBytes = pcmData.length;
         const bytesPerSecond = 32000; // 16kHz * 16bit * mono = 32000 bytes/sec
         const chunkSize = bytesPerSecond; // send 1 second per chunk
-        const segmentInterval = bytesPerSecond * 10; // send segment_end every ~10s
+        const segmentInterval = bytesPerSecond * 15; // send segment_end every ~15s
         let segmentStartByte = 0; // track start of current segment
         let pendingFinals = 0; // how many segment_ends sent but no final received yet
         let allSent = false;
+
+        // Calculate total expected finals for accurate progress tracking
+        const totalExpectedFinals = Math.max(
+          1,
+          Math.ceil(totalBytes / segmentInterval),
+        );
+        let receivedFinals = 0;
 
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
@@ -528,7 +535,6 @@ function App(): React.JSX.Element {
                     ws.send(JSON.stringify({ type: "segment_end" }));
                   }
                   allSent = true;
-                  setRegenerationProgress(90);
                   // If no pending finals (empty remaining), close now
                   if (pendingFinals === 0) {
                     setRegenerationProgress(100);
@@ -544,15 +550,15 @@ function App(): React.JSX.Element {
                 bytesSinceLastSegment += end - offset;
                 offset = end;
 
-                // Send segment_end every ~10 seconds of audio
+                // Send segment_end every ~15 seconds of audio
                 if (bytesSinceLastSegment >= segmentInterval) {
                   pendingFinals++;
                   ws.send(JSON.stringify({ type: "segment_end" }));
                   bytesSinceLastSegment = 0;
                 }
 
-                // Progress: 0-90% for sending audio
-                setRegenerationProgress(Math.round((offset / totalBytes) * 90));
+                // Progress: 0-30% for sending audio (this phase is fast)
+                setRegenerationProgress(Math.round((offset / totalBytes) * 30));
               }, 100); // ~10x real-time speed
             } else if (msg.type === "partial") {
               if (store.currentSessionId === sessionId) {
@@ -560,6 +566,7 @@ function App(): React.JSX.Element {
               }
             } else if (msg.type === "final") {
               pendingFinals = Math.max(0, pendingFinals - 1);
+              receivedFinals++;
 
               if (store.currentSessionId === sessionId) {
                 store.setPartialText("");
@@ -595,6 +602,11 @@ function App(): React.JSX.Element {
                     }
                   });
               }
+
+              // Progress: 30-100% for transcription results
+              setRegenerationProgress(
+                30 + Math.round((receivedFinals / totalExpectedFinals) * 70),
+              );
 
               // Close connection when all audio sent and all finals received
               if (allSent && pendingFinals === 0) {

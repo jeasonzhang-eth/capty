@@ -15,6 +15,12 @@ from capty_sidecar.model_runner import ModelRunner
 
 logger = logging.getLogger(__name__)
 
+# Audio constants
+SAMPLE_RATE = 16000
+BYTES_PER_SECOND = SAMPLE_RATE * 2  # 16-bit PCM = 2 bytes/sample
+MAX_CHUNK_SECONDS = 30  # Max audio duration per transcription call
+MAX_CHUNK_BYTES = MAX_CHUNK_SECONDS * BYTES_PER_SECOND
+
 
 # ---------------------------------------------------------------------------
 # Request / response schemas
@@ -185,11 +191,40 @@ def create_app(models_dir: str) -> FastAPI:
                         audio_buffer.clear()
                         segment_counter += 1
 
+                        # Split long audio into manageable chunks (max 30s each)
+                        # Prevents excessive memory/time for long segments and
+                        # respects Whisper's 30-second input limit.
+                        chunks: list[bytes] = []
+                        if len(pcm_data) > MAX_CHUNK_BYTES:
+                            offset = 0
+                            while offset < len(pcm_data):
+                                end = min(offset + MAX_CHUNK_BYTES, len(pcm_data))
+                                chunks.append(pcm_data[offset:end])
+                                offset = end
+                            logger.info(
+                                "Split %d bytes into %d chunks for transcription",
+                                len(pcm_data),
+                                len(chunks),
+                            )
+                        else:
+                            chunks.append(pcm_data)
+
                         try:
-                            async for result in runner.transcribe_stream(pcm_data):
-                                if result.get("type") == "final":
-                                    result = {**result, "segment_id": segment_counter}
-                                await ws.send_json(result)
+                            all_texts: list[str] = []
+                            for chunk in chunks:
+                                async for result in runner.transcribe_stream(chunk):
+                                    if result.get("type") == "partial":
+                                        await ws.send_json(result)
+                                    elif result.get("type") == "final":
+                                        text = result.get("text", "")
+                                        if text:
+                                            all_texts.append(text)
+                            combined = " ".join(all_texts)
+                            await ws.send_json({
+                                "type": "final",
+                                "text": combined,
+                                "segment_id": segment_counter,
+                            })
                         except Exception as exc:
                             logger.exception("Transcription error")
                             await ws.send_json({
