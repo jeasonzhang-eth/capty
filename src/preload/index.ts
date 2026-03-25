@@ -103,8 +103,8 @@ const api = {
       success: boolean;
       model: string;
     }>,
-  summarize: (sessionId: number) =>
-    ipcRenderer.invoke("llm:summarize", sessionId),
+  summarize: (sessionId: number, providerId: string) =>
+    ipcRenderer.invoke("llm:summarize", sessionId, providerId),
   listSummaries: (sessionId: number) =>
     ipcRenderer.invoke("summary:list", sessionId),
   deleteSummary: (summaryId: number) =>

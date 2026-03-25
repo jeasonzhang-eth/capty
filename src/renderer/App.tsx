@@ -708,35 +708,46 @@ function App(): React.JSX.Element {
   }, []);
 
   const handleSaveLlmProviders = useCallback(
-    async (providers: LlmProvider[], selectedId: string | null) => {
+    async (providers: LlmProvider[]) => {
       setLlmProviders(providers);
-      setSelectedLlmProviderId(selectedId);
       const config = await window.capty.getConfig();
       await window.capty.setConfig({
         ...config,
         llmProviders: providers,
-        selectedLlmProviderId: selectedId,
       });
     },
     [],
   );
 
-  const handleSummarize = useCallback(async () => {
-    if (!store.currentSessionId || isGeneratingSummary) return;
-    setIsGeneratingSummary(true);
-    setGenerateError(null);
-    try {
-      const result = await window.capty.summarize(store.currentSessionId);
-      setSummaries((prev) => [...prev, result as Summary]);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to generate summary";
-      console.error("Summarize error:", err);
-      setGenerateError(msg);
-    } finally {
-      setIsGeneratingSummary(false);
-    }
-  }, [store.currentSessionId, isGeneratingSummary]);
+  const handleSummarize = useCallback(
+    async (providerId: string) => {
+      if (!store.currentSessionId || isGeneratingSummary) return;
+      setIsGeneratingSummary(true);
+      setGenerateError(null);
+      try {
+        const result = await window.capty.summarize(
+          store.currentSessionId,
+          providerId,
+        );
+        setSummaries((prev) => [...prev, result as Summary]);
+        // Remember last used provider
+        setSelectedLlmProviderId(providerId);
+        const config = await window.capty.getConfig();
+        await window.capty.setConfig({
+          ...config,
+          selectedLlmProviderId: providerId,
+        });
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Failed to generate summary";
+        console.error("Summarize error:", err);
+        setGenerateError(msg);
+      } finally {
+        setIsGeneratingSummary(false);
+      }
+    },
+    [store.currentSessionId, isGeneratingSummary],
+  );
 
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
@@ -805,12 +816,8 @@ function App(): React.JSX.Element {
           generateError={generateError}
           currentSessionId={store.currentSessionId}
           hasSegments={store.segments.length > 0}
-          hasLlmProvider={
-            selectedLlmProviderId !== null &&
-            llmProviders.some(
-              (p) => p.id === selectedLlmProviderId && p.apiKey && p.model,
-            )
-          }
+          llmProviders={llmProviders}
+          selectedLlmProviderId={selectedLlmProviderId}
           onSummarize={handleSummarize}
         />
       </div>
@@ -854,7 +861,6 @@ function App(): React.JSX.Element {
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
           llmProviders={llmProviders}
-          selectedLlmProviderId={selectedLlmProviderId}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSelectModel}
           onDownloadModel={handleSettingsDownloadModel}

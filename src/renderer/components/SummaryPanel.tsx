@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { marked } from "marked";
+import type { LlmProvider } from "./SettingsModal";
 
 export interface Summary {
   readonly id: number;
@@ -16,8 +17,9 @@ interface SummaryPanelProps {
   readonly generateError: string | null;
   readonly currentSessionId: number | null;
   readonly hasSegments: boolean;
-  readonly hasLlmProvider: boolean;
-  readonly onSummarize: () => void;
+  readonly llmProviders: readonly LlmProvider[];
+  readonly selectedLlmProviderId: string | null;
+  readonly onSummarize: (providerId: string) => void;
 }
 
 // Configure marked for safe rendering
@@ -42,11 +44,27 @@ export function SummaryPanel({
   generateError,
   currentSessionId,
   hasSegments,
-  hasLlmProvider,
+  llmProviders,
+  selectedLlmProviderId,
   onSummarize,
 }: SummaryPanelProps): React.ReactElement {
+  // Only show configured providers in the dropdown
+  const configuredProviders = useMemo(
+    () => llmProviders.filter((p) => p.apiKey && p.model),
+    [llmProviders],
+  );
+
+  const [localProviderId, setLocalProviderId] = useState<string>(
+    () =>
+      (selectedLlmProviderId &&
+      configuredProviders.some((p) => p.id === selectedLlmProviderId)
+        ? selectedLlmProviderId
+        : configuredProviders[0]?.id) ?? "",
+  );
+
+  const hasProvider = configuredProviders.length > 0 && localProviderId !== "";
   const canSummarize =
-    currentSessionId !== null && hasSegments && hasLlmProvider && !isGenerating;
+    currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
 
   return (
     <div
@@ -62,56 +80,87 @@ export function SummaryPanel({
       {/* Header */}
       <div
         style={{
-          padding: "16px",
+          padding: "12px 16px",
           borderBottom: "1px solid var(--border)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
-        <span
+        <div
           style={{
-            fontSize: "14px",
-            fontWeight: 600,
-            color: "var(--text-primary)",
-          }}
-        >
-          Summary
-        </span>
-        <button
-          onClick={onSummarize}
-          disabled={!canSummarize}
-          style={{
-            padding: "5px 12px",
-            fontSize: "11px",
-            borderRadius: "5px",
-            border: "none",
-            backgroundColor: canSummarize
-              ? "var(--accent)"
-              : "var(--bg-tertiary)",
-            color: canSummarize ? "white" : "var(--text-muted)",
-            cursor: canSummarize ? "pointer" : "not-allowed",
-            opacity: canSummarize ? 1 : 0.6,
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: "6px",
           }}
         >
-          {isGenerating && (
-            <span
+          <span
+            style={{
+              fontSize: "14px",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+            }}
+          >
+            Summary
+          </span>
+          <button
+            onClick={() => onSummarize(localProviderId)}
+            disabled={!canSummarize}
+            style={{
+              padding: "5px 12px",
+              fontSize: "11px",
+              borderRadius: "5px",
+              border: "none",
+              backgroundColor: canSummarize
+                ? "var(--accent)"
+                : "var(--bg-tertiary)",
+              color: canSummarize ? "white" : "var(--text-muted)",
+              cursor: canSummarize ? "pointer" : "not-allowed",
+              opacity: canSummarize ? 1 : 0.6,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            {isGenerating && (
+              <span
+                style={{
+                  display: "inline-block",
+                  width: "12px",
+                  height: "12px",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "white",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+            )}
+            {isGenerating ? "Generating..." : "Summarize"}
+          </button>
+        </div>
+        {configuredProviders.length > 0 && (
+          <div style={{ marginTop: "8px" }}>
+            <select
+              value={localProviderId}
+              onChange={(e) => setLocalProviderId(e.target.value)}
+              disabled={isGenerating}
               style={{
-                display: "inline-block",
-                width: "12px",
-                height: "12px",
-                border: "2px solid rgba(255,255,255,0.3)",
-                borderTopColor: "white",
-                borderRadius: "50%",
-                animation: "spin 0.8s linear infinite",
+                width: "100%",
+                padding: "4px 8px",
+                fontSize: "11px",
+                borderRadius: "4px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                cursor: isGenerating ? "not-allowed" : "pointer",
+                outline: "none",
               }}
-            />
-          )}
-          {isGenerating ? "Generating..." : "Summarize"}
-        </button>
+            >
+              {configuredProviders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.model})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -154,7 +203,7 @@ export function SummaryPanel({
           </div>
         )}
 
-        {currentSessionId !== null && !hasLlmProvider && (
+        {currentSessionId !== null && !hasProvider && (
           <div
             style={{
               textAlign: "center",
@@ -169,7 +218,7 @@ export function SummaryPanel({
         )}
 
         {currentSessionId !== null &&
-          hasLlmProvider &&
+          hasProvider &&
           summaries.length === 0 &&
           !isGenerating && (
             <div

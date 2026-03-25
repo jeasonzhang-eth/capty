@@ -68,7 +68,10 @@ declare global {
         apiKey: string;
         model: string;
       }) => Promise<{ success: boolean; model: string }>;
-      summarize: (sessionId: number) => Promise<{
+      summarize: (
+        sessionId: number,
+        providerId: string,
+      ) => Promise<{
         id: number;
         session_id: number;
         content: string;

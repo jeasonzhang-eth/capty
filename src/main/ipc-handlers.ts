@@ -564,97 +564,99 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   });
 
   // LLM Summarization
-  ipcMain.handle("llm:summarize", async (_event, sessionId: number) => {
-    const config = readConfig(configDir);
-    const providerId = config.selectedLlmProviderId;
-    if (!providerId) {
-      throw new Error("No LLM provider selected");
-    }
-    const provider = config.llmProviders.find(
-      (p: LlmProvider) => p.id === providerId,
-    );
-    if (!provider) {
-      throw new Error("Selected LLM provider not found");
-    }
-    if (!provider.apiKey) {
-      throw new Error("API key not configured for selected provider");
-    }
-
-    // Gather all segments for this session
-    const segments = getSegments(db, sessionId);
-    if (segments.length === 0) {
-      throw new Error("No transcript segments found for this session");
-    }
-
-    const transcriptText = segments.map((s: any) => s.text).join("\n");
-
-    // Call OpenAI-compatible API
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-
-    try {
-      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${provider.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: provider.model,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a voice transcript summarization assistant. Please summarize the following voice transcript, extract key points, and generate a structured summary. Respond in the same language as the transcript.",
-            },
-            {
-              role: "user",
-              content: transcriptText,
-            },
-          ],
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`LLM API error (${resp.status}): ${body}`);
+  ipcMain.handle(
+    "llm:summarize",
+    async (_event, sessionId: number, providerId: string) => {
+      const config = readConfig(configDir);
+      if (!providerId) {
+        throw new Error("No LLM provider selected");
+      }
+      const provider = config.llmProviders.find(
+        (p: LlmProvider) => p.id === providerId,
+      );
+      if (!provider) {
+        throw new Error("Selected LLM provider not found");
+      }
+      if (!provider.apiKey) {
+        throw new Error("API key not configured for selected provider");
       }
 
-      const data = (await resp.json()) as {
-        choices: { message: { content: string } }[];
-      };
-      const content = data.choices?.[0]?.message?.content ?? "";
-
-      if (!content) {
-        throw new Error("LLM returned empty response");
+      // Gather all segments for this session
+      const segments = getSegments(db, sessionId);
+      if (segments.length === 0) {
+        throw new Error("No transcript segments found for this session");
       }
 
-      // Save to database
-      const summaryId = addSummary(db, {
-        sessionId,
-        content,
-        modelName: provider.model,
-        providerId: provider.id,
-      });
+      const transcriptText = segments.map((s: any) => s.text).join("\n");
 
-      // Return the new summary record
-      return {
-        id: summaryId,
-        session_id: sessionId,
-        content,
-        model_name: provider.model,
-        provider_id: provider.id,
-        created_at: new Date().toISOString(),
-      };
-    } catch (err) {
-      clearTimeout(timeout);
-      throw err;
-    }
-  });
+      // Call OpenAI-compatible API
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+
+      try {
+        const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+        const resp = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${provider.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: provider.model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a voice transcript summarization assistant. Please summarize the following voice transcript, extract key points, and generate a structured summary. Respond in the same language as the transcript.",
+              },
+              {
+                role: "user",
+                content: transcriptText,
+              },
+            ],
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!resp.ok) {
+          const body = await resp.text();
+          throw new Error(`LLM API error (${resp.status}): ${body}`);
+        }
+
+        const data = (await resp.json()) as {
+          choices: { message: { content: string } }[];
+        };
+        const content = data.choices?.[0]?.message?.content ?? "";
+
+        if (!content) {
+          throw new Error("LLM returned empty response");
+        }
+
+        // Save to database
+        const summaryId = addSummary(db, {
+          sessionId,
+          content,
+          modelName: provider.model,
+          providerId: provider.id,
+        });
+
+        // Return the new summary record
+        return {
+          id: summaryId,
+          session_id: sessionId,
+          content,
+          model_name: provider.model,
+          provider_id: provider.id,
+          created_at: new Date().toISOString(),
+        };
+      } catch (err) {
+        clearTimeout(timeout);
+        throw err;
+      }
+    },
+  );
 
   // LLM Provider Test
   ipcMain.handle(

@@ -33,17 +33,13 @@ interface SettingsModalProps {
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
   readonly llmProviders: readonly LlmProvider[];
-  readonly selectedLlmProviderId: string | null;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
-  readonly onSaveLlmProviders: (
-    providers: LlmProvider[],
-    selectedId: string | null,
-  ) => void;
+  readonly onSaveLlmProviders: (providers: LlmProvider[]) => void;
   readonly onClose: () => void;
 }
 
@@ -928,20 +924,12 @@ const PRESET_PROVIDERS: readonly {
 
 function LanguageModelsTab({
   llmProviders,
-  selectedLlmProviderId,
   onSave,
 }: {
   readonly llmProviders: readonly LlmProvider[];
-  readonly selectedLlmProviderId: string | null;
-  readonly onSave: (
-    providers: LlmProvider[],
-    selectedId: string | null,
-  ) => void;
+  readonly onSave: (providers: LlmProvider[]) => void;
 }): React.ReactElement {
   const [providers, setProviders] = useState<LlmProvider[]>([...llmProviders]);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    selectedLlmProviderId,
-  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -955,10 +943,9 @@ function LanguageModelsTab({
   >({});
 
   const save = useCallback(
-    (next: LlmProvider[], nextSelectedId: string | null) => {
+    (next: LlmProvider[]) => {
       setProviders(next);
-      setSelectedId(nextSelectedId);
-      onSave(next, nextSelectedId);
+      onSave(next);
     },
     [onSave],
   );
@@ -977,7 +964,7 @@ function LanguageModelsTab({
         isPreset: true,
       };
       const next = [...providers, newProvider];
-      save(next, selectedId);
+      save(next);
       // Open edit form for the new provider
       setEditingId(newProvider.id);
       setEditForm({
@@ -987,7 +974,7 @@ function LanguageModelsTab({
         model: "",
       });
     },
-    [providers, selectedId, save],
+    [providers, save],
   );
 
   const handleAddCustom = useCallback(() => {
@@ -1001,7 +988,7 @@ function LanguageModelsTab({
       isPreset: false,
     };
     const next = [...providers, newProvider];
-    save(next, selectedId);
+    save(next);
     setEditingId(id);
     setEditForm({
       name: "Custom Provider",
@@ -1009,7 +996,7 @@ function LanguageModelsTab({
       apiKey: "",
       model: "",
     });
-  }, [providers, selectedId, save]);
+  }, [providers, save]);
 
   const handleEdit = useCallback(
     (provider: LlmProvider) => {
@@ -1041,25 +1028,17 @@ function LanguageModelsTab({
           }
         : p,
     );
-    save(next, selectedId);
+    save(next);
     setEditingId(null);
-  }, [editingId, editForm, providers, selectedId, save]);
+  }, [editingId, editForm, providers, save]);
 
   const handleDelete = useCallback(
     (providerId: string) => {
       const next = providers.filter((p) => p.id !== providerId);
-      const nextSelected = selectedId === providerId ? null : selectedId;
-      save(next, nextSelected);
+      save(next);
       if (editingId === providerId) setEditingId(null);
     },
-    [providers, selectedId, editingId, save],
-  );
-
-  const handleUse = useCallback(
-    (providerId: string) => {
-      save([...providers], providerId);
-    },
-    [providers, save],
+    [providers, editingId, save],
   );
 
   const handleTest = useCallback(async (provider: LlmProvider) => {
@@ -1169,7 +1148,6 @@ function LanguageModelsTab({
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {providers.map((provider) => {
-          const isActive = selectedId === provider.id;
           const isConfigured = Boolean(provider.apiKey && provider.model);
           const isEditing = editingId === provider.id;
 
@@ -1178,12 +1156,8 @@ function LanguageModelsTab({
               key={provider.id}
               style={{
                 padding: "12px",
-                backgroundColor: isActive
-                  ? "var(--bg-tertiary)"
-                  : "transparent",
-                border: isActive
-                  ? "1px solid var(--accent)"
-                  : "1px solid var(--border)",
+                backgroundColor: "transparent",
+                border: "1px solid var(--border)",
                 borderRadius: "8px",
                 transition: "border-color 0.2s",
               }}
@@ -1256,36 +1230,6 @@ function LanguageModelsTab({
                     alignItems: "center",
                   }}
                 >
-                  {isConfigured && !isActive && (
-                    <button
-                      onClick={() => handleUse(provider.id)}
-                      style={{
-                        padding: "5px 12px",
-                        fontSize: "11px",
-                        borderRadius: "5px",
-                        border: "1px solid var(--accent)",
-                        backgroundColor: "transparent",
-                        color: "var(--accent)",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Use
-                    </button>
-                  )}
-                  {isActive && (
-                    <span
-                      style={{
-                        padding: "5px 12px",
-                        fontSize: "11px",
-                        color: "var(--accent)",
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Active
-                    </span>
-                  )}
                   {isConfigured && (
                     <button
                       onClick={() => handleTest(provider)}
@@ -1529,7 +1473,6 @@ export function SettingsModal({
   hfMirrorUrl,
   defaultHfUrl,
   llmProviders,
-  selectedLlmProviderId,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
@@ -1675,7 +1618,6 @@ export function SettingsModal({
           {activeTab === "language-models" && (
             <LanguageModelsTab
               llmProviders={llmProviders}
-              selectedLlmProviderId={selectedLlmProviderId}
               onSave={onSaveLlmProviders}
             />
           )}
