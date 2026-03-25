@@ -130,6 +130,14 @@ export function SummaryPanel({
   const startX = useRef(0);
   const startWidth = useRef(initialWidth);
 
+  // Sync when initialWidth changes from async config load
+  useEffect(() => {
+    if (!isDragging.current) {
+      setPanelWidth(initialWidth);
+      startWidth.current = initialWidth;
+    }
+  }, [initialWidth]);
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true;
