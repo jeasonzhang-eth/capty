@@ -79,11 +79,15 @@ def create_app(models_dir: str) -> FastAPI:
         # Unload current model (if any) and load the new one
         runner.unload()
         try:
-            runner.load(
-                body.model,
-                models_dir=Path(models_dir),
-                model_type=model_info.get("type", "qwen-asr"),
-                mlx_repo=model_info.get("mlx_repo"),
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: runner.load(
+                    body.model,
+                    models_dir=Path(models_dir),
+                    model_type=model_info.get("type", "qwen-asr"),
+                    mlx_repo=model_info.get("mlx_repo"),
+                ),
             )
         except Exception as exc:
             logger.exception("Failed to load model %s", body.model)
@@ -248,11 +252,15 @@ def create_app(models_dir: str) -> FastAPI:
                             )
                             try:
                                 runner.unload()
-                                runner.load(
-                                    session_model,
-                                    models_dir=Path(models_dir),
-                                    model_type=model_type,
-                                    mlx_repo=mlx_repo,
+                                loop = asyncio.get_event_loop()
+                                await loop.run_in_executor(
+                                    None,
+                                    lambda: runner.load(
+                                        session_model,
+                                        models_dir=Path(models_dir),
+                                        model_type=model_type,
+                                        mlx_repo=mlx_repo,
+                                    ),
                                 )
                             except Exception as exc:
                                 await ws.send_json({

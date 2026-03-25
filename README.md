@@ -294,6 +294,7 @@ pytest
   - `segment_end` 触发后立即接收下一个 segment，不再等待转录完成
   - 最多 3 个 segment 并发转录（`Semaphore` 控制），避免 GPU 内存溢出
   - 结果按 segment_id 顺序发送（即使 segment 3 先完成，也等 1、2 先发送）
+- **异步模型加载** — 模型加载包装在线程池中执行（`run_in_executor`），不再阻塞 event loop，避免 WebSocket 连接在加载大模型时被丢弃
 - **Whisper MLX 权重迁移** — `models.json` 和 `model_registry.py` 添加 `mlx_repo` 字段
   - 新下载直接从 `mlx-community` 仓库获取 MLX 格式权重
   - 已下载的 PyTorch 权重会 fallback 到 `mlx_repo` HF 标识符，`mlx-whisper` 自动下载到缓存
