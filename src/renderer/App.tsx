@@ -478,37 +478,55 @@ function App(): React.JSX.Element {
         const pcmData = new Uint8Array(audioBuffer, 44);
         const totalBytes = pcmData.length;
         const bytesPerSecond = 32000; // 16kHz * 16bit * mono = 32000 bytes/sec
-        const chunkSize = bytesPerSecond; // send 1 second per chunk
-        const segmentInterval = bytesPerSecond * 15; // send segment_end every ~15s
-        let segmentStartByte = 0; // track start of current segment
-        let pendingFinals = 0; // how many segment_ends sent but no final received yet
-        let allSent = false;
+        const segmentSeconds = 15; // transcribe in 15-second segments
+        const segmentBytes = bytesPerSecond * segmentSeconds;
 
-        // Calculate total expected finals for accurate progress tracking
-        const totalExpectedFinals = Math.max(
-          1,
-          Math.ceil(totalBytes / segmentInterval),
-        );
-        let receivedFinals = 0;
+        // Split audio into segments upfront
+        const segments: Array<{ data: Uint8Array; startByte: number }> = [];
+        for (let off = 0; off < totalBytes; off += segmentBytes) {
+          segments.push({
+            data: pcmData.slice(off, Math.min(off + segmentBytes, totalBytes)),
+            startByte: off,
+          });
+        }
+        const totalSegments = segments.length;
 
-        // Monotonic progress: only moves forward, never backwards
-        let highWaterMark = 0;
-        const updateProgress = (p: number): void => {
-          if (p > highWaterMark) {
-            highWaterMark = p;
-            setRegenerationProgress(p);
-          }
-        };
-
+        // Sequential: send one segment → wait for result → next segment
+        // Progress is purely based on completed transcriptions (linear)
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
             () => reject(new Error("Connection timeout")),
             15000,
           );
 
-          const cleanup = () => {
+          const cleanup = (): void => {
             setRegeneratingSessionId(null);
             setRegenerationProgress(0);
+          };
+
+          let segmentIdx = 0;
+          let waitingForFinal = false;
+
+          const sendNextSegment = (): void => {
+            if (segmentIdx >= totalSegments) {
+              // All segments transcribed — done
+              setRegenerationProgress(100);
+              ws.send(JSON.stringify({ type: "stop" }));
+              ws.close();
+              return;
+            }
+
+            const seg = segments[segmentIdx];
+            // Send audio data in small chunks (avoid single huge message)
+            const chunkSize = bytesPerSecond; // 1 second per message
+            for (let i = 0; i < seg.data.length; i += chunkSize) {
+              ws.send(
+                seg.data.slice(i, Math.min(i + chunkSize, seg.data.length)),
+              );
+            }
+            // Signal end of this segment
+            ws.send(JSON.stringify({ type: "segment_end" }));
+            waitingForFinal = true;
           };
 
           ws.onopen = () => {
@@ -531,64 +549,26 @@ function App(): React.JSX.Element {
 
             if (msg.type === "ready") {
               clearTimeout(timeout);
-
-              let offset = 0;
-              let bytesSinceLastSegment = 0;
-
-              const sendInterval = setInterval(() => {
-                if (offset >= totalBytes) {
-                  clearInterval(sendInterval);
-                  // Send final segment_end for remaining audio
-                  if (bytesSinceLastSegment > 0) {
-                    pendingFinals++;
-                    ws.send(JSON.stringify({ type: "segment_end" }));
-                  }
-                  allSent = true;
-                  // If no pending finals (empty remaining), close now
-                  if (pendingFinals === 0) {
-                    updateProgress(100);
-                    ws.send(JSON.stringify({ type: "stop" }));
-                    ws.close();
-                  }
-                  return;
-                }
-
-                const end = Math.min(offset + chunkSize, totalBytes);
-                const chunk = pcmData.slice(offset, end);
-                ws.send(chunk);
-                bytesSinceLastSegment += end - offset;
-                offset = end;
-
-                // Send segment_end every ~15 seconds of audio
-                if (bytesSinceLastSegment >= segmentInterval) {
-                  pendingFinals++;
-                  ws.send(JSON.stringify({ type: "segment_end" }));
-                  bytesSinceLastSegment = 0;
-                }
-
-                // Progress: 0-30% for sending audio (this phase is fast)
-                updateProgress(Math.round((offset / totalBytes) * 30));
-              }, 100); // ~10x real-time speed
+              sendNextSegment();
             } else if (msg.type === "partial") {
               if (store.currentSessionId === sessionId) {
                 store.setPartialText(msg.text ?? "");
               }
-            } else if (msg.type === "final") {
-              pendingFinals = Math.max(0, pendingFinals - 1);
-              receivedFinals++;
+            } else if (msg.type === "final" && waitingForFinal) {
+              waitingForFinal = false;
 
               if (store.currentSessionId === sessionId) {
                 store.setPartialText("");
               }
+
               const text = msg.text ?? "";
               if (text.trim()) {
-                const startTime = Math.round(segmentStartByte / bytesPerSecond);
+                const seg = segments[segmentIdx];
+                const startTime = Math.round(seg.startByte / bytesPerSecond);
                 const endTime = Math.round(
-                  Math.min(segmentStartByte + segmentInterval, totalBytes) /
+                  Math.min(seg.startByte + segmentBytes, totalBytes) /
                     bytesPerSecond,
                 );
-                // Move start for next segment
-                segmentStartByte += segmentInterval;
 
                 // Save to DB and update in-memory store
                 window.capty
@@ -612,23 +592,18 @@ function App(): React.JSX.Element {
                   });
               }
 
-              // Progress: 30-100% for transcription results
-              updateProgress(
-                30 + Math.round((receivedFinals / totalExpectedFinals) * 70),
+              segmentIdx++;
+              // Progress = completed segments / total segments
+              setRegenerationProgress(
+                Math.round((segmentIdx / totalSegments) * 100),
               );
-
-              // Close connection when all audio sent and all finals received
-              if (allSent && pendingFinals === 0) {
-                updateProgress(100);
-                ws.send(JSON.stringify({ type: "stop" }));
-                ws.close();
-              }
+              // Send next segment
+              sendNextSegment();
             } else if (msg.type === "error") {
               console.error("Regeneration transcription error:", msg.message);
-              pendingFinals = Math.max(0, pendingFinals - 1);
-              if (allSent && pendingFinals === 0) {
-                ws.close();
-              }
+              // Skip failed segment, continue with next
+              segmentIdx++;
+              sendNextSegment();
             }
           };
 
