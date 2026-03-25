@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { marked } from "marked";
 
 export interface Summary {
   readonly id: number;
@@ -17,6 +18,13 @@ interface SummaryPanelProps {
   readonly hasSegments: boolean;
   readonly hasLlmProvider: boolean;
   readonly onSummarize: () => void;
+}
+
+// Configure marked for safe rendering
+marked.setOptions({ breaks: true, gfm: true });
+
+function renderMarkdown(md: string): string {
+  return marked.parse(md) as string;
 }
 
 function formatTime(dateStr: string): string {
@@ -38,10 +46,7 @@ export function SummaryPanel({
   onSummarize,
 }: SummaryPanelProps): React.ReactElement {
   const canSummarize =
-    currentSessionId !== null &&
-    hasSegments &&
-    hasLlmProvider &&
-    !isGenerating;
+    currentSessionId !== null && hasSegments && hasLlmProvider && !isGenerating;
 
   return (
     <div
@@ -181,50 +186,106 @@ export function SummaryPanel({
 
         {/* Summaries list */}
         {summaries.map((summary) => (
-          <div
-            key={summary.id}
-            style={{
-              marginBottom: "16px",
-              padding: "12px",
-              backgroundColor: "var(--bg-secondary)",
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-primary)",
-                lineHeight: "20px",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {summary.content}
-            </div>
-            <div
-              style={{
-                marginTop: "8px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                fontSize: "10px",
-                color: "var(--text-muted)",
-              }}
-            >
-              <span>{summary.model_name}</span>
-              <span>{formatTime(summary.created_at)}</span>
-            </div>
-          </div>
+          <SummaryCard key={summary.id} summary={summary} />
         ))}
       </div>
 
-      {/* Inline CSS for spinner animation */}
+      {/* Inline CSS for spinner animation + markdown styles */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        .summary-md h1, .summary-md h2, .summary-md h3, .summary-md h4 {
+          margin: 8px 0 4px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+        .summary-md h1 { font-size: 16px; }
+        .summary-md h2 { font-size: 14px; }
+        .summary-md h3 { font-size: 13px; }
+        .summary-md p { margin: 4px 0; }
+        .summary-md ul, .summary-md ol { margin: 4px 0; padding-left: 20px; }
+        .summary-md li { margin: 2px 0; }
+        .summary-md code {
+          background: var(--bg-tertiary);
+          padding: 1px 4px;
+          border-radius: 3px;
+          font-size: 12px;
+        }
+        .summary-md pre {
+          background: var(--bg-tertiary);
+          padding: 8px;
+          border-radius: 4px;
+          overflow-x: auto;
+          margin: 6px 0;
+        }
+        .summary-md pre code { background: none; padding: 0; }
+        .summary-md blockquote {
+          border-left: 3px solid var(--border);
+          margin: 6px 0;
+          padding: 2px 10px;
+          color: var(--text-muted);
+        }
+        .summary-md a { color: var(--accent); text-decoration: none; }
+        .summary-md a:hover { text-decoration: underline; }
+        .summary-md strong { color: var(--text-primary); }
+        .summary-md hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+        .summary-md table { border-collapse: collapse; width: 100%; margin: 6px 0; }
+        .summary-md th, .summary-md td {
+          border: 1px solid var(--border);
+          padding: 4px 8px;
+          font-size: 12px;
+          text-align: left;
+        }
+        .summary-md th { background: var(--bg-tertiary); font-weight: 600; }
       `}</style>
+    </div>
+  );
+}
+
+function SummaryCard({
+  summary,
+}: {
+  readonly summary: Summary;
+}): React.ReactElement {
+  const html = useMemo(
+    () => renderMarkdown(summary.content),
+    [summary.content],
+  );
+
+  return (
+    <div
+      style={{
+        marginBottom: "16px",
+        padding: "12px",
+        backgroundColor: "var(--bg-secondary)",
+        borderRadius: "8px",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <div
+        className="summary-md"
+        style={{
+          fontSize: "13px",
+          color: "var(--text-primary)",
+          lineHeight: "20px",
+          wordBreak: "break-word",
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <div
+        style={{
+          marginTop: "8px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "10px",
+          color: "var(--text-muted)",
+        }}
+      >
+        <span>{summary.model_name}</span>
+        <span>{formatTime(summary.created_at)}</span>
+      </div>
     </div>
   );
 }
