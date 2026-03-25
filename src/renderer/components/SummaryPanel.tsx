@@ -306,7 +306,13 @@ export function SummaryPanel({
 
         {/* Summaries list (newest first) */}
         {reversedSummaries.map((summary) => (
-          <SummaryCard key={summary.id} summary={summary} />
+          <SummaryCard
+            key={summary.id}
+            summary={summary}
+            providerName={
+              llmProviders.find((p) => p.id === summary.provider_id)?.name
+            }
+          />
         ))}
       </div>
 
@@ -365,8 +371,10 @@ export function SummaryPanel({
 
 function SummaryCard({
   summary,
+  providerName,
 }: {
   readonly summary: Summary;
+  readonly providerName: string | undefined;
 }): React.ReactElement {
   const html = useMemo(
     () => renderMarkdown(summary.content),
@@ -403,7 +411,10 @@ function SummaryCard({
           color: "var(--text-muted)",
         }}
       >
-        <span>{summary.model_name}</span>
+        <span>
+          {providerName ? `${providerName} · ` : ""}
+          {summary.model_name}
+        </span>
         <span>{formatTime(summary.created_at)}</span>
       </div>
     </div>

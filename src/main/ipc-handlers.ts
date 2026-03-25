@@ -626,6 +626,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         }
 
         const data = (await resp.json()) as {
+          model?: string;
           choices: { message: { content: string } }[];
         };
         const content = data.choices?.[0]?.message?.content ?? "";
@@ -634,11 +635,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           throw new Error("LLM returned empty response");
         }
 
+        // Use actual model from API response (important for routing
+        // providers like OpenRouter where the response model differs
+        // from the requested model)
+        const actualModel = data.model ?? provider.model;
+
         // Save to database
         const summaryId = addSummary(db, {
           sessionId,
           content,
-          modelName: provider.model,
+          modelName: actualModel,
           providerId: provider.id,
         });
 
@@ -647,7 +653,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           id: summaryId,
           session_id: sessionId,
           content,
-          model_name: provider.model,
+          model_name: actualModel,
           provider_id: provider.id,
           created_at: new Date().toISOString(),
         };
