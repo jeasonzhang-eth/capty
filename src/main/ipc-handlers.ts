@@ -340,6 +340,47 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  ipcMain.handle("session:rename", (_event, id: number, newTitle: string) => {
+    const session = getSession(db, id);
+    if (!session) throw new Error("Session not found");
+
+    const trimmed = newTitle.trim();
+    if (!trimmed) throw new Error("Title cannot be empty");
+
+    // Sanitize title for filesystem use
+    const sanitized = trimmed.replace(/[/\\:*?"<>|]/g, "-").replace(/^\.+/, "");
+    if (!sanitized) throw new Error("Invalid title");
+
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+
+    // Rename audio directory and main audio file if audio_path exists
+    if (session.audio_path) {
+      const oldDir = join(dataDir, "audio", session.audio_path);
+      const newDir = join(dataDir, "audio", sanitized);
+
+      if (oldDir !== newDir && fs.existsSync(oldDir)) {
+        if (fs.existsSync(newDir)) {
+          throw new Error(`Directory already exists: ${sanitized}`);
+        }
+        fs.renameSync(oldDir, newDir);
+
+        // Rename main audio file inside the directory
+        const oldAudioFile = join(newDir, `${session.audio_path}.wav`);
+        const newAudioFile = join(newDir, `${sanitized}.wav`);
+        if (fs.existsSync(oldAudioFile) && oldAudioFile !== newAudioFile) {
+          fs.renameSync(oldAudioFile, newAudioFile);
+        }
+      }
+    }
+
+    // Update database
+    updateSession(db, id, {
+      title: trimmed,
+      audioPath: session.audio_path ? sanitized : undefined,
+    });
+  });
+
   ipcMain.handle("session:delete", (_event, id: number) => {
     // Get session to find audio directory before deleting DB records
     const session = getSession(db, id);

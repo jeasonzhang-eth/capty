@@ -9,6 +9,8 @@ const api = {
   updateSession: (id: number, fields: Record<string, unknown>) =>
     ipcRenderer.invoke("session:update", id, fields),
   deleteSession: (id: number) => ipcRenderer.invoke("session:delete", id),
+  renameSession: (id: number, newTitle: string) =>
+    ipcRenderer.invoke("session:rename", id, newTitle),
 
   // Segments
   addSegment: (opts: Record<string, unknown>) =>

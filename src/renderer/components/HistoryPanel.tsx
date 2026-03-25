@@ -30,6 +30,7 @@ interface HistoryPanelProps {
   readonly onDeleteSession: (id: number) => void;
   readonly onPlaySession: (id: number) => void;
   readonly onStopPlayback: () => void;
+  readonly onRenameSession: (id: number, newTitle: string) => void;
   readonly onRegenerateSubtitles: (id: number) => void;
   readonly onOpenFolder: (id: number) => void;
 }
@@ -120,6 +121,7 @@ export function HistoryPanel({
   onDeleteSession,
   onPlaySession,
   onStopPlayback,
+  onRenameSession,
   onRegenerateSubtitles,
   onOpenFolder,
 }: HistoryPanelProps): React.ReactElement {
@@ -236,6 +238,43 @@ export function HistoryPanel({
     [],
   );
 
+  // Inline rename state
+  const [renamingSessionId, setRenamingSessionId] = useState<number | null>(
+    null,
+  );
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRenameClick = useCallback(() => {
+    if (contextMenu.sessionId !== null) {
+      const target = sessions.find((s) => s.id === contextMenu.sessionId);
+      if (target) {
+        setRenamingSessionId(target.id);
+        setRenameValue(target.title);
+      }
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, sessions]);
+
+  const handleRenameConfirm = useCallback(() => {
+    if (renamingSessionId !== null && renameValue.trim()) {
+      onRenameSession(renamingSessionId, renameValue.trim());
+    }
+    setRenamingSessionId(null);
+  }, [renamingSessionId, renameValue, onRenameSession]);
+
+  const handleRenameCancel = useCallback(() => {
+    setRenamingSessionId(null);
+  }, []);
+
+  // Auto-focus rename input
+  useEffect(() => {
+    if (renamingSessionId !== null && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingSessionId]);
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const handleRegenerateClick = useCallback(() => {
@@ -319,16 +358,6 @@ export function HistoryPanel({
           zIndex: 10,
         }}
       />
-      <div
-        style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid var(--border)",
-          fontSize: "13px",
-          color: "var(--text-secondary)",
-        }}
-      >
-        History ({sessions.length})
-      </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {groups.map((group) => {
           const isCollapsed = collapsedGroups.has(group.label);
@@ -398,15 +427,46 @@ export function HistoryPanel({
                           : "transparent",
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        marginBottom: "4px",
-                      }}
-                    >
-                      {session.title}
-                    </div>
+                    {renamingSessionId === session.id ? (
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleRenameConfirm();
+                          } else if (e.key === "Escape") {
+                            handleRenameCancel();
+                          }
+                          e.stopPropagation();
+                        }}
+                        onBlur={handleRenameConfirm}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          marginBottom: "4px",
+                          width: "100%",
+                          padding: "2px 4px",
+                          border: "1px solid var(--accent)",
+                          borderRadius: "3px",
+                          backgroundColor: "var(--bg-primary)",
+                          color: "var(--text-primary)",
+                          outline: "none",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 500,
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {session.title}
+                      </div>
+                    )}
                     <div
                       style={{
                         fontSize: "11px",
@@ -601,6 +661,23 @@ export function HistoryPanel({
               </>
             );
           })()}
+          <div
+            onClick={handleRenameClick}
+            style={{
+              padding: "8px 16px",
+              fontSize: "13px",
+              cursor: "pointer",
+              color: "var(--text-primary)",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.backgroundColor = "var(--bg-tertiary)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.backgroundColor = "transparent")
+            }
+          >
+            Rename
+          </div>
           <div
             onClick={handleDeleteClick}
             style={{

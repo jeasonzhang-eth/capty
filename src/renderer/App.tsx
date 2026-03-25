@@ -433,6 +433,18 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleRenameSession = useCallback(
+    async (sessionId: number, newTitle: string) => {
+      try {
+        await window.capty.renameSession(sessionId, newTitle);
+        await store.loadSessions();
+      } catch (err) {
+        console.error("Failed to rename session:", err);
+      }
+    },
+    [store],
+  );
+
   const handleRegenerateSubtitles = useCallback(
     async (sessionId: number) => {
       if (regeneratingSessionId !== null || store.isRecording) return;
@@ -922,6 +934,7 @@ function App(): React.JSX.Element {
           onDeleteSession={handleDeleteSession}
           onPlaySession={handlePlaySession}
           onStopPlayback={audioPlayer.stop}
+          onRenameSession={handleRenameSession}
           onRegenerateSubtitles={handleRegenerateSubtitles}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
         />
