@@ -108,6 +108,20 @@ function groupSessionsByDate(
     .map((label) => ({ label, sessions: buckets[label] }));
 }
 
+/* Inject keyframe animations for Studio Noir theme */
+const styleTagId = "studio-noir-history-keyframes";
+if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
+  const style = document.createElement("style");
+  style.id = styleTagId;
+  style.textContent = `
+    @keyframes breathe {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export function HistoryPanel({
   sessions,
   currentSessionId,
@@ -336,7 +350,9 @@ export function HistoryPanel({
         width: `${width}px`,
         minWidth: `${HISTORY_MIN_WIDTH}px`,
         maxWidth: `${HISTORY_MAX_WIDTH}px`,
-        backgroundColor: "var(--bg-secondary)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(28, 28, 31, 0.85)",
         borderRight: "1px solid var(--border)",
         display: "flex",
         flexDirection: "column",
@@ -367,10 +383,11 @@ export function HistoryPanel({
               <div
                 onClick={() => toggleGroup(group.label)}
                 style={{
-                  padding: "8px 16px",
+                  padding: "8px 16px 8px 14px",
                   cursor: "pointer",
-                  borderBottom: "1px solid var(--border)",
-                  backgroundColor: "var(--bg-tertiary)",
+                  backgroundColor: "transparent",
+                  borderLeft: "2px solid var(--accent)",
+                  marginTop: "8px",
                   display: "flex",
                   alignItems: "center",
                   gap: "6px",
@@ -390,17 +407,20 @@ export function HistoryPanel({
                 </span>
                 <span
                   style={{
-                    fontSize: "12px",
+                    fontSize: "10px",
                     fontWeight: 600,
-                    color: "var(--text-secondary)",
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
                   }}
                 >
                   {group.label}
                 </span>
                 <span
                   style={{
-                    fontSize: "11px",
+                    fontSize: "10px",
                     color: "var(--text-muted)",
+                    letterSpacing: "0.08em",
                   }}
                 >
                   ({group.sessions.length})
@@ -408,184 +428,220 @@ export function HistoryPanel({
               </div>
               {/* Session items */}
               {!isCollapsed &&
-                group.sessions.map((session) => (
-                  <div
-                    key={session.id}
-                    onClick={() => onSelectSession(session.id)}
-                    onContextMenu={(e) => handleContextMenu(e, session.id)}
-                    style={{
-                      padding: "10px 16px",
-                      cursor: "pointer",
-                      borderBottom: "1px solid var(--border)",
-                      borderLeft:
-                        session.id === currentSessionId
+                group.sessions.map((session) => {
+                  const isSelected = session.id === currentSessionId;
+                  const isPlaying = playingSessionId === session.id;
+                  return (
+                    <div
+                      key={session.id}
+                      onClick={() => onSelectSession(session.id)}
+                      onContextMenu={(e) => handleContextMenu(e, session.id)}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(255,255,255,0.03)";
+                          e.currentTarget.style.borderLeft =
+                            "3px solid var(--text-muted)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.borderLeft =
+                            "3px solid transparent";
+                        }
+                      }}
+                      style={{
+                        padding: "10px 16px",
+                        cursor: "pointer",
+                        marginBottom: "2px",
+                        borderLeft: isSelected
                           ? "3px solid var(--accent)"
                           : "3px solid transparent",
-                      backgroundColor:
-                        session.id === currentSessionId
-                          ? "var(--bg-tertiary)"
+                        backgroundColor: isSelected
+                          ? "rgba(245, 166, 35, 0.06)"
                           : "transparent",
-                    }}
-                  >
-                    {renamingSessionId === session.id ? (
-                      <input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            handleRenameConfirm();
-                          } else if (e.key === "Escape") {
-                            handleRenameCancel();
-                          }
-                          e.stopPropagation();
-                        }}
-                        onBlur={handleRenameConfirm}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          marginBottom: "4px",
-                          width: "100%",
-                          padding: "2px 4px",
-                          border: "1px solid var(--accent)",
-                          borderRadius: "3px",
-                          backgroundColor: "var(--bg-primary)",
-                          color: "var(--text-primary)",
-                          outline: "none",
-                          boxSizing: "border-box",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          marginBottom: "4px",
-                        }}
-                      >
-                        {session.title}
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--text-muted)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
+                        transition:
+                          "background-color 0.15s ease, border-left 0.15s ease",
                       }}
                     >
-                      <span>{formatDate(session.started_at)}</span>
-                      <span
+                      {renamingSessionId === session.id ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleRenameConfirm();
+                            } else if (e.key === "Escape") {
+                              handleRenameCancel();
+                            }
+                            e.stopPropagation();
+                          }}
+                          onBlur={handleRenameConfirm}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            marginBottom: "4px",
+                            width: "100%",
+                            padding: "2px 4px",
+                            border: "1px solid var(--accent)",
+                            borderRadius: "3px",
+                            backgroundColor: "var(--bg-primary)",
+                            color: "var(--text-primary)",
+                            outline: "none",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            color: "var(--text-primary)",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          {session.title}
+                        </div>
+                      )}
+                      <div
                         style={{
+                          fontSize: "11px",
+                          color: "var(--text-muted)",
+                          fontFamily: "'JetBrains Mono', monospace",
                           display: "flex",
+                          justifyContent: "space-between",
                           alignItems: "center",
-                          gap: "6px",
                         }}
                       >
-                        <span>{formatDuration(session.duration_seconds)}</span>
-                        {session.status === "completed" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (playingSessionId === session.id) {
-                                onStopPlayback();
-                              } else if (!isRecording) {
-                                onPlaySession(session.id);
+                        <span>{formatDate(session.started_at)}</span>
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <span>
+                            {formatDuration(session.duration_seconds)}
+                          </span>
+                          {session.status === "completed" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (playingSessionId === session.id) {
+                                  onStopPlayback();
+                                } else if (!isRecording) {
+                                  onPlaySession(session.id);
+                                }
+                              }}
+                              disabled={
+                                isRecording && playingSessionId !== session.id
                               }
-                            }}
-                            disabled={
-                              isRecording && playingSessionId !== session.id
-                            }
-                            style={{
-                              background: "none",
-                              border: "none",
-                              color:
-                                playingSessionId === session.id
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: isPlaying
                                   ? "var(--accent)"
                                   : "var(--text-muted)",
-                              fontSize: "12px",
-                              cursor:
-                                isRecording && playingSessionId !== session.id
-                                  ? "not-allowed"
-                                  : "pointer",
-                              padding: "0 2px",
-                              opacity:
-                                isRecording && playingSessionId !== session.id
-                                  ? 0.4
-                                  : 1,
-                            }}
-                            title={
-                              playingSessionId === session.id
-                                ? "Stop"
-                                : isRecording
-                                  ? "Cannot play while recording"
-                                  : "Play"
-                            }
-                          >
-                            {playingSessionId === session.id
-                              ? "\u25A0"
-                              : "\u25B6"}
-                          </button>
-                        )}
-                      </span>
-                    </div>
-                    {session.status === "recording" && (
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--danger)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        RECORDING
-                      </span>
-                    )}
-                    {regeneratingSessionId === session.id && (
-                      <div style={{ marginTop: "4px" }}>
-                        <div
+                                fontSize: "12px",
+                                cursor:
+                                  isRecording &&
+                                  playingSessionId !== session.id
+                                    ? "not-allowed"
+                                    : "pointer",
+                                padding: "0 2px",
+                                opacity:
+                                  isRecording &&
+                                  playingSessionId !== session.id
+                                    ? 0.4
+                                    : 1,
+                                animation: isPlaying
+                                  ? "breathe 1.5s ease-in-out infinite"
+                                  : "none",
+                              }}
+                              title={
+                                playingSessionId === session.id
+                                  ? "Stop"
+                                  : isRecording
+                                    ? "Cannot play while recording"
+                                    : "Play"
+                              }
+                            >
+                              {playingSessionId === session.id
+                                ? "\u25A0"
+                                : "\u25B6"}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      {session.status === "recording" && (
+                        <span
                           style={{
+                            display: "inline-block",
+                            marginTop: "4px",
                             fontSize: "10px",
-                            color: "var(--accent)",
+                            color: "var(--danger)",
                             fontWeight: 600,
-                            marginBottom: "3px",
+                            backgroundColor: "rgba(239, 68, 68, 0.15)",
+                            borderRadius: "10px",
+                            padding: "1px 8px",
+                            animation: "breathe 2s ease-in-out infinite",
                           }}
                         >
-                          Regenerating... {regenerationProgress}%
-                        </div>
-                        <div
-                          style={{
-                            height: "3px",
-                            backgroundColor: "var(--border)",
-                            borderRadius: "2px",
-                            overflow: "hidden",
-                          }}
-                        >
+                          RECORDING
+                        </span>
+                      )}
+                      {regeneratingSessionId === session.id && (
+                        <div style={{ marginTop: "4px" }}>
                           <div
                             style={{
-                              height: "100%",
-                              width: `${regenerationProgress}%`,
-                              backgroundColor: "var(--accent)",
-                              borderRadius: "2px",
-                              transition: "width 0.2s ease",
+                              fontSize: "10px",
+                              color: "var(--accent)",
+                              fontWeight: 600,
+                              marginBottom: "3px",
+                              fontFamily: "'JetBrains Mono', monospace",
                             }}
-                          />
+                          >
+                            Regenerating... {regenerationProgress}%
+                          </div>
+                          <div
+                            style={{
+                              height: "3px",
+                              backgroundColor: "var(--border)",
+                              borderRadius: "2px",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${regenerationProgress}%`,
+                                background:
+                                  "linear-gradient(90deg, var(--accent), var(--accent-hover))",
+                                borderRadius: "2px",
+                                transition: "width 0.2s ease",
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           );
         })}
         {sessions.length === 0 && (
           <div
             style={{
-              padding: "20px 16px",
+              padding: "40px 16px",
               textAlign: "center",
               color: "var(--text-muted)",
               fontSize: "13px",
+              opacity: 0.7,
             }}
           >
             No sessions yet
@@ -601,7 +657,9 @@ export function HistoryPanel({
             position: "fixed",
             top: contextMenu.y,
             left: contextMenu.x,
-            backgroundColor: "var(--bg-secondary)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            backgroundColor: "rgba(28, 28, 31, 0.92)",
             border: "1px solid var(--border)",
             borderRadius: "6px",
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
@@ -629,7 +687,7 @@ export function HistoryPanel({
                     }}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.backgroundColor =
-                        "var(--bg-tertiary)")
+                        "var(--accent-glow)")
                     }
                     onMouseLeave={(e) =>
                       (e.currentTarget.style.backgroundColor = "transparent")
@@ -649,7 +707,7 @@ export function HistoryPanel({
                     }}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.backgroundColor =
-                        "var(--bg-tertiary)")
+                        "var(--accent-glow)")
                     }
                     onMouseLeave={(e) =>
                       (e.currentTarget.style.backgroundColor = "transparent")
@@ -670,7 +728,7 @@ export function HistoryPanel({
               color: "var(--text-primary)",
             }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--bg-tertiary)")
+              (e.currentTarget.style.backgroundColor = "var(--accent-glow)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "transparent")
@@ -687,7 +745,7 @@ export function HistoryPanel({
               color: "var(--danger)",
             }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--bg-tertiary)")
+              (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "transparent")
@@ -707,7 +765,7 @@ export function HistoryPanel({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
+            backgroundColor: "rgba(0,0,0,0.7)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -717,7 +775,9 @@ export function HistoryPanel({
         >
           <div
             style={{
-              backgroundColor: "var(--bg-secondary)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              backgroundColor: "rgba(28, 28, 31, 0.92)",
               border: "1px solid var(--border)",
               borderRadius: "10px",
               padding: "20px 24px",
@@ -727,7 +787,12 @@ export function HistoryPanel({
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              style={{ fontSize: "15px", fontWeight: 600, marginBottom: "8px" }}
+              style={{
+                fontSize: "15px",
+                fontWeight: 600,
+                marginBottom: "8px",
+                color: "var(--text-primary)",
+              }}
             >
               确认删除
             </div>

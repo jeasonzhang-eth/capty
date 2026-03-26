@@ -67,6 +67,8 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   padding: "16px",
   marginBottom: "16px",
+  backdropFilter: "blur(8px)",
+  WebkitBackdropFilter: "blur(8px)",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -93,13 +95,14 @@ const inputStyle: React.CSSProperties = {
   height: "32px",
   padding: "0 10px",
   fontSize: "12px",
-  backgroundColor: "var(--bg-primary)",
+  backgroundColor: "var(--bg-surface)",
   color: "var(--text-primary)",
   border: "1px solid var(--border)",
   borderRadius: "6px",
   outline: "none",
   boxSizing: "border-box",
-  transition: "border-color 0.15s",
+  transition: "border-color 0.2s",
+  fontFamily: "'DM Sans', sans-serif",
 };
 
 const primaryBtnStyle: React.CSSProperties = {
@@ -137,7 +140,11 @@ const tagStyle: React.CSSProperties = {
 
 type TabId = "general" | "speech" | "language-models";
 
-const TABS: readonly { readonly id: TabId; readonly icon: string; readonly label: string }[] = [
+const TABS: readonly {
+  readonly id: TabId;
+  readonly icon: string;
+  readonly label: string;
+}[] = [
   { id: "general", icon: "\u2699\ufe0f", label: "General" },
   { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "Speech" },
   { id: "language-models", icon: "\ud83e\udde0", label: "Language Models" },
@@ -154,7 +161,10 @@ function SegmentedControl({
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly disabled?: boolean;
-  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly options: readonly {
+    readonly value: string;
+    readonly label: string;
+  }[];
 }): React.ReactElement {
   return (
     <div
@@ -187,7 +197,7 @@ function SegmentedControl({
               cursor: disabled ? "not-allowed" : "pointer",
               transition: "all 0.2s ease",
               backgroundColor: isSelected ? "var(--accent)" : "transparent",
-              color: isSelected ? "white" : "var(--text-muted)",
+              color: isSelected ? "#141416" : "var(--text-muted)",
             }}
           >
             {opt.label}
@@ -207,9 +217,9 @@ function TypeTag({ type }: { readonly type: string }): React.ReactElement {
       style={{
         ...tagStyle,
         backgroundColor: isWhisper
-          ? "rgba(16, 163, 127, 0.15)"
-          : "rgba(99, 102, 241, 0.15)",
-        color: isWhisper ? "#10a37f" : "#6366f1",
+          ? "rgba(74, 222, 128, 0.12)"
+          : "rgba(245, 166, 35, 0.12)",
+        color: isWhisper ? "#4ADE80" : "#F5A623",
       }}
     >
       {isWhisper ? "Whisper" : "Qwen"}
@@ -337,8 +347,8 @@ function ModelCard({
               <span
                 style={{
                   ...tagStyle,
-                  backgroundColor: "rgba(34, 197, 94, 0.15)",
-                  color: "#22c55e",
+                  backgroundColor: "rgba(74, 222, 128, 0.12)",
+                  color: "#4ADE80",
                 }}
               >
                 Downloaded
@@ -847,7 +857,7 @@ function SpeechTab({
               style={{
                 ...inputStyle,
                 flex: 1,
-                fontFamily: "monospace",
+                fontFamily: "'JetBrains Mono', monospace",
               }}
             />
             {editSidecarUrl !== sidecarUrl && (
@@ -873,7 +883,7 @@ function SpeechTab({
               style={{
                 marginBottom: "12px",
                 fontSize: "11px",
-                color: "#22c55e",
+                color: "#4ADE80",
               }}
             >
               Sidecar is online
@@ -884,7 +894,7 @@ function SpeechTab({
               style={{
                 marginBottom: "12px",
                 fontSize: "11px",
-                color: "#ef4444",
+                color: "#EF4444",
               }}
             >
               Sidecar is offline
@@ -910,7 +920,7 @@ function SpeechTab({
                 padding: "6px 8px",
                 backgroundColor: "var(--bg-tertiary)",
                 borderRadius: "4px",
-                fontFamily: "monospace",
+                fontFamily: "'JetBrains Mono', monospace",
                 fontSize: "11px",
                 wordBreak: "break-all",
               }}
@@ -1171,9 +1181,7 @@ function SpeechTab({
             >
               HuggingFace Mirror (model download source)
             </div>
-            <div
-              style={{ display: "flex", alignItems: "center", gap: "6px" }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <input
                 type="text"
                 value={editingHfUrl}
@@ -1182,7 +1190,7 @@ function SpeechTab({
                 style={{
                   ...inputStyle,
                   flex: 1,
-                  fontFamily: "monospace",
+                  fontFamily: "'JetBrains Mono', monospace",
                   fontSize: "11px",
                 }}
               />
@@ -1198,7 +1206,7 @@ function SpeechTab({
                 <span
                   style={{
                     fontSize: "11px",
-                    color: "#22c55e",
+                    color: "#4ADE80",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -1234,7 +1242,7 @@ function SpeechTab({
                 border: "1px solid rgba(239, 68, 68, 0.3)",
                 borderRadius: "6px",
                 fontSize: "12px",
-                color: "#ef4444",
+                color: "#EF4444",
                 lineHeight: "18px",
               }}
             >
@@ -1244,9 +1252,7 @@ function SpeechTab({
 
           {/* Search HuggingFace */}
           <div style={{ marginBottom: "16px" }}>
-            <div
-              style={{ display: "flex", gap: "6px", marginBottom: "8px" }}
-            >
+            <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
               <input
                 type="text"
                 value={searchQuery}
@@ -1272,8 +1278,7 @@ function SpeechTab({
             </div>
 
             {/* Search results */}
-            {(searchResults.length > 0 ||
-              (hasSearched && !isSearching)) && (
+            {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
               <div
                 style={{
                   display: "flex",
@@ -1324,11 +1329,13 @@ function SpeechTab({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.6)",
+            backgroundColor: "rgba(0,0,0,0.7)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 4000,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget) setConfirmDeleteId(null);
@@ -1670,8 +1677,8 @@ function LanguageModelsTab({
                       <span
                         style={{
                           ...tagStyle,
-                          backgroundColor: "rgba(99, 102, 241, 0.15)",
-                          color: "#6366f1",
+                          backgroundColor: "rgba(245, 166, 35, 0.12)",
+                          color: "#F5A623",
                         }}
                       >
                         Preset
@@ -1681,9 +1688,9 @@ function LanguageModelsTab({
                       style={{
                         ...tagStyle,
                         backgroundColor: isConfigured
-                          ? "rgba(34, 197, 94, 0.15)"
-                          : "rgba(239, 68, 68, 0.15)",
-                        color: isConfigured ? "#22c55e" : "#ef4444",
+                          ? "rgba(74, 222, 128, 0.12)"
+                          : "rgba(239, 68, 68, 0.12)",
+                        color: isConfigured ? "#4ADE80" : "#EF4444",
                       }}
                     >
                       {isConfigured ? "Configured" : "Not configured"}
@@ -1721,9 +1728,7 @@ function LanguageModelsTab({
                         fontSize: "11px",
                         color: "var(--text-muted)",
                         cursor:
-                          testingId === provider.id
-                            ? "not-allowed"
-                            : "pointer",
+                          testingId === provider.id ? "not-allowed" : "pointer",
                         opacity: testingId === provider.id ? 0.6 : 1,
                       }}
                     >
@@ -1869,8 +1874,7 @@ function LanguageModelsTab({
                           !editForm.apiKey || !editForm.model
                             ? "not-allowed"
                             : "pointer",
-                        opacity:
-                          !editForm.apiKey || !editForm.model ? 0.5 : 1,
+                        opacity: !editForm.apiKey || !editForm.model ? 0.5 : 1,
                       }}
                     >
                       Save
@@ -1931,11 +1935,13 @@ export function SettingsModal({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.7)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 3000,
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
       }}
       onClick={handleOverlayClick}
     >
@@ -1950,7 +1956,7 @@ export function SettingsModal({
           maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
           overflow: "hidden",
         }}
       >
@@ -1965,7 +1971,14 @@ export function SettingsModal({
             flexShrink: 0,
           }}
         >
-          <h2 style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>
+          <h2
+            style={{
+              fontSize: "16px",
+              fontWeight: 700,
+              margin: 0,
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
             Settings
           </h2>
           <button
@@ -1997,7 +2010,7 @@ export function SettingsModal({
             style={{
               width: "160px",
               flexShrink: 0,
-              backgroundColor: "var(--bg-tertiary)",
+              backgroundColor: "var(--bg-primary)",
               padding: "12px 8px",
               display: "flex",
               flexDirection: "column",
@@ -2031,7 +2044,7 @@ export function SettingsModal({
                   onMouseEnter={(e) => {
                     if (!isActive) {
                       e.currentTarget.style.backgroundColor =
-                        "rgba(255,255,255,0.08)";
+                        "rgba(245, 166, 35, 0.08)";
                     }
                   }}
                   onMouseLeave={(e) => {

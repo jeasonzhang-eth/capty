@@ -48,14 +48,15 @@ export function TranscriptArea({
             onSeekToTime ? () => onSeekToTime(segment.start_time) : undefined
           }
           style={{
-            marginBottom: "4px",
-            padding: "8px 12px",
-            borderRadius: "6px",
+            marginBottom: "2px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            borderBottom: "1px solid var(--border)",
             borderLeft: active
               ? "3px solid var(--accent)"
               : "3px solid transparent",
             backgroundColor: active
-              ? "rgba(96, 165, 250, 0.12)"
+              ? "rgba(245, 166, 35, 0.06)"
               : "transparent",
             cursor: "pointer",
             transition:
@@ -66,20 +67,19 @@ export function TranscriptArea({
           <span
             style={{
               fontSize: "11px",
-              color: active ? "var(--accent)" : "var(--text-muted)",
+              color: "var(--accent)",
               marginRight: "8px",
-              fontFamily: "monospace",
+              fontFamily: "'JetBrains Mono', monospace",
             }}
           >
             {formatTime(segment.start_time)}
           </span>
           <span
             style={{
-              fontSize: "14px",
-              lineHeight: 1.6,
-              color: active
-                ? "var(--text-primary)"
-                : "var(--text-secondary)",
+              fontSize: "15px",
+              lineHeight: 1.7,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "var(--text-primary)",
             }}
           >
             {segment.text}
@@ -98,7 +98,7 @@ export function TranscriptArea({
   }, [segments, partialText, isRecording]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "transparent" }}>
       {isPlayback && segments.length > 0 ? (
         <Lrc
           lrc={lrcString}
@@ -106,41 +106,45 @@ export function TranscriptArea({
           lineRenderer={lineRenderer}
           verticalSpace
           recoverAutoScrollInterval={5000}
-          style={{ flex: 1, overflowY: "auto", padding: "16px 24px" }}
+          style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}
         />
       ) : (
         <div
           style={{
             flex: 1,
             overflowY: "auto",
-            padding: "16px 24px",
+            padding: "20px 28px",
           }}
         >
           {segments.map((seg) => (
             <div
               key={seg.id}
+              className="fade-in-up"
               style={{
-                marginBottom: "4px",
-                padding: "8px 12px",
-                borderRadius: "6px",
+                marginBottom: "2px",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                borderBottom: "1px solid var(--border)",
                 borderLeft: "3px solid transparent",
+                opacity: 0.7,
               }}
             >
               <span
                 style={{
                   fontSize: "11px",
-                  color: "var(--text-muted)",
+                  color: "var(--accent)",
                   marginRight: "8px",
-                  fontFamily: "monospace",
+                  fontFamily: "'JetBrains Mono', monospace",
                 }}
               >
                 {formatTime(seg.start_time)}
               </span>
               <span
                 style={{
-                  fontSize: "14px",
-                  lineHeight: 1.6,
-                  color: "var(--text-secondary)",
+                  fontSize: "15px",
+                  lineHeight: 1.7,
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "var(--text-primary)",
                 }}
               >
                 {seg.text}
@@ -150,9 +154,16 @@ export function TranscriptArea({
 
           {isRecording && partialText && (
             <div
-              style={{ marginBottom: "12px", padding: "8px 12px", opacity: 0.7 }}
+              style={{ marginBottom: "12px", padding: "10px 16px", opacity: 0.7 }}
             >
-              <span style={{ fontSize: "14px", lineHeight: 1.6 }}>
+              <span
+                style={{
+                  fontSize: "15px",
+                  lineHeight: 1.7,
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "var(--text-primary)",
+                }}
+              >
                 {partialText}
               </span>
               <span
@@ -178,9 +189,10 @@ export function TranscriptArea({
                 height: "100%",
                 color: "var(--text-muted)",
                 fontSize: "14px",
+                fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              Click Start to begin transcription
+              Click <span style={{ color: "var(--accent)", margin: "0 5px", fontWeight: 600 }}>Start</span> to begin transcription
             </div>
           )}
 

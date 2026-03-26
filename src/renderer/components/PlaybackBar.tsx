@@ -39,12 +39,13 @@ function formatTime(seconds: number): string {
 const controlBtnStyle: React.CSSProperties = {
   background: "none",
   border: "none",
-  color: "var(--text-primary)",
+  color: "var(--text-secondary)",
   fontSize: "14px",
   cursor: "pointer",
   padding: "2px 6px",
   flexShrink: 0,
-  borderRadius: "4px",
+  borderRadius: "6px",
+  transition: "text-shadow 0.2s ease",
 };
 
 export function PlaybackBar({
@@ -80,9 +81,9 @@ export function PlaybackBar({
       container,
       media: audioEl,
       height: 32,
-      waveColor: "#475569",
-      progressColor: "#60a5fa",
-      cursorColor: "#60a5fa",
+      waveColor: "#3a3a3e",
+      progressColor: "#F5A623",
+      cursorColor: "#F5A623",
       cursorWidth: 1,
       barWidth: 2,
       barGap: 1,
@@ -119,7 +120,7 @@ export function PlaybackBar({
       regions.addRegion({
         start: seg.start_time,
         end: seg.end_time,
-        color: "rgba(96, 165, 250, 0.08)",
+        color: "rgba(245, 166, 35, 0.08)",
         drag: false,
         resize: false,
       });
@@ -169,7 +170,9 @@ export function PlaybackBar({
         alignItems: "center",
         gap: "6px",
         padding: "8px 16px",
-        backgroundColor: "var(--bg-secondary)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(28, 28, 31, 0.92)",
         borderTop: "1px solid var(--border)",
         fontSize: "13px",
       }}
@@ -179,8 +182,14 @@ export function PlaybackBar({
         onClick={onSkipBackward}
         style={controlBtnStyle}
         title="Backward 10s (←)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.textShadow = "0 0 8px rgba(245, 166, 35, 0.5)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.textShadow = "none";
+        }}
       >
-        ⏪
+        {"\u27EA"}
       </button>
 
       {/* Play/Pause button */}
@@ -188,6 +197,12 @@ export function PlaybackBar({
         onClick={isPlaying ? onPause : onResume}
         style={{ ...controlBtnStyle, fontSize: "16px" }}
         title={isPlaying ? "Pause (Space)" : "Resume (Space)"}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.textShadow = "0 0 8px rgba(245, 166, 35, 0.5)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.textShadow = "none";
+        }}
       >
         {isPlaying ? "\u23F8" : "\u25B6"}
       </button>
@@ -197,8 +212,14 @@ export function PlaybackBar({
         onClick={onSkipForward}
         style={controlBtnStyle}
         title="Forward 10s (→)"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.textShadow = "0 0 8px rgba(245, 166, 35, 0.5)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.textShadow = "none";
+        }}
       >
-        ⏩
+        {"\u27EB"}
       </button>
 
       {/* Session title */}
@@ -207,9 +228,12 @@ export function PlaybackBar({
           flexShrink: 0,
           maxWidth: "120px",
           overflow: "hidden",
-          textOverflow: "ellipsis",
           whiteSpace: "nowrap",
           color: "var(--text-secondary)",
+          maskImage:
+            "linear-gradient(to right, black 70%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to right, black 70%, transparent 100%)",
         }}
       >
         {sessionTitle}
@@ -220,6 +244,7 @@ export function PlaybackBar({
         style={{
           flexShrink: 0,
           color: "var(--text-muted)",
+          fontFamily: "'JetBrains Mono', monospace",
           fontSize: "12px",
           minWidth: "36px",
           textAlign: "right",
@@ -244,6 +269,7 @@ export function PlaybackBar({
         style={{
           flexShrink: 0,
           color: "var(--text-muted)",
+          fontFamily: "'JetBrains Mono', monospace",
           fontSize: "12px",
           minWidth: "36px",
         }}
@@ -259,7 +285,16 @@ export function PlaybackBar({
           fontSize: "12px",
           minWidth: "40px",
           textAlign: "center",
-          color: playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
+          borderRadius: "12px",
+          padding: "2px 10px",
+          background:
+            playbackRate !== 1.0 ? "var(--accent-glow)" : "transparent",
+          color:
+            playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
+          border:
+            playbackRate !== 1.0
+              ? "1px solid var(--border-accent)"
+              : "1px solid transparent",
         }}
         title="Playback speed"
       >
@@ -275,6 +310,12 @@ export function PlaybackBar({
           fontSize: "14px",
         }}
         title="Stop"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--danger)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--text-muted)";
+        }}
       >
         ✕
       </button>

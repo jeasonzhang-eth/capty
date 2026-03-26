@@ -6,13 +6,15 @@ interface SetupWizardProps {
 
 const wizardButtonStyle: React.CSSProperties = {
   backgroundColor: "var(--accent)",
-  color: "white",
+  color: "#141416",
   border: "none",
   borderRadius: "8px",
   padding: "12px 32px",
   fontSize: "15px",
   fontWeight: 600,
   cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
+  transition: "background-color 0.2s, transform 0.1s",
 };
 
 export function SetupWizard({
@@ -51,18 +53,29 @@ export function SetupWizard({
         height: "100vh",
         gap: "24px",
         padding: "40px",
+        backgroundColor: "var(--bg-primary)",
       }}
     >
       {step === 0 && (
         <>
-          <h1 style={{ fontSize: "32px", fontWeight: "bold" }}>
-            Welcome to Capty
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: 700,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "var(--text-primary)",
+            }}
+          >
+            Welcome to{" "}
+            <span style={{ color: "var(--accent)" }}>Capty</span>
           </h1>
           <p
             style={{
               color: "var(--text-secondary)",
               fontSize: "16px",
               textAlign: "center",
+              fontFamily: "'DM Sans', sans-serif",
+              lineHeight: 1.6,
             }}
           >
             Real-time speech-to-text transcription, powered by local AI models.
@@ -75,9 +88,22 @@ export function SetupWizard({
 
       {step === 1 && (
         <>
-          <h2 style={{ fontSize: "24px" }}>Choose Data Folder</h2>
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "var(--text-primary)",
+            }}
+          >
+            Choose Data Folder
+          </h2>
           <p
-            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+            style={{
+              color: "var(--text-secondary)",
+              textAlign: "center",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
           >
             Select where Capty stores recordings, transcripts, and models.
           </p>
@@ -86,7 +112,15 @@ export function SetupWizard({
           </button>
           {dataDir && (
             <p
-              style={{ color: "var(--text-secondary)", fontSize: "13px" }}
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "13px",
+                fontFamily: "'JetBrains Mono', monospace",
+                padding: "8px 16px",
+                backgroundColor: "var(--bg-tertiary)",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+              }}
             >
               {dataDir}
             </p>
@@ -103,9 +137,22 @@ export function SetupWizard({
 
       {step === 2 && (
         <>
-          <h2 style={{ fontSize: "24px" }}>Download Model</h2>
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "var(--text-primary)",
+            }}
+          >
+            Download Model
+          </h2>
           <p
-            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+            style={{
+              color: "var(--text-secondary)",
+              textAlign: "center",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
           >
             Download the ASR model for transcription. You can skip and do this
             later.
@@ -115,7 +162,7 @@ export function SetupWizard({
               <div
                 style={{
                   height: "8px",
-                  backgroundColor: "var(--bg-tertiary)",
+                  backgroundColor: "var(--bg-surface)",
                   borderRadius: "4px",
                   overflow: "hidden",
                 }}
@@ -124,8 +171,10 @@ export function SetupWizard({
                   style={{
                     height: "100%",
                     width: `${downloadProgress}%`,
-                    backgroundColor: "var(--accent)",
+                    background:
+                      "linear-gradient(90deg, var(--accent), var(--accent-hover))",
                     transition: "width 0.3s",
+                    borderRadius: "4px",
                   }}
                 />
               </div>
@@ -135,6 +184,7 @@ export function SetupWizard({
                   color: "var(--text-muted)",
                   textAlign: "center",
                   marginTop: "8px",
+                  fontFamily: "'JetBrains Mono', monospace",
                 }}
               >
                 {Math.round(downloadProgress)}%
@@ -146,6 +196,8 @@ export function SetupWizard({
               style={{
                 ...wizardButtonStyle,
                 backgroundColor: "var(--bg-tertiary)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border)",
               }}
             >
               Skip for Now
@@ -156,9 +208,22 @@ export function SetupWizard({
 
       {step === 3 && (
         <>
-          <h2 style={{ fontSize: "24px" }}>All Set!</h2>
+          <h2
+            style={{
+              fontSize: "24px",
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              color: "var(--text-primary)",
+            }}
+          >
+            All Set!
+          </h2>
           <p
-            style={{ color: "var(--text-secondary)", textAlign: "center" }}
+            style={{
+              color: "var(--text-secondary)",
+              textAlign: "center",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
           >
             Capty is ready to use. Start recording to begin transcription.
           </p>

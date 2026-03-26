@@ -1068,7 +1068,10 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <>
+    <div
+      className={store.isRecording ? "recording-mode" : ""}
+      style={{ display: "flex", flexDirection: "column", height: "100vh" }}
+    >
       <ControlBar
         isRecording={store.isRecording}
         sidecarReady={store.sidecarReady}
@@ -1194,7 +1197,7 @@ function App(): React.JSX.Element {
           onClose={() => setShowSettings(false)}
         />
       )}
-    </>
+    </div>
   );
 }
 

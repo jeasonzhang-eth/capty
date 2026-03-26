@@ -313,6 +313,23 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (13)
+
+- **"Studio Noir" 全局 UI 重设计** — 完整视觉重构，录音棚/广播控制室美学，功能逻辑完全不变
+  - **设计系统** — 新调色板（近黑炭灰背景 `#141416`、暖琥珀金主题色 `#F5A623`、暖白文字 `#e8e4df`）
+  - **字体** — Google Fonts 导入 DM Sans（UI 文字）+ JetBrains Mono（时间戳、代码、数据）
+  - **动画** — 新增 6 个 CSS keyframes：pulse-ring（录音按钮脉冲环）、breathe（呼吸闪烁）、fade-in-up（新字幕淡入）、blink（光标闪烁）、vu-pulse、glow-pulse
+  - **质感** — SVG fractal noise 纹理叠加、毛玻璃面板（`backdrop-filter: blur(12px)`）、自定义琥珀色滚动条
+  - **录音模式** — 录音时 `#root` 自动添加 `.recording-mode` CSS 类，底部红色径向渐变氛围光
+  - **ControlBar** — 毛玻璃背景、琥珀色发光状态指示灯、DM Sans 品牌文字
+  - **RecordingControls** — 居中 56px 英雄录音按钮（空闲琥珀边框、录音红色 + 3 层脉冲环扩散动画）、水平 VU 表（绿→琥珀→红渐变）、JetBrains Mono 计时器
+  - **HistoryPanel** — 毛玻璃面板、大写分组标题带琥珀左边框、选中项琥珀左边框 + 琥珀色调背景、毛玻璃右键菜单
+  - **TranscriptArea** — 琥珀色时间戳、段落卡片式布局、活跃段落琥珀高亮、新段落 fade-in-up 入场动画、琥珀闪烁光标
+  - **PlaybackBar** — 毛玻璃背景、wavesurfer 琥珀进度色、药丸形倍速按钮、JetBrains Mono 时间显示
+  - **SummaryPanel** — 琥珀色 Tab 下划线指示器、流式卡片琥珀边框辉光、Markdown 琥珀色链接和引用边框
+  - **SettingsModal** — 更深遮罩层、毛玻璃弹窗和确认对话框、琥珀色侧边栏悬停效果、统一暖色标签
+  - **SetupWizard** — "Capty" 琥珀色高亮、JetBrains Mono 路径显示、琥珀渐变进度条
+
 ### 2026-03-26 (12)
 
 - **ControlBar "Studio Noir" 视觉重设计** — 纯样式重写，功能逻辑不变

@@ -273,7 +273,7 @@ export function SummaryPanel({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "2px",
+              gap: "0px",
               flexShrink: 0,
             }}
           >
@@ -305,6 +305,7 @@ export function SummaryPanel({
                 openEdit(pt);
               }}
               title="Edit prompt"
+              className="edit-tab-btn"
               style={{
                 padding: "2px 4px",
                 fontSize: "10px",
@@ -312,8 +313,9 @@ export function SummaryPanel({
                 backgroundColor: "transparent",
                 border: "none",
                 cursor: "pointer",
-                opacity: 0.6,
+                opacity: 0.3,
                 flexShrink: 0,
+                transition: "opacity 0.15s ease",
               }}
             >
               ✎
@@ -323,6 +325,7 @@ export function SummaryPanel({
         <button
           onClick={() => setIsAdding(true)}
           title="Add custom tab"
+          className="add-tab-btn"
           style={{
             padding: "8px 10px",
             fontSize: "14px",
@@ -331,6 +334,7 @@ export function SummaryPanel({
             border: "none",
             cursor: "pointer",
             flexShrink: 0,
+            transition: "color 0.15s ease",
           }}
         >
           +
@@ -356,17 +360,19 @@ export function SummaryPanel({
               value={localProviderId}
               onChange={(e) => setLocalProviderId(e.target.value)}
               disabled={isGenerating}
+              className="provider-select"
               style={{
                 flex: 1,
                 padding: "4px 8px",
                 fontSize: "11px",
                 borderRadius: "4px",
                 border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
+                backgroundColor: "var(--bg-surface)",
                 color: "var(--text-primary)",
                 cursor: isGenerating ? "not-allowed" : "pointer",
                 outline: "none",
                 marginRight: "8px",
+                transition: "border-color 0.15s ease",
               }}
             >
               {configuredProviders.map((p) => (
@@ -382,7 +388,7 @@ export function SummaryPanel({
             style={{
               padding: "5px 12px",
               fontSize: "11px",
-              borderRadius: "5px",
+              borderRadius: "6px",
               border: "none",
               backgroundColor: canGenerate
                 ? "var(--accent)"
@@ -433,7 +439,7 @@ export function SummaryPanel({
               border: "1px solid rgba(239, 68, 68, 0.3)",
               borderRadius: "6px",
               fontSize: "12px",
-              color: "#ef4444",
+              color: "var(--danger)",
               lineHeight: "18px",
             }}
           >
@@ -507,7 +513,7 @@ export function SummaryPanel({
           style={{
             position: "absolute",
             inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
+            backgroundColor: "rgba(0,0,0,0.6)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -517,8 +523,8 @@ export function SummaryPanel({
         >
           <div
             style={{
-              backgroundColor: "var(--bg-primary)",
-              borderRadius: "8px",
+              backgroundColor: "var(--bg-secondary)",
+              borderRadius: "10px",
               border: "1px solid var(--border)",
               padding: "16px",
               width: "100%",
@@ -542,14 +548,16 @@ export function SummaryPanel({
               value={editLabel}
               onChange={(e) => setEditLabel(e.target.value)}
               placeholder="Tab label"
+              className="modal-input"
               style={{
                 padding: "6px 8px",
                 fontSize: "12px",
                 borderRadius: "4px",
                 border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
+                backgroundColor: "var(--bg-surface)",
                 color: "var(--text-primary)",
                 outline: "none",
+                transition: "border-color 0.15s ease",
               }}
             />
             <textarea
@@ -557,16 +565,18 @@ export function SummaryPanel({
               onChange={(e) => setEditPrompt(e.target.value)}
               placeholder="System prompt"
               rows={6}
+              className="modal-input"
               style={{
                 padding: "6px 8px",
                 fontSize: "12px",
                 borderRadius: "4px",
                 border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
+                backgroundColor: "var(--bg-surface)",
                 color: "var(--text-primary)",
                 outline: "none",
                 resize: "vertical",
                 fontFamily: "inherit",
+                transition: "border-color 0.15s ease",
               }}
             />
             <div
@@ -605,7 +615,7 @@ export function SummaryPanel({
                     borderRadius: "4px",
                     border: "1px solid rgba(239,68,68,0.3)",
                     backgroundColor: "rgba(239,68,68,0.1)",
-                    color: "#ef4444",
+                    color: "var(--danger)",
                     cursor: "pointer",
                     marginRight: "auto",
                   }}
@@ -657,7 +667,7 @@ export function SummaryPanel({
           style={{
             position: "absolute",
             inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
+            backgroundColor: "rgba(0,0,0,0.6)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -667,8 +677,8 @@ export function SummaryPanel({
         >
           <div
             style={{
-              backgroundColor: "var(--bg-primary)",
-              borderRadius: "8px",
+              backgroundColor: "var(--bg-secondary)",
+              borderRadius: "10px",
               border: "1px solid var(--border)",
               padding: "16px",
               width: "100%",
@@ -692,14 +702,16 @@ export function SummaryPanel({
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Tab name (e.g. Action Items)"
+              className="modal-input"
               style={{
                 padding: "6px 8px",
                 fontSize: "12px",
                 borderRadius: "4px",
                 border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
+                backgroundColor: "var(--bg-surface)",
                 color: "var(--text-primary)",
                 outline: "none",
+                transition: "border-color 0.15s ease",
               }}
             />
             <textarea
@@ -707,16 +719,18 @@ export function SummaryPanel({
               onChange={(e) => setNewPrompt(e.target.value)}
               placeholder="System prompt for this tab..."
               rows={6}
+              className="modal-input"
               style={{
                 padding: "6px 8px",
                 fontSize: "12px",
                 borderRadius: "4px",
                 border: "1px solid var(--border)",
-                backgroundColor: "var(--bg-tertiary)",
+                backgroundColor: "var(--bg-surface)",
                 color: "var(--text-primary)",
                 outline: "none",
                 resize: "vertical",
                 fontFamily: "inherit",
+                transition: "border-color 0.15s ease",
               }}
             />
             <div
@@ -777,6 +791,18 @@ export function SummaryPanel({
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
+        .edit-tab-btn:hover {
+          opacity: 0.7 !important;
+        }
+        .add-tab-btn:hover {
+          color: var(--accent) !important;
+        }
+        .provider-select:focus {
+          border-color: var(--accent) !important;
+        }
+        .modal-input:focus {
+          border-color: var(--accent) !important;
+        }
         .streaming-cursor {
           display: inline-block;
           width: 6px;
@@ -812,7 +838,7 @@ export function SummaryPanel({
         }
         .summary-md pre code { background: none; padding: 0; }
         .summary-md blockquote {
-          border-left: 3px solid var(--border);
+          border-left: 3px solid var(--border-accent);
           margin: 6px 0;
           padding: 2px 10px;
           color: var(--text-muted);
@@ -859,7 +885,8 @@ function StreamingCard({
         padding: "12px",
         backgroundColor: "var(--bg-secondary)",
         borderRadius: "8px",
-        border: "1px solid var(--accent)",
+        border: "1px solid var(--border-accent)",
+        boxShadow: "0 0 12px rgba(245, 166, 35, 0.08)",
         position: "relative",
       }}
     >
@@ -892,8 +919,8 @@ function StreamingCard({
               display: "inline-block",
               width: "12px",
               height: "12px",
-              border: "2px solid rgba(100,100,100,0.3)",
-              borderTopColor: "var(--accent)",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "white",
               borderRadius: "50%",
               animation: "spin 0.8s linear infinite",
             }}
@@ -944,6 +971,7 @@ function SummaryCard({
           justifyContent: "space-between",
           alignItems: "center",
           fontSize: "10px",
+          fontFamily: "'JetBrains Mono', monospace",
           color: "var(--text-muted)",
         }}
       >
