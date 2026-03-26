@@ -313,6 +313,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (15)
+
+- **修复右键菜单被面板裁剪** — HistoryPanel 的右键菜单和删除确认弹窗改用 React Portal 渲染到 `document.body`，避免父容器 `overflow: hidden` + `backdrop-filter` 创建的 stacking context 导致 `position: fixed` 元素被裁剪
+
 ### 2026-03-26 (14)
 
 - **修复播放时字幕不同步** — 点击历史列表中某个会话的播放按钮时，如果该会话未被选中，现在会自动选中该会话并加载字幕段落，使歌词式滚动同步功能正常工作

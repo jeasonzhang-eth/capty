@@ -5,6 +5,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 
 interface SessionSummary {
   readonly id: number;
@@ -548,14 +549,12 @@ export function HistoryPanel({
                                   : "var(--text-muted)",
                                 fontSize: "12px",
                                 cursor:
-                                  isRecording &&
-                                  playingSessionId !== session.id
+                                  isRecording && playingSessionId !== session.id
                                     ? "not-allowed"
                                     : "pointer",
                                 padding: "0 2px",
                                 opacity:
-                                  isRecording &&
-                                  playingSessionId !== session.id
+                                  isRecording && playingSessionId !== session.id
                                     ? 0.4
                                     : 1,
                                 animation: isPlaying
@@ -649,202 +648,208 @@ export function HistoryPanel({
         )}
       </div>
 
-      {/* Context menu */}
-      {contextMenu.visible && (
-        <div
-          ref={menuRef}
-          style={{
-            position: "fixed",
-            top: contextMenu.y,
-            left: contextMenu.x,
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            backgroundColor: "rgba(28, 28, 31, 0.92)",
-            border: "1px solid var(--border)",
-            borderRadius: "6px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            zIndex: 1000,
-            minWidth: "160px",
-            padding: "4px 0",
-          }}
-        >
-          {(() => {
-            const targetSession = sessions.find(
-              (s) => s.id === contextMenu.sessionId,
-            );
-            const isCompleted = targetSession?.status === "completed";
-            const canRegenerate = isCompleted && regeneratingSessionId === null;
-            return (
-              <>
-                {canRegenerate && (
-                  <div
-                    onClick={handleRegenerateClick}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "13px",
-                      cursor: "pointer",
-                      color: "var(--text-primary)",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.backgroundColor =
-                        "var(--accent-glow)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.backgroundColor = "transparent")
-                    }
-                  >
-                    Regenerate Subtitles
-                  </div>
-                )}
-                {isCompleted && (
-                  <div
-                    onClick={handleOpenFolderClick}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "13px",
-                      cursor: "pointer",
-                      color: "var(--text-primary)",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.backgroundColor =
-                        "var(--accent-glow)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.backgroundColor = "transparent")
-                    }
-                  >
-                    Open Folder
-                  </div>
-                )}
-              </>
-            );
-          })()}
+      {/* Context menu — portal to body to avoid overflow clipping */}
+      {contextMenu.visible &&
+        createPortal(
           <div
-            onClick={handleRenameClick}
+            ref={menuRef}
             style={{
-              padding: "8px 16px",
-              fontSize: "13px",
-              cursor: "pointer",
-              color: "var(--text-primary)",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--accent-glow)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.backgroundColor = "transparent")
-            }
-          >
-            Rename
-          </div>
-          <div
-            onClick={handleDeleteClick}
-            style={{
-              padding: "8px 16px",
-              fontSize: "13px",
-              cursor: "pointer",
-              color: "var(--danger)",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.backgroundColor = "transparent")
-            }
-          >
-            Delete
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation dialog */}
-      {confirmDeleteId !== null && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.7)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 2000,
-          }}
-          onClick={handleCancelDelete}
-        >
-          <div
-            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
               backgroundColor: "rgba(28, 28, 31, 0.92)",
               border: "1px solid var(--border)",
-              borderRadius: "10px",
-              padding: "20px 24px",
-              maxWidth: "340px",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              borderRadius: "6px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              zIndex: 9000,
+              minWidth: "160px",
+              padding: "4px 0",
             }}
-            onClick={(e) => e.stopPropagation()}
+          >
+            {(() => {
+              const targetSession = sessions.find(
+                (s) => s.id === contextMenu.sessionId,
+              );
+              const isCompleted = targetSession?.status === "completed";
+              const canRegenerate =
+                isCompleted && regeneratingSessionId === null;
+              return (
+                <>
+                  {canRegenerate && (
+                    <div
+                      onClick={handleRegenerateClick}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "var(--accent-glow)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "transparent")
+                      }
+                    >
+                      Regenerate Subtitles
+                    </div>
+                  )}
+                  {isCompleted && (
+                    <div
+                      onClick={handleOpenFolderClick}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "var(--accent-glow)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "transparent")
+                      }
+                    >
+                      Open Folder
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+            <div
+              onClick={handleRenameClick}
+              style={{
+                padding: "8px 16px",
+                fontSize: "13px",
+                cursor: "pointer",
+                color: "var(--text-primary)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--accent-glow)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+            >
+              Rename
+            </div>
+            <div
+              onClick={handleDeleteClick}
+              style={{
+                padding: "8px 16px",
+                fontSize: "13px",
+                cursor: "pointer",
+                color: "var(--danger)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor =
+                  "rgba(239, 68, 68, 0.1)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+            >
+              Delete
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Confirmation dialog */}
+      {confirmDeleteId !== null &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+            }}
+            onClick={handleCancelDelete}
           >
             <div
               style={{
-                fontSize: "15px",
-                fontWeight: 600,
-                marginBottom: "8px",
-                color: "var(--text-primary)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                backgroundColor: "rgba(28, 28, 31, 0.92)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "20px 24px",
+                maxWidth: "340px",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              确认删除
-            </div>
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                marginBottom: "20px",
-                lineHeight: 1.5,
-              }}
-            >
-              此操作将同时删除录音记录和原始音频文件，且无法恢复。确定要删除吗？
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-              }}
-            >
-              <button
-                onClick={handleCancelDelete}
+              <div
                 style={{
-                  padding: "6px 16px",
-                  fontSize: "13px",
-                  borderRadius: "6px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "transparent",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  marginBottom: "8px",
                   color: "var(--text-primary)",
-                  cursor: "pointer",
                 }}
               >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmDelete}
+                确认删除
+              </div>
+              <div
                 style={{
-                  padding: "6px 16px",
                   fontSize: "13px",
-                  borderRadius: "6px",
-                  border: "none",
-                  backgroundColor: "var(--danger)",
-                  color: "#fff",
-                  cursor: "pointer",
+                  color: "var(--text-secondary)",
+                  marginBottom: "20px",
+                  lineHeight: 1.5,
                 }}
               >
-                删除
-              </button>
+                此操作将同时删除录音记录和原始音频文件，且无法恢复。确定要删除吗？
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                <button
+                  onClick={handleCancelDelete}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "none",
+                    backgroundColor: "var(--danger)",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  删除
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
