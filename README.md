@@ -294,7 +294,7 @@ pytest
   - sidecar `model_registry.py` 重写：删除 `BUILTIN_MODELS`，纯磁盘扫描 + `model-meta.json` 读取
   - `appStore.ts` 默认 `selectedModelId` 改为空字符串（不再硬编码模型 ID）
   - 统一目录命名：所有模型目录名 = `repo.replace("/", "--")`
-  - ControlBar 模型下拉：无已下载模型时显示 "No models — download in Settings" 占位提示
+  - ControlBar 模型下拉：无已下载模型时显示 "No models" 占位提示
   - 启动时自动选中第一个已下载模型（当保存的 modelId 不存在时）
 
 ### 2026-03-27 (28)

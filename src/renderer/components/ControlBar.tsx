@@ -174,7 +174,7 @@ export function ControlBar({
           >
             {models.filter((m) => m.downloaded).length === 0 && (
               <option value="" disabled>
-                No models — download in Settings
+                No models
               </option>
             )}
             {models
