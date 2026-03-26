@@ -9,11 +9,13 @@ functions from arbitrary threads or via the default executor.
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
+import mlx.core as mx
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,13 @@ PCM_MAX = 32768.0
 # Single-thread executor dedicated to MLX operations.  MLX's native C++
 # layer segfaults when accessed concurrently from multiple threads.
 _mlx_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
+
+# Limit the MLX metal buffer cache to 2 GB.  On Apple Silicon the GPU shares
+# system RAM (unified memory).  Without a limit the cache grows unbounded —
+# every inference allocates buffers that are kept for reuse, and over many
+# transcriptions this can consume 30+ GB of RAM.
+_MLX_CACHE_LIMIT_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
+mx.set_cache_limit(_MLX_CACHE_LIMIT_BYTES)
 
 
 def _pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
@@ -164,7 +173,9 @@ class ModelRunner:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             _mlx_executor,
-            lambda: session.transcribe((audio_float, sample_rate)),
+            lambda: _run_and_cleanup(
+                lambda: session.transcribe((audio_float, sample_rate))
+            ),
         )
 
         return result.text if result else ""
@@ -183,10 +194,21 @@ class ModelRunner:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             _mlx_executor,
-            lambda: mlx_whisper.transcribe(
-                audio_float,
-                path_or_hf_repo=model_path,
+            lambda: _run_and_cleanup(
+                lambda: mlx_whisper.transcribe(
+                    audio_float,
+                    path_or_hf_repo=model_path,
+                )
             ),
         )
 
         return result.get("text", "") if result else ""
+
+
+def _run_and_cleanup(fn):
+    """Run *fn*, then release MLX cache and collect garbage."""
+    try:
+        return fn()
+    finally:
+        mx.clear_cache()
+        gc.collect()

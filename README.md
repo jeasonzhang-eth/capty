@@ -283,6 +283,14 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (6)
+
+- **修复 Sidecar 内存无限增长** — MLX GPU 缓存池未清理
+  - 根因：Apple Silicon 统一内存架构下，MLX 的 metal buffer 缓存池默认无上限，每次推理分配的 GPU 缓冲区不会归还系统，只是留在池中等待复用，长时间录音后从 2-3 GB 增长到 30+ GB
+  - 修复：启动时 `mx.set_cache_limit(2GB)` 限制缓存池上限
+  - 每次推理后 `mx.clear_cache()` + `gc.collect()` 主动释放未使用缓存
+  - 使用新版 MLX API（`mx.set_cache_limit` / `mx.clear_cache`），消除 deprecation 警告
+
 ### 2026-03-26 (5)
 
 - **修复 Sidecar 录音中崩溃** — MLX 并发推理导致 segfault
