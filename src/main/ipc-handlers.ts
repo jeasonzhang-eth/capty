@@ -500,42 +500,24 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     ) => {
       const wavBuffer = pcmToWav(Buffer.from(pcmData), 16000, 1, 16);
 
-      // Build multipart form data
-      const boundary =
-        "----CaptyBoundary" +
-        Date.now().toString(36) +
-        Math.random().toString(36);
-      const header = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="file"; filename="audio.wav"`,
-        `Content-Type: audio/wav`,
-        "",
-      ].join("\r\n");
-      const modelField = [
-        "",
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="model"`,
-        "",
-        provider.model,
-        `--${boundary}--`,
-        "",
-      ].join("\r\n");
-
-      const headerBuf = Buffer.from(header, "utf-8");
-      const modelBuf = Buffer.from(modelField, "utf-8");
-      const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([wavBuffer], { type: "audio/wav" }),
+        "audio.wav",
+      );
+      formData.append("model", provider.model);
 
       // Strip trailing /v1 or / to avoid double /v1/v1 paths
       const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
       const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
           ...(provider.apiKey
             ? { Authorization: `Bearer ${provider.apiKey}` }
             : {}),
         },
-        body,
+        body: formData,
         signal: AbortSignal.timeout(60000),
       });
 
@@ -560,40 +542,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const silentPcm = Buffer.alloc(3200);
       const wavBuffer = pcmToWav(silentPcm, 16000, 1, 16);
 
-      const boundary =
-        "----CaptyBoundary" +
-        Date.now().toString(36) +
-        Math.random().toString(36);
-      const header = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="file"; filename="test.wav"`,
-        `Content-Type: audio/wav`,
-        "",
-      ].join("\r\n");
-      const modelField = [
-        "",
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="model"`,
-        "",
-        provider.model,
-        `--${boundary}--`,
-        "",
-      ].join("\r\n");
-
-      const headerBuf = Buffer.from(header, "utf-8");
-      const modelBuf = Buffer.from(modelField, "utf-8");
-      const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([wavBuffer], { type: "audio/wav" }),
+        "test.wav",
+      );
+      formData.append("model", provider.model);
 
       const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
       const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
           ...(provider.apiKey
             ? { Authorization: `Bearer ${provider.apiKey}` }
             : {}),
         },
-        body,
+        body: formData,
         signal: AbortSignal.timeout(10000),
       });
 
