@@ -33,6 +33,7 @@ export interface AsrProviderState {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly isSidecar: boolean;
 }
 
 interface AppState {
@@ -41,10 +42,9 @@ interface AppState {
   readonly sidecarReady: boolean;
   readonly dataDir: string | null;
 
-  // ASR backend
-  readonly asrBackend: "builtin" | "external";
-  readonly sidecarUrl: string;
-  readonly asrProvider: AsrProviderState | null;
+  // ASR providers
+  readonly asrProviders: readonly AsrProviderState[];
+  readonly selectedAsrProviderId: string | null;
 
   // Current session
   readonly currentSessionId: number | null;
@@ -65,9 +65,8 @@ interface AppState {
   readonly setRecording: (v: boolean) => void;
   readonly setSidecarReady: (v: boolean) => void;
   readonly setDataDir: (dir: string | null) => void;
-  readonly setAsrBackend: (backend: "builtin" | "external") => void;
-  readonly setSidecarUrl: (url: string) => void;
-  readonly setAsrProvider: (provider: AsrProviderState | null) => void;
+  readonly setAsrProviders: (providers: AsrProviderState[]) => void;
+  readonly setSelectedAsrProviderId: (id: string | null) => void;
   readonly setCurrentSessionId: (id: number | null) => void;
   readonly addSegment: (seg: Segment) => void;
   readonly setSegments: (segs: Segment[]) => void;
@@ -87,9 +86,8 @@ const initialState = {
   isRecording: false,
   sidecarReady: false,
   dataDir: null as string | null,
-  asrBackend: "builtin" as "builtin" | "external",
-  sidecarUrl: "http://localhost:8765",
-  asrProvider: null as AsrProviderState | null,
+  asrProviders: [] as AsrProviderState[],
+  selectedAsrProviderId: null as string | null,
   currentSessionId: null as number | null,
   segments: [] as Segment[],
   partialText: "",
@@ -107,9 +105,8 @@ export const useAppStore = create<AppState>((set) => ({
   setRecording: (v) => set({ isRecording: v }),
   setSidecarReady: (v) => set({ sidecarReady: v }),
   setDataDir: (dir) => set({ dataDir: dir }),
-  setAsrBackend: (backend) => set({ asrBackend: backend }),
-  setSidecarUrl: (url) => set({ sidecarUrl: url }),
-  setAsrProvider: (provider) => set({ asrProvider: provider }),
+  setAsrProviders: (providers) => set({ asrProviders: providers }),
+  setSelectedAsrProviderId: (id) => set({ selectedAsrProviderId: id }),
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   addSegment: (seg) => set((state) => ({ segments: [...state.segments, seg] })),
   setSegments: (segs) => set({ segments: segs, partialText: "" }),

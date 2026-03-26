@@ -23,6 +23,7 @@ export interface AsrProvider {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly isSidecar: boolean;
 }
 
 export interface PromptType {
@@ -69,9 +70,8 @@ export interface AppConfig {
   readonly zoomFactor: number | null;
   readonly historyPanelWidth: number | null;
   readonly summaryPanelWidth: number | null;
-  readonly asrBackend: "builtin" | "external";
-  readonly sidecarUrl: string;
-  readonly asrProvider: AsrProvider | null;
+  readonly asrProviders: AsrProvider[];
+  readonly selectedAsrProviderId: string | null;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -107,9 +107,17 @@ const DEFAULT_CONFIG: AppConfig = {
   zoomFactor: null,
   historyPanelWidth: null,
   summaryPanelWidth: null,
-  asrBackend: "builtin",
-  sidecarUrl: "http://localhost:8765",
-  asrProvider: null,
+  asrProviders: [
+    {
+      id: "sidecar",
+      name: "Local Sidecar",
+      baseUrl: "http://localhost:8765",
+      apiKey: "",
+      model: "",
+      isSidecar: true,
+    },
+  ],
+  selectedAsrProviderId: "sidecar",
 };
 
 export function readConfig(configDir: string): AppConfig {
@@ -117,10 +125,63 @@ export function readConfig(configDir: string): AppConfig {
 
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw) as Partial<AppConfig>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    // Migrate old asrBackend/sidecarUrl/asrProvider to asrProviders[]
+    if ("asrBackend" in parsed && !("asrProviders" in parsed)) {
+      const oldBackend = parsed.asrBackend as "builtin" | "external";
+      const oldSidecarUrl =
+        (parsed.sidecarUrl as string) ?? "http://localhost:8765";
+      const oldProvider = parsed.asrProvider as {
+        id: string;
+        name: string;
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+      } | null;
+
+      const providers: AsrProvider[] = [
+        {
+          id: "sidecar",
+          name: "Local Sidecar",
+          baseUrl: oldSidecarUrl,
+          apiKey: "",
+          model: "",
+          isSidecar: true,
+        },
+      ];
+
+      if (oldProvider?.baseUrl) {
+        providers.push({
+          id: oldProvider.id || `ext-${Date.now()}`,
+          name: oldProvider.name || "External ASR",
+          baseUrl: oldProvider.baseUrl,
+          apiKey: oldProvider.apiKey || "",
+          model: oldProvider.model || "",
+          isSidecar: false,
+        });
+      }
+
+      const selectedId =
+        oldBackend === "external" && oldProvider?.baseUrl
+          ? oldProvider.id || providers[1]?.id
+          : "sidecar";
+
+      parsed.asrProviders = providers;
+      parsed.selectedAsrProviderId = selectedId;
+      delete parsed.asrBackend;
+      delete parsed.sidecarUrl;
+      delete parsed.asrProvider;
+
+      // Write migrated config back to disk
+      const migrated = { ...DEFAULT_CONFIG, ...parsed } as AppConfig;
+      writeConfig(configDir, migrated);
+      return migrated;
+    }
+
     return {
       ...DEFAULT_CONFIG,
-      ...parsed,
+      ...(parsed as Partial<AppConfig>),
     };
   } catch {
     return { ...DEFAULT_CONFIG };

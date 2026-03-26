@@ -30,7 +30,6 @@ import {
   getDataDir,
   LlmProvider,
   PromptType,
-  AsrProvider,
   getEffectivePromptTypes,
   DEFAULT_PROMPT_TYPES,
 } from "./config";
@@ -472,12 +471,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   // Sidecar
   ipcMain.handle("sidecar:get-url", () => {
     const config = readConfig(configDir);
-    return config.sidecarUrl ?? "http://localhost:8765";
+    const sidecarProvider = (config.asrProviders ?? []).find(
+      (p) => p.isSidecar,
+    );
+    return sidecarProvider?.baseUrl ?? "http://localhost:8765";
   });
 
   ipcMain.handle("sidecar:health-check", async () => {
     const config = readConfig(configDir);
-    const url = config.sidecarUrl ?? "http://localhost:8765";
+    const sidecarProvider = (config.asrProviders ?? []).find(
+      (p) => p.isSidecar,
+    );
+    const url = sidecarProvider?.baseUrl ?? "http://localhost:8765";
     try {
       const resp = await fetch(`${url}/health`, {
         signal: AbortSignal.timeout(3000),
@@ -653,8 +658,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (fs.existsSync(modelPath)) {
       // Notify sidecar to unload if it's the active model
       try {
-        const sidecarUrl =
-          readConfig(configDir).sidecarUrl ?? "http://localhost:8765";
+        const cfg = readConfig(configDir);
+        const sidecarProvider = (cfg.asrProviders ?? []).find(
+          (p) => p.isSidecar,
+        );
+        const sidecarUrl = sidecarProvider?.baseUrl ?? "http://localhost:8765";
         const healthResp = await fetch(`${sidecarUrl}/health`, {
           signal: AbortSignal.timeout(2000),
         });

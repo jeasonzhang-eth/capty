@@ -15,14 +15,14 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（ASR 后端切换 + 模型管理，合并为一页）、Language Models（LLM provider 配置与测试）；Segmented Control 切换 Built-in / External 模式
+- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（ASR Provider 列表 + 本地模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
-- **双 ASR 后端** — 支持 Built-in Sidecar（本地 MLX 推理）和 External ASR Server 两种转录后端，均通过 OpenAI 兼容 HTTP API（`POST /v1/audio/transcriptions`）通信，可在 Settings > Speech Backend 切换
+- **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -51,20 +51,18 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 │                                                              │
 │  ipc-handlers.ts ──→ 模型管理、配置、数据库、文件 I/O          │
 │  ├── sidecar:health-check ──→ 检测 sidecar 是否在线           │
-│  ├── asr:transcribe ──→ HTTP POST ASR API（sidecar 或外部）   │
+│  ├── asr:transcribe ──→ HTTP POST ASR API（统一 Provider）    │
 │  └── asr:test ──→ ASR 连通性测试                              │
 ├──────────────────────────────────────────────────────────────┤
-│  路径 A: Built-in Sidecar（独立进程，用户手动启动）             │
+│  ASR Provider（统一架构，所有 Provider 使用相同协议）           │
 │                                                              │
-│  Python Sidecar (FastAPI + uvicorn)                          │
-│  HTTP: /health, /models, /models/switch                      │
-│  REST: POST /v1/audio/transcriptions (OpenAI 兼容)           │
-│  ModelRunner → qwen-asr / whisper (MLX GPU 加速)             │
-├──────────────────────────────────────────────────────────────┤
-│  路径 B: External ASR Server（OpenAI 兼容 HTTP API）          │
+│  Provider 1: Local Sidecar (预配置)                           │
+│    Python (FastAPI + uvicorn) · MLX GPU 加速                  │
+│    POST /v1/audio/transcriptions (OpenAI 兼容)               │
 │                                                              │
-│  POST /v1/audio/transcriptions (multipart WAV + model)       │
-│  任何兼容 OpenAI Whisper API 的服务均可接入                     │
+│  Provider 2..N: 外部 ASR 服务                                 │
+│    POST /v1/audio/transcriptions (multipart WAV + model)     │
+│    任何兼容 OpenAI Whisper API 的服务均可接入                   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,7 +77,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 5. 主进程 `pcmToWav()` 转换为 WAV → multipart POST 到 `{baseUrl}/v1/audio/transcriptions`
 6. API 返回 `{text}` → IPC 回传 → 前端追加到字幕列表
 
-Built-in 模式的 `baseUrl` 指向本地 Sidecar（如 `http://localhost:8765`），External 模式指向外部 ASR 服务器。两者使用完全相同的 OpenAI 兼容 HTTP 协议。
+活跃 Provider 的 `baseUrl` 指向对应的 ASR 服务（本地 Sidecar 或外部服务器），所有 Provider 使用完全相同的 OpenAI 兼容 HTTP 协议。
 
 **模型管理**（Electron IPC）：
 
@@ -166,9 +164,8 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `zoomFactor` | `number \| null` | 界面缩放比例，`null` 时使用默认值 1.0；通过 Cmd/Ctrl + =/- 调整 |
 | `historyPanelWidth` | `number \| null` | HistoryPanel 宽度（px），`null` 时使用默认值 240，范围 160-400 |
 | `summaryPanelWidth` | `number \| null` | SummaryPanel 宽度（px），`null` 时使用默认值 320，范围 220-600 |
-| `asrBackend` | `"builtin" \| "external"` | ASR 后端类型，默认 `"builtin"` |
-| `sidecarUrl` | `string` | Sidecar 地址，默认 `http://localhost:8765` |
-| `asrProvider` | `AsrProvider \| null` | 外部 ASR 服务配置（id / name / baseUrl / apiKey / model） |
+| `asrProviders` | `AsrProvider[]` | ASR Provider 列表，每个含 id / name / baseUrl / apiKey / model / isSidecar；默认含一个 Local Sidecar |
+| `selectedAsrProviderId` | `string \| null` | 当前激活的 ASR Provider ID |
 
 #### user-models.json
 
@@ -296,6 +293,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (22)
+
+- **统一 ASR Provider 架构** — 移除 Built-in / External 二元切换，改为统一的 ASR Provider 列表
+  - 新增 `AsrProvider` 接口，含 `isSidecar` 字段区分本地 Sidecar 和外部服务
+  - config.json 移除 `asrBackend` / `sidecarUrl` / `asrProvider` 三个旧字段，新增 `asrProviders[]` + `selectedAsrProviderId`
+  - 自动迁移旧配置：检测到旧格式时自动转换为新 Provider 列表，写回磁盘
+  - Settings > Speech 重写为 Provider 列表 + 本地模型管理：每个 Provider 一张卡片，支持 Add / Edit / Test / Use / Delete
+  - Local Sidecar 作为预配置的第一个 Provider，不可删除
+  - Local Models 和 Download Models 区域始终可见（不再受 Backend 切换控制）
+  - ControlBar 状态显示：Sidecar+Online → 琥珀色 Ready / Sidecar+Offline → 灰色 Offline / 外部 Provider → 蓝色 Provider 名 / 无 Provider → 灰色 No Provider
+  - 移除 SegmentedControl 组件（不再需要）
+  - App.tsx 移除所有 `asrBackend` 分支，统一为 Provider 查找逻辑
 
 ### 2026-03-26 (21)
 

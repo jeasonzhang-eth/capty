@@ -3,8 +3,8 @@ import React from "react";
 interface ControlBarProps {
   readonly isRecording: boolean;
   readonly sidecarReady: boolean;
-  readonly asrBackend: "builtin" | "external";
-  readonly asrProviderName: string | null;
+  readonly activeProviderName: string | null;
+  readonly isSidecarActive: boolean;
   readonly devices: readonly MediaDeviceInfo[];
   readonly selectedDeviceId: string | null;
   readonly onDeviceChange: (deviceId: string) => void;
@@ -26,8 +26,8 @@ interface ControlBarProps {
 export function ControlBar({
   isRecording,
   sidecarReady,
-  asrBackend,
-  asrProviderName,
+  activeProviderName,
+  isSidecarActive,
   devices,
   selectedDeviceId,
   onDeviceChange,
@@ -52,19 +52,12 @@ export function ControlBar({
     statusLabel = "Recording";
     statusGlow = "0 0 6px rgba(239, 68, 68, 0.6)";
     statusAnimation = "breathe 1.5s ease-in-out infinite";
-  } else if (asrBackend === "external") {
-    if (asrProviderName) {
-      statusColor = "#3b82f6";
-      statusLabel = `External (${asrProviderName})`;
-      statusGlow = "0 0 6px rgba(59, 130, 246, 0.5)";
-      statusAnimation = undefined;
-    } else {
-      statusColor = "var(--text-muted)";
-      statusLabel = "Not Configured";
-      statusGlow = "none";
-      statusAnimation = undefined;
-    }
-  } else {
+  } else if (!activeProviderName) {
+    statusColor = "var(--text-muted)";
+    statusLabel = "No Provider";
+    statusGlow = "none";
+    statusAnimation = undefined;
+  } else if (isSidecarActive) {
     if (sidecarReady) {
       statusColor = "var(--accent)";
       statusLabel = "Ready";
@@ -72,10 +65,15 @@ export function ControlBar({
       statusAnimation = undefined;
     } else {
       statusColor = "var(--text-muted)";
-      statusLabel = "Sidecar Offline";
+      statusLabel = "Offline";
       statusGlow = "none";
       statusAnimation = undefined;
     }
+  } else {
+    statusColor = "#3b82f6";
+    statusLabel = activeProviderName;
+    statusGlow = "0 0 6px rgba(59, 130, 246, 0.5)";
+    statusAnimation = undefined;
   }
 
   return (
@@ -151,7 +149,7 @@ export function ControlBar({
         ))}
       </select>
 
-      {asrBackend === "builtin" && (
+      {isSidecarActive && (
         <>
           <select
             value={selectedModelId}
@@ -241,8 +239,7 @@ export function ControlBar({
         onClick={onSettings}
         onMouseEnter={(e) => {
           e.currentTarget.style.color = "var(--text-primary)";
-          e.currentTarget.style.textShadow =
-            "0 0 8px rgba(245, 166, 35, 0.4)";
+          e.currentTarget.style.textShadow = "0 0 8px rgba(245, 166, 35, 0.4)";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.color = "var(--text-muted)";

@@ -5,11 +5,7 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import {
-  SettingsModal,
-  LlmProvider,
-  AsrProviderConfig,
-} from "./components/SettingsModal";
+import { SettingsModal, LlmProvider } from "./components/SettingsModal";
 import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
@@ -245,23 +241,19 @@ function App(): React.JSX.Element {
           // the device might be reconnected later
         }
 
-        // Restore ASR backend settings
-        const savedAsrBackend = config.asrBackend as
-          | "builtin"
-          | "external"
+        // Restore ASR providers
+        const savedAsrProviders = config.asrProviders as
+          | import("./stores/appStore").AsrProviderState[]
           | undefined;
-        if (savedAsrBackend) {
-          store.setAsrBackend(savedAsrBackend);
+        if (savedAsrProviders?.length) {
+          store.setAsrProviders(savedAsrProviders);
         }
-        const savedSidecarUrl = config.sidecarUrl as string | undefined;
-        if (savedSidecarUrl) {
-          store.setSidecarUrl(savedSidecarUrl);
-        }
-        const savedAsrProvider = config.asrProvider as
-          | AsrProviderConfig
+        const savedAsrProviderId = config.selectedAsrProviderId as
+          | string
+          | null
           | undefined;
-        if (savedAsrProvider) {
-          store.setAsrProvider(savedAsrProvider);
+        if (savedAsrProviderId !== undefined) {
+          store.setSelectedAsrProviderId(savedAsrProviderId);
         }
 
         // Check sidecar health
@@ -345,20 +337,25 @@ function App(): React.JSX.Element {
       store.loadSessions();
 
       // Configure transcription provider and connect
-      if (store.asrBackend === "external" && store.asrProvider) {
-        transcription.setProvider({
-          baseUrl: store.asrProvider.baseUrl,
-          apiKey: store.asrProvider.apiKey,
-          model: store.asrProvider.model,
-        });
-      } else {
-        const sidecarUrl = await window.capty.getSidecarUrl();
-        transcription.setProvider({
-          baseUrl: sidecarUrl,
-          apiKey: "",
-          model: store.selectedModelId,
-        });
+      const activeProvider = store.asrProviders.find(
+        (p) => p.id === store.selectedAsrProviderId,
+      );
+      if (!activeProvider) {
+        console.warn("No ASR provider selected");
+        store.setRecording(false);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+        return;
       }
+      transcription.setProvider({
+        baseUrl: activeProvider.baseUrl,
+        apiKey: activeProvider.apiKey,
+        model: activeProvider.isSidecar
+          ? store.selectedModelId
+          : activeProvider.model,
+      });
       transcription
         .connect()
         .catch((err: unknown) => console.warn("ASR connect failed:", err));
@@ -541,22 +538,22 @@ function App(): React.JSX.Element {
         }
         const totalSegments = audioSegments.length;
 
-        // Determine provider: external ASR or builtin sidecar (both use HTTP)
-        let provider: { baseUrl: string; apiKey: string; model: string };
-        if (store.asrBackend === "external" && store.asrProvider) {
-          provider = {
-            baseUrl: store.asrProvider.baseUrl,
-            apiKey: store.asrProvider.apiKey,
-            model: store.asrProvider.model,
-          };
-        } else {
-          const sidecarUrl = await window.capty.getSidecarUrl();
-          provider = {
-            baseUrl: sidecarUrl,
-            apiKey: "",
-            model: store.selectedModelId,
-          };
+        // Determine provider from unified provider list
+        const activeProvider = store.asrProviders.find(
+          (p) => p.id === store.selectedAsrProviderId,
+        );
+        if (!activeProvider) {
+          console.warn("No ASR provider selected");
+          setRegeneratingSessionId(null);
+          return;
         }
+        const provider = {
+          baseUrl: activeProvider.baseUrl,
+          apiKey: activeProvider.apiKey,
+          model: activeProvider.isSidecar
+            ? store.selectedModelId
+            : activeProvider.model,
+        };
 
         // Sequential HTTP POST for each segment (unified for both backends)
         for (let i = 0; i < totalSegments; i++) {
@@ -752,22 +749,20 @@ function App(): React.JSX.Element {
 
   const handleSaveAsrSettings = useCallback(
     async (settings: {
-      asrBackend: "builtin" | "external";
-      sidecarUrl: string;
-      asrProvider: AsrProviderConfig | null;
+      asrProviders: import("./stores/appStore").AsrProviderState[];
+      selectedAsrProviderId: string | null;
     }) => {
-      store.setAsrBackend(settings.asrBackend);
-      store.setSidecarUrl(settings.sidecarUrl);
-      store.setAsrProvider(settings.asrProvider);
+      store.setAsrProviders(settings.asrProviders);
+      store.setSelectedAsrProviderId(settings.selectedAsrProviderId);
       const config = await window.capty.getConfig();
       await window.capty.setConfig({
         ...config,
-        asrBackend: settings.asrBackend,
-        sidecarUrl: settings.sidecarUrl,
-        asrProvider: settings.asrProvider,
+        asrProviders: settings.asrProviders,
+        selectedAsrProviderId: settings.selectedAsrProviderId,
       });
-      // Re-check sidecar health if switching to builtin
-      if (settings.asrBackend === "builtin") {
+      // Re-check sidecar health if a sidecar provider exists
+      const hasSidecar = settings.asrProviders.some((p) => p.isSidecar);
+      if (hasSidecar) {
         try {
           const health = await window.capty.checkSidecarHealth();
           store.setSidecarReady(health.online);
@@ -899,9 +894,10 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Sidecar health polling (every 10s when in builtin mode)
+  // Sidecar health polling (every 10s when a sidecar provider exists)
   useEffect(() => {
-    if (store.asrBackend !== "builtin") return;
+    const hasSidecar = store.asrProviders.some((p) => p.isSidecar);
+    if (!hasSidecar) return;
     const poll = async (): Promise<void> => {
       try {
         const health = await window.capty.checkSidecarHealth();
@@ -912,7 +908,7 @@ function App(): React.JSX.Element {
     };
     const timer = setInterval(poll, 10000);
     return () => clearInterval(timer);
-  }, [store.asrBackend]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.asrProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for LLM streaming chunks
   useEffect(() => {
@@ -953,8 +949,14 @@ function App(): React.JSX.Element {
       <ControlBar
         isRecording={store.isRecording}
         sidecarReady={store.sidecarReady}
-        asrBackend={store.asrBackend}
-        asrProviderName={store.asrProvider?.name ?? null}
+        activeProviderName={
+          store.asrProviders.find((p) => p.id === store.selectedAsrProviderId)
+            ?.name ?? null
+        }
+        isSidecarActive={
+          store.asrProviders.find((p) => p.id === store.selectedAsrProviderId)
+            ?.isSidecar ?? false
+        }
         devices={audioCapture.devices}
         selectedDeviceId={audioCapture.selectedDeviceId}
         onDeviceChange={handleDeviceChange}
@@ -1062,9 +1064,9 @@ function App(): React.JSX.Element {
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={DEFAULT_HF_URL}
           llmProviders={llmProviders}
-          asrBackend={store.asrBackend}
-          sidecarUrl={store.sidecarUrl}
-          asrProvider={store.asrProvider}
+          asrProviders={store.asrProviders}
+          selectedAsrProviderId={store.selectedAsrProviderId}
+          sidecarReady={store.sidecarReady}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
