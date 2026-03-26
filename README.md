@@ -313,11 +313,17 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (18)
+
+- **修复迁移误改 title + 空状态文案** — 两项修复
+  - `title` 列原本就是 `datetime('now', 'localtime')`（本地时间），v1 迁移误将其当 UTC 再加 8 小时；新增 v2 迁移用 `datetime(title, 'utc')` 回滚
+  - TranscriptArea 空状态提示文字从 "Click Start" 改为 "Click REC"，与实际按钮一致
+
 ### 2026-03-26 (17)
 
 - **旧数据 UTC→本地时间迁移** — 一次性自动迁移旧数据中的 UTC 时间戳到本地时间
   - 使用 `PRAGMA user_version` 作为迁移版本控制，确保只执行一次
-  - 迁移 `sessions` 表的 `started_at`、`ended_at`、`title`（仅日期格式的 title）
+  - 迁移 `sessions` 表的 `started_at`、`ended_at`（title 已是本地时间，不动）
   - 迁移 `summaries` 表的 `created_at`
   - 自动重命名磁盘上的音频目录和 WAV 文件（UTC 时间戳→本地时间戳）
   - 整个迁移包裹在 SQLite 事务中，保证原子性

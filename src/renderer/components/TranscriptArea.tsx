@@ -98,7 +98,15 @@ export function TranscriptArea({
   }, [segments, partialText, isRecording]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "transparent" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        minHeight: 0,
+        background: "transparent",
+      }}
+    >
       {isPlayback && segments.length > 0 ? (
         <Lrc
           lrc={lrcString}
@@ -154,7 +162,11 @@ export function TranscriptArea({
 
           {isRecording && partialText && (
             <div
-              style={{ marginBottom: "12px", padding: "10px 16px", opacity: 0.7 }}
+              style={{
+                marginBottom: "12px",
+                padding: "10px 16px",
+                opacity: 0.7,
+              }}
             >
               <span
                 style={{
@@ -192,7 +204,17 @@ export function TranscriptArea({
                 fontFamily: "'DM Sans', sans-serif",
               }}
             >
-              Click <span style={{ color: "var(--accent)", margin: "0 5px", fontWeight: 600 }}>Start</span> to begin transcription
+              Click{" "}
+              <span
+                style={{
+                  color: "var(--accent)",
+                  margin: "0 5px",
+                  fontWeight: 600,
+                }}
+              >
+                REC
+              </span>{" "}
+              to begin transcription
             </div>
           )}
 
