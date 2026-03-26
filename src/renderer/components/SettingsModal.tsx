@@ -20,6 +20,14 @@ export interface LlmProvider {
   readonly isPreset: boolean;
 }
 
+export interface AsrProviderConfig {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+}
+
 interface SettingsModalProps {
   readonly dataDir: string | null;
   readonly configDir: string | null;
@@ -33,6 +41,9 @@ interface SettingsModalProps {
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
   readonly llmProviders: readonly LlmProvider[];
+  readonly asrBackend: "builtin" | "external";
+  readonly sidecarUrl: string;
+  readonly asrProvider: AsrProviderConfig | null;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
@@ -40,6 +51,11 @@ interface SettingsModalProps {
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onSaveLlmProviders: (providers: LlmProvider[]) => void;
+  readonly onSaveAsrSettings: (settings: {
+    asrBackend: "builtin" | "external";
+    sidecarUrl: string;
+    asrProvider: AsrProviderConfig | null;
+  }) => void;
   readonly onClose: () => void;
 }
 
@@ -69,10 +85,11 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-type TabId = "general" | "speech-models" | "language-models";
+type TabId = "general" | "speech-backend" | "speech-models" | "language-models";
 
 const TABS: readonly { readonly id: TabId; readonly label: string }[] = [
   { id: "general", label: "General" },
+  { id: "speech-backend", label: "Speech Backend" },
   { id: "speech-models", label: "Speech Models" },
   { id: "language-models", label: "Language Models" },
 ];
@@ -900,6 +917,472 @@ function SpeechModelsTab({
   );
 }
 
+/* ─── Tab: Speech Backend ─── */
+
+function SpeechBackendTab({
+  asrBackend,
+  sidecarUrl,
+  asrProvider,
+  isRecording,
+  dataDir,
+  onSave,
+}: {
+  readonly asrBackend: "builtin" | "external";
+  readonly sidecarUrl: string;
+  readonly asrProvider: AsrProviderConfig | null;
+  readonly isRecording: boolean;
+  readonly dataDir: string | null;
+  readonly onSave: (settings: {
+    asrBackend: "builtin" | "external";
+    sidecarUrl: string;
+    asrProvider: AsrProviderConfig | null;
+  }) => void;
+}): React.ReactElement {
+  const [backend, setBackend] = useState(asrBackend);
+  const [editSidecarUrl, setEditSidecarUrl] = useState(sidecarUrl);
+  const [editProvider, setEditProvider] = useState({
+    name: asrProvider?.name ?? "",
+    baseUrl: asrProvider?.baseUrl ?? "",
+    apiKey: asrProvider?.apiKey ?? "",
+    model: asrProvider?.model ?? "",
+  });
+  const [sidecarStatus, setSidecarStatus] = useState<
+    "checking" | "online" | "offline" | null
+  >(null);
+  const [asrTestResult, setAsrTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+  const [asrTesting, setAsrTesting] = useState(false);
+
+  const handleBackendChange = useCallback(
+    (newBackend: "builtin" | "external") => {
+      if (isRecording) return;
+      setBackend(newBackend);
+      if (newBackend === "builtin") {
+        onSave({
+          asrBackend: "builtin",
+          sidecarUrl: editSidecarUrl,
+          asrProvider: asrProvider,
+        });
+      } else {
+        onSave({
+          asrBackend: "external",
+          sidecarUrl: editSidecarUrl,
+          asrProvider: editProvider.baseUrl
+            ? {
+                id: asrProvider?.id ?? `ext-${Date.now()}`,
+                name: editProvider.name || "External ASR",
+                baseUrl: editProvider.baseUrl,
+                apiKey: editProvider.apiKey,
+                model: editProvider.model,
+              }
+            : null,
+        });
+      }
+    },
+    [isRecording, editSidecarUrl, editProvider, asrProvider, onSave],
+  );
+
+  const handleTestSidecar = useCallback(async () => {
+    setSidecarStatus("checking");
+    try {
+      const result = await window.capty.checkSidecarHealth();
+      setSidecarStatus(result.online ? "online" : "offline");
+    } catch {
+      setSidecarStatus("offline");
+    }
+    setTimeout(() => setSidecarStatus(null), 5000);
+  }, []);
+
+  const handleSaveSidecarUrl = useCallback(() => {
+    onSave({
+      asrBackend: backend,
+      sidecarUrl: editSidecarUrl,
+      asrProvider: asrProvider,
+    });
+  }, [backend, editSidecarUrl, asrProvider, onSave]);
+
+  const handleSaveAsrProvider = useCallback(() => {
+    const provider: AsrProviderConfig = {
+      id: asrProvider?.id ?? `ext-${Date.now()}`,
+      name: editProvider.name || "External ASR",
+      baseUrl: editProvider.baseUrl,
+      apiKey: editProvider.apiKey,
+      model: editProvider.model,
+    };
+    onSave({
+      asrBackend: backend,
+      sidecarUrl: editSidecarUrl,
+      asrProvider: provider,
+    });
+  }, [backend, editSidecarUrl, editProvider, asrProvider, onSave]);
+
+  const handleTestAsr = useCallback(async () => {
+    if (!editProvider.baseUrl || !editProvider.model) return;
+    setAsrTesting(true);
+    setAsrTestResult(null);
+    try {
+      await window.capty.asrTest({
+        baseUrl: editProvider.baseUrl,
+        apiKey: editProvider.apiKey,
+        model: editProvider.model,
+      });
+      setAsrTestResult({ ok: true, message: "Connection OK" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Connection failed";
+      setAsrTestResult({ ok: false, message: msg });
+    } finally {
+      setAsrTesting(false);
+      setTimeout(() => setAsrTestResult(null), 5000);
+    }
+  }, [editProvider]);
+
+  const cardStyle = (isActive: boolean): React.CSSProperties => ({
+    padding: "14px",
+    border: isActive ? "2px solid var(--accent)" : "1px solid var(--border)",
+    borderRadius: "8px",
+    cursor: isRecording ? "not-allowed" : "pointer",
+    opacity: isRecording ? 0.6 : 1,
+    backgroundColor: isActive ? "rgba(59, 130, 246, 0.08)" : "transparent",
+    transition: "border-color 0.2s, background-color 0.2s",
+  });
+
+  const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
+
+  return (
+    <>
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Backend Type</div>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <div
+            style={cardStyle(backend === "builtin")}
+            onClick={() => handleBackendChange("builtin")}
+          >
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                marginBottom: "4px",
+              }}
+            >
+              Built-in Sidecar
+            </div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              WebSocket protocol. Run sidecar process manually.
+            </div>
+          </div>
+          <div
+            style={cardStyle(backend === "external")}
+            onClick={() => handleBackendChange("external")}
+          >
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                marginBottom: "4px",
+              }}
+            >
+              External ASR Server
+            </div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              OpenAI-compatible HTTP API.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {backend === "builtin" && (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>Sidecar Configuration</div>
+          <div style={{ marginBottom: "12px" }}>
+            <div style={labelStyle}>Sidecar URL</div>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <input
+                type="text"
+                value={editSidecarUrl}
+                onChange={(e) => setEditSidecarUrl(e.target.value)}
+                placeholder="http://localhost:8765"
+                style={{
+                  flex: 1,
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+              />
+              {editSidecarUrl !== sidecarUrl && (
+                <button
+                  onClick={handleSaveSidecarUrl}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "none",
+                    backgroundColor: "var(--accent)",
+                    color: "white",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Save
+                </button>
+              )}
+              <button
+                onClick={handleTestSidecar}
+                disabled={sidecarStatus === "checking"}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "transparent",
+                  color: "var(--text-muted)",
+                  cursor:
+                    sidecarStatus === "checking" ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {sidecarStatus === "checking" ? "Checking..." : "Test"}
+              </button>
+            </div>
+            {sidecarStatus === "online" && (
+              <div
+                style={{
+                  marginTop: "6px",
+                  fontSize: "11px",
+                  color: "#22c55e",
+                }}
+              >
+                Sidecar is online
+              </div>
+            )}
+            {sidecarStatus === "offline" && (
+              <div
+                style={{
+                  marginTop: "6px",
+                  fontSize: "11px",
+                  color: "#ef4444",
+                }}
+              >
+                Sidecar is offline
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              padding: "10px 12px",
+              backgroundColor: "var(--bg-tertiary)",
+              borderRadius: "6px",
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              lineHeight: "18px",
+            }}
+          >
+            <div style={{ marginBottom: "4px", fontWeight: 600 }}>
+              Start command:
+            </div>
+            <code
+              style={{
+                display: "block",
+                padding: "6px 8px",
+                backgroundColor: "var(--bg-primary)",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                fontSize: "11px",
+                wordBreak: "break-all",
+              }}
+            >
+              capty-sidecar --models-dir {modelsDir} --port 8765
+            </code>
+          </div>
+        </div>
+      )}
+
+      {backend === "external" && (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>External ASR Server</div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            <div>
+              <div style={labelStyle}>Name</div>
+              <input
+                type="text"
+                value={editProvider.name}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, name: e.target.value })
+                }
+                placeholder="My ASR Server"
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <div style={labelStyle}>Base URL</div>
+              <input
+                type="text"
+                value={editProvider.baseUrl}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, baseUrl: e.target.value })
+                }
+                placeholder="http://localhost:8080"
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <div style={labelStyle}>API Key (optional)</div>
+              <input
+                type="password"
+                value={editProvider.apiKey}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, apiKey: e.target.value })
+                }
+                placeholder="sk-..."
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <div style={labelStyle}>Model</div>
+              <input
+                type="text"
+                value={editProvider.model}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, model: e.target.value })
+                }
+                placeholder="e.g. whisper-1"
+                style={{
+                  width: "100%",
+                  padding: "6px 8px",
+                  fontSize: "12px",
+                  backgroundColor: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+                marginTop: "4px",
+              }}
+            >
+              <button
+                onClick={handleTestAsr}
+                disabled={
+                  asrTesting || !editProvider.baseUrl || !editProvider.model
+                }
+                style={{
+                  padding: "6px 12px",
+                  fontSize: "11px",
+                  borderRadius: "5px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "transparent",
+                  color: "var(--text-muted)",
+                  cursor:
+                    asrTesting || !editProvider.baseUrl || !editProvider.model
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    asrTesting || !editProvider.baseUrl || !editProvider.model
+                      ? 0.5
+                      : 1,
+                }}
+              >
+                {asrTesting ? "Testing..." : "Test"}
+              </button>
+              <button
+                onClick={handleSaveAsrProvider}
+                disabled={!editProvider.baseUrl || !editProvider.model}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "11px",
+                  borderRadius: "5px",
+                  border: "none",
+                  backgroundColor: "var(--accent)",
+                  color: "white",
+                  cursor:
+                    !editProvider.baseUrl || !editProvider.model
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    !editProvider.baseUrl || !editProvider.model ? 0.5 : 1,
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {asrTestResult && (
+              <div
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  backgroundColor: asrTestResult.ok
+                    ? "rgba(34, 197, 94, 0.1)"
+                    : "rgba(239, 68, 68, 0.1)",
+                  color: asrTestResult.ok ? "#22c55e" : "#ef4444",
+                  wordBreak: "break-word",
+                }}
+              >
+                {asrTestResult.message}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─── Preset LLM provider templates ─── */
 
 const PRESET_PROVIDERS: readonly {
@@ -1473,6 +1956,9 @@ export function SettingsModal({
   hfMirrorUrl,
   defaultHfUrl,
   llmProviders,
+  asrBackend,
+  sidecarUrl,
+  asrProvider,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
@@ -1480,6 +1966,7 @@ export function SettingsModal({
   onSearchModels,
   onChangeHfMirrorUrl,
   onSaveLlmProviders,
+  onSaveAsrSettings,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -1595,6 +2082,16 @@ export function SettingsModal({
               configDir={configDir}
               isRecording={isRecording}
               onChangeDataDir={onChangeDataDir}
+            />
+          )}
+          {activeTab === "speech-backend" && (
+            <SpeechBackendTab
+              asrBackend={asrBackend}
+              sidecarUrl={sidecarUrl}
+              asrProvider={asrProvider}
+              isRecording={isRecording}
+              dataDir={dataDir}
+              onSave={onSaveAsrSettings}
             />
           )}
           {activeTab === "speech-models" && (

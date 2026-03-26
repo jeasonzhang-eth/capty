@@ -17,6 +17,14 @@ export interface LlmProvider {
   readonly isPreset: boolean;
 }
 
+export interface AsrProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+}
+
 export interface PromptType {
   readonly id: string;
   readonly label: string;
@@ -61,6 +69,9 @@ export interface AppConfig {
   readonly zoomFactor: number | null;
   readonly historyPanelWidth: number | null;
   readonly summaryPanelWidth: number | null;
+  readonly asrBackend: "builtin" | "external";
+  readonly sidecarUrl: string;
+  readonly asrProvider: AsrProvider | null;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -96,6 +107,9 @@ const DEFAULT_CONFIG: AppConfig = {
   zoomFactor: null,
   historyPanelWidth: null,
   summaryPanelWidth: null,
+  asrBackend: "builtin",
+  sidecarUrl: "http://localhost:8765",
+  asrProvider: null,
 };
 
 export function readConfig(configDir: string): AppConfig {

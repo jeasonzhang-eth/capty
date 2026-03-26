@@ -10,14 +10,12 @@ import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
 import { createDatabase } from "./database";
-import { SidecarManager } from "./sidecar";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { repairWavHeaders } from "./audio-files";
 import Database from "better-sqlite3";
 
 let mainWindow: BrowserWindow | null = null;
 let db: Database.Database | null = null;
-let sidecar: SidecarManager | null = null;
 
 function createWindow(configDir: string): BrowserWindow {
   const config = readConfig(configDir);
@@ -95,23 +93,14 @@ app.whenReady().then(() => {
   const audioDir = join(dataDir, "audio");
   repairWavHeaders(audioDir);
 
-  // 4. Create SidecarManager
+  // 4. Ensure models directory exists
   const modelsDir = join(dataDir, "models");
   fs.mkdirSync(modelsDir, { recursive: true });
-  const sidecarDir = is.dev
-    ? join(__dirname, "../../sidecar")
-    : join(process.resourcesPath, "sidecar");
-  sidecar = new SidecarManager({
-    sidecarDir,
-    modelsDir,
-    isDev: is.dev,
-  });
 
   // 5. Register IPC handlers
   registerIpcHandlers({
     db,
     configDir,
-    sidecar,
     getMainWindow: () => mainWindow,
   });
 
@@ -145,11 +134,6 @@ app.whenReady().then(() => {
   // 8. Create BrowserWindow
   createWindow(configDir);
 
-  // 9. Start sidecar in background (don't block window)
-  sidecar.start().catch((err) => {
-    console.error("[sidecar] Failed to start:", err);
-  });
-
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow(configDir);
@@ -158,9 +142,6 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
-  if (sidecar) {
-    sidecar.stop();
-  }
   if (db) {
     db.close();
   }

@@ -31,10 +31,7 @@ declare global {
         pcmData: ArrayBuffer,
         fileName?: string,
       ) => Promise<void>;
-      openAudioStream: (
-        sessionDir: string,
-        fileName: string,
-      ) => Promise<void>;
+      openAudioStream: (sessionDir: string, fileName: string) => Promise<void>;
       appendAudioStream: (pcmData: ArrayBuffer) => Promise<void>;
       closeAudioStream: () => Promise<void>;
       exportTxt: (
@@ -54,6 +51,19 @@ declare global {
       getConfig: () => Promise<Record<string, unknown>>;
       setConfig: (config: Record<string, unknown>) => Promise<void>;
       getSidecarUrl: () => Promise<string>;
+      checkSidecarHealth: () => Promise<{
+        online: boolean;
+        [key: string]: unknown;
+      }>;
+      asrTranscribe: (
+        pcmData: ArrayBuffer,
+        provider: { baseUrl: string; apiKey: string; model: string },
+      ) => Promise<{ text: string }>;
+      asrTest: (provider: {
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+      }) => Promise<{ success: boolean }>;
       listModels: () => Promise<unknown[]>;
       searchModels: (query: string) => Promise<unknown[]>;
       deleteModel: (modelId: string) => Promise<void>;
@@ -172,35 +182,38 @@ export function useSession() {
     window.capty.appendAudioStream(merged.buffer as ArrayBuffer);
   }, []);
 
-  const startSession = useCallback(async (model: string): Promise<number> => {
-    const sessionId = await window.capty.createSession(model);
-    const dataDir = await window.capty.getDataDir();
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .slice(0, 19);
-    const sessionDir = `${dataDir}/audio/${timestamp}`;
-    sessionDirRef.current = sessionDir;
-    sessionTimestampRef.current = timestamp;
-    pendingChunksRef.current = [];
+  const startSession = useCallback(
+    async (model: string): Promise<number> => {
+      const sessionId = await window.capty.createSession(model);
+      const dataDir = await window.capty.getDataDir();
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, 19);
+      const sessionDir = `${dataDir}/audio/${timestamp}`;
+      sessionDirRef.current = sessionDir;
+      sessionTimestampRef.current = timestamp;
+      pendingChunksRef.current = [];
 
-    // Save audio path to DB so delete can find the audio files
-    await window.capty.updateSession(sessionId, { audioPath: timestamp });
+      // Save audio path to DB so delete can find the audio files
+      await window.capty.updateSession(sessionId, { audioPath: timestamp });
 
-    // Open streaming WAV file on disk — audio is written incrementally
-    await window.capty.openAudioStream(sessionDir, `${timestamp}.wav`);
+      // Open streaming WAV file on disk — audio is written incrementally
+      await window.capty.openAudioStream(sessionDir, `${timestamp}.wav`);
 
-    // Start periodic flush timer
-    flushTimerRef.current = setInterval(flushAudio, FLUSH_INTERVAL_MS);
+      // Start periodic flush timer
+      flushTimerRef.current = setInterval(flushAudio, FLUSH_INTERVAL_MS);
 
-    setState({
-      isRecording: true,
-      currentSessionId: sessionId,
-      segmentCount: 0,
-    });
+      setState({
+        isRecording: true,
+        currentSessionId: sessionId,
+        segmentCount: 0,
+      });
 
-    return sessionId;
-  }, [flushAudio]);
+      return sessionId;
+    },
+    [flushAudio],
+  );
 
   const feedAudio = useCallback((pcm: Int16Array) => {
     pendingChunksRef.current.push(new Int16Array(pcm));

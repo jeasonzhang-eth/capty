@@ -15,13 +15,14 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — 三个 Tab：General（数据目录、配置目录）、Speech Models（模型管理）、Language Models（LLM provider 配置与测试）
+- **设置页面** — 四个 Tab：General（数据目录、配置目录）、Speech Backend（ASR 后端切换）、Speech Models（模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
+- **双 ASR 后端** — 支持 Built-in Sidecar（WebSocket，本地 MLX 推理）和 External ASR Server（OpenAI 兼容 HTTP API）两种转录后端，可在 Settings > Speech Backend 切换
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -31,43 +32,45 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) |
+| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) 或 外部 ASR 服务器 (OpenAI 兼容 API) |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 架构
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Electron Renderer (React)                          │
-│                                                     │
-│  useAudioCapture ──→ useVAD ──→ useTranscription    │
-│  (麦克风 PCM 采集)   (语音端点检测)  (WebSocket 客户端)  │
-│       │                              │    ▲         │
-│       │     16kHz PCM 二进制帧         │    │ JSON    │
-│       └──────────────────────────────▼    │ 转写结果  │
-├──────────── IPC (contextBridge) ─────────────────────┤
-│  Electron Main Process                              │
-│                                                     │
-│  SidecarManager ──→ spawn Python 子进程              │
-│  (启动/停止/健康检查)                                  │
-│                                                     │
-│  ipc-handlers.ts ──→ 模型管理、配置、数据库、文件 I/O   │
-├─────────────────────────────────────────────────────┤
-│  Python Sidecar (FastAPI + uvicorn)                 │
-│                                                     │
-│  HTTP:  /health, /models, /models/switch            │
-│  WS:    /ws/transcribe                              │
-│                                                     │
-│  ModelRunner ──→ 根据 model_type 自动选择推理后端：    │
-│     • qwen-asr  → Qwen3-ASR 模型 (mlx-qwen3-asr)   │
-│     • whisper   → OpenAI Whisper (mlx-whisper)      │
-│  ※ 全部通过 MLX 在 Apple GPU 上加速推理              │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Electron Renderer (React)                                   │
+│                                                              │
+│  useAudioCapture ──→ useVAD ──┬→ useTranscription (WS)      │
+│  (麦克风 PCM 采集)   (语音端点)  └→ useExternalTranscription   │
+│       │                              │    ▲                  │
+│       │     16kHz PCM 二进制帧         │    │ 转写结果          │
+│       └──────────────────────────────▼    │                  │
+├──────────── IPC (contextBridge) ──────────────────────────────┤
+│  Electron Main Process                                       │
+│                                                              │
+│  ipc-handlers.ts ──→ 模型管理、配置、数据库、文件 I/O          │
+│  ├── sidecar:health-check ──→ 检测 sidecar 是否在线           │
+│  ├── asr:transcribe ──→ HTTP POST 外部 ASR API               │
+│  └── asr:test ──→ 外部 ASR 连通性测试                         │
+├──────────────────────────────────────────────────────────────┤
+│  路径 A: Built-in Sidecar（独立进程，用户手动启动）             │
+│                                                              │
+│  Python Sidecar (FastAPI + uvicorn)                          │
+│  HTTP: /health, /models, /models/switch                      │
+│  WS:   /ws/transcribe                                        │
+│  ModelRunner → qwen-asr / whisper (MLX GPU 加速)             │
+├──────────────────────────────────────────────────────────────┤
+│  路径 B: External ASR Server（OpenAI 兼容 HTTP API）          │
+│                                                              │
+│  POST /v1/audio/transcriptions (multipart WAV + model)       │
+│  任何兼容 OpenAI Whisper API 的服务均可接入                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### 通信流程
 
-**录音转写**（实时）：
+**录音转写 — Built-in 模式**（WebSocket，实时）：
 
 1. `useAudioCapture` 通过 Web Audio API 采集麦克风音频，输出 16kHz 16bit PCM
 2. PCM 数据同时送入 `useVAD`（语音活动检测）和 `useTranscription`
@@ -76,6 +79,14 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 5. 音频 PCM 数据以二进制帧持续发送到 Sidecar
 6. VAD 检测到语音停顿时，发送 `{"type": "segment_end"}`，Sidecar 对累积的音频执行转写
 7. Sidecar 返回 `{"type": "final", "text": "...", "segment_id": N}`，前端追加到字幕列表
+
+**录音转写 — External 模式**（HTTP，VAD 触发）：
+
+1. `useAudioCapture` 采集音频 → `useVAD` 检测停顿 → `useExternalTranscription`
+2. `sendAudio()` 将 PCM 数据推入内存 buffer
+3. VAD 触发 `sendSegmentEnd()` → 合并 buffer → IPC 发送到主进程
+4. 主进程 `pcmToWav()` 转换为 WAV → multipart POST 到 `{baseUrl}/v1/audio/transcriptions`
+5. API 返回 `{text}` → IPC 回传 → 前端追加到字幕列表
 
 **模型管理**（Electron IPC）：
 
@@ -94,7 +105,6 @@ src/
 │   ├── audio-files.ts   # 音频文件读写/删除
 │   ├── config.ts        # 应用配置管理
 │   ├── export.ts        # TXT/SRT/Markdown 导出
-│   ├── sidecar.ts       # Python sidecar 进程管理
 │   └── model-downloader.ts
 ├── preload/             # contextBridge API
 │   └── index.ts
@@ -112,7 +122,8 @@ src/
 │   ├── hooks/           # 自定义 Hooks
 │   │   ├── useAudioCapture.ts
 │   │   ├── useVAD.ts
-│   │   ├── useTranscription.ts
+│   │   ├── useTranscription.ts         # WebSocket (sidecar)
+│   │   ├── useExternalTranscription.ts  # HTTP (外部 ASR)
 │   │   ├── useSession.ts
 │   │   └── useAudioPlayer.ts
 │   ├── utils/
@@ -163,6 +174,9 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `zoomFactor` | `number \| null` | 界面缩放比例，`null` 时使用默认值 1.0；通过 Cmd/Ctrl + =/- 调整 |
 | `historyPanelWidth` | `number \| null` | HistoryPanel 宽度（px），`null` 时使用默认值 240，范围 160-400 |
 | `summaryPanelWidth` | `number \| null` | SummaryPanel 宽度（px），`null` 时使用默认值 320，范围 220-600 |
+| `asrBackend` | `"builtin" \| "external"` | ASR 后端类型，默认 `"builtin"` |
+| `sidecarUrl` | `string` | Sidecar 地址，默认 `http://localhost:8765` |
+| `asrProvider` | `AsrProvider \| null` | 外部 ASR 服务配置（id / name / baseUrl / apiKey / model） |
 
 #### user-models.json
 
@@ -223,7 +237,7 @@ npm run build
 
 ### Sidecar（Python ASR 后端）
 
-Sidecar 是一个独立的 FastAPI 服务，负责 ASR 模型加载和语音转写。Electron 主进程会自动启动它，但开发和调试时可以单独运行。
+Sidecar 是一个独立的 FastAPI 服务，负责 ASR 模型加载和语音转写。作为独立进程运行，Electron 主进程通过健康检查检测其在线状态。
 
 #### 环境安装
 
@@ -282,6 +296,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (9)
+
+- **Sidecar 解耦 + 外部 ASR 支持** — 将 sidecar 从受管子进程变为独立服务，同时支持外部 ASR 服务器
+  - **删除 SidecarManager** — 主进程不再负责 spawn/stop/restart sidecar 子进程。sidecar 作为独立进程由用户手动启动
+  - **双后端架构** — 支持 Built-in Sidecar（WebSocket 协议）和 External ASR Server（OpenAI 兼容 HTTP API）两种转录后端
+  - **健康检查轮询** — Built-in 模式下每 10 秒检测 sidecar 是否在线，状态实时反映在 ControlBar
+  - **External ASR hook** — 新增 `useExternalTranscription`，与 `useTranscription` 接口相同，内部通过 IPC → main process → HTTP POST 实现
+  - **Settings > Speech Backend** — 新增设置 Tab，可切换后端类型；Built-in 显示 URL 配置和启动命令；External 显示 Name / Base URL / API Key / Model 表单
+  - **ControlBar 状态适配** — builtin+online 绿色 Ready / builtin+offline 灰色 Sidecar Offline / external+configured 蓝色 External (name) / external+unconfigured 灰色 Not Configured；external 模式隐藏模型下拉
+  - **重新生成字幕** — 两种模式均支持：builtin 走 WebSocket，external 逐段 HTTP POST
+  - **配置持久化** — `asrBackend` / `sidecarUrl` / `asrProvider` 保存到 config.json，重启后恢复
+  - config.json 新增 3 个字段：`asrBackend`、`sidecarUrl`、`asrProvider`
 
 ### 2026-03-26 (8)
 

@@ -2,7 +2,6 @@ import { ipcMain, dialog, BrowserWindow, app, shell } from "electron";
 import fs from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
-import { SidecarManager } from "./sidecar";
 import {
   createSession,
   getSession,
@@ -31,9 +30,11 @@ import {
   getDataDir,
   LlmProvider,
   PromptType,
+  AsrProvider,
   getEffectivePromptTypes,
   DEFAULT_PROMPT_TYPES,
 } from "./config";
+import { pcmToWav } from "./audio-files";
 import {
   calcDirSizeGb,
   downloadModel,
@@ -43,7 +44,6 @@ import {
 export interface IpcDeps {
   readonly db: Database.Database;
   readonly configDir: string;
-  readonly sidecar: SidecarManager;
   readonly getMainWindow: () => BrowserWindow | null;
 }
 
@@ -329,7 +329,7 @@ async function searchHuggingFaceModels(
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
-  const { db, configDir, sidecar, getMainWindow } = deps;
+  const { db, configDir, getMainWindow } = deps;
 
   // Sessions
   ipcMain.handle("session:create", (_event, modelName: string) => {
@@ -471,8 +471,139 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // Sidecar
   ipcMain.handle("sidecar:get-url", () => {
-    return sidecar.getUrl();
+    const config = readConfig(configDir);
+    return config.sidecarUrl ?? "http://localhost:8765";
   });
+
+  ipcMain.handle("sidecar:health-check", async () => {
+    const config = readConfig(configDir);
+    const url = config.sidecarUrl ?? "http://localhost:8765";
+    try {
+      const resp = await fetch(`${url}/health`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!resp.ok) return { online: false };
+      const data = (await resp.json()) as Record<string, unknown>;
+      return { online: true, ...data };
+    } catch {
+      return { online: false };
+    }
+  });
+
+  // External ASR transcription (OpenAI-compatible API)
+  ipcMain.handle(
+    "asr:transcribe",
+    async (
+      _event,
+      pcmData: ArrayBuffer,
+      provider: { baseUrl: string; apiKey: string; model: string },
+    ) => {
+      const wavBuffer = pcmToWav(Buffer.from(pcmData), 16000, 1, 16);
+
+      // Build multipart form data
+      const boundary =
+        "----CaptyBoundary" +
+        Date.now().toString(36) +
+        Math.random().toString(36);
+      const header = [
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="file"; filename="audio.wav"`,
+        `Content-Type: audio/wav`,
+        "",
+      ].join("\r\n");
+      const modelField = [
+        "",
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="model"`,
+        "",
+        provider.model,
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+
+      const headerBuf = Buffer.from(header, "utf-8");
+      const modelBuf = Buffer.from(modelField, "utf-8");
+      const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
+
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const resp = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
+        },
+        body,
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`ASR API error (${resp.status}): ${errBody}`);
+      }
+
+      const result = (await resp.json()) as { text?: string };
+      return { text: result.text ?? "" };
+    },
+  );
+
+  // External ASR connectivity test (send short silent audio)
+  ipcMain.handle(
+    "asr:test",
+    async (
+      _event,
+      provider: { baseUrl: string; apiKey: string; model: string },
+    ) => {
+      // 0.1 second of silence at 16kHz 16bit mono = 3200 bytes
+      const silentPcm = Buffer.alloc(3200);
+      const wavBuffer = pcmToWav(silentPcm, 16000, 1, 16);
+
+      const boundary =
+        "----CaptyBoundary" +
+        Date.now().toString(36) +
+        Math.random().toString(36);
+      const header = [
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="file"; filename="test.wav"`,
+        `Content-Type: audio/wav`,
+        "",
+      ].join("\r\n");
+      const modelField = [
+        "",
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="model"`,
+        "",
+        provider.model,
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+
+      const headerBuf = Buffer.from(header, "utf-8");
+      const modelBuf = Buffer.from(modelField, "utf-8");
+      const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
+
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const resp = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
+        },
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${errBody}`);
+      }
+
+      return { success: true };
+    },
+  );
 
   // Models — builtin registry + user-downloaded models
   ipcMain.handle("models:list", () => {
@@ -511,17 +642,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (fs.existsSync(modelPath)) {
       // Notify sidecar to unload if it's the active model
       try {
-        const sidecarUrl = sidecar.getUrl();
-        if (sidecarUrl) {
-          const healthResp = await fetch(`${sidecarUrl}/health`);
-          if (healthResp.ok) {
-            const health = (await healthResp.json()) as {
-              current_model: string | null;
-            };
-            if (health.current_model === modelId) {
-              // Sidecar will handle the missing model gracefully
-            }
-          }
+        const sidecarUrl =
+          readConfig(configDir).sidecarUrl ?? "http://localhost:8765";
+        const healthResp = await fetch(`${sidecarUrl}/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (healthResp.ok) {
+          // Sidecar is online — it will handle the missing model gracefully
         }
       } catch {
         // Sidecar not available, proceed with deletion

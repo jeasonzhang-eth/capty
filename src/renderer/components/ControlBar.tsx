@@ -3,6 +3,8 @@ import React from "react";
 interface ControlBarProps {
   readonly isRecording: boolean;
   readonly sidecarReady: boolean;
+  readonly asrBackend: "builtin" | "external";
+  readonly asrProviderName: string | null;
   readonly devices: readonly MediaDeviceInfo[];
   readonly selectedDeviceId: string | null;
   readonly onDeviceChange: (deviceId: string) => void;
@@ -24,6 +26,8 @@ interface ControlBarProps {
 export function ControlBar({
   isRecording,
   sidecarReady,
+  asrBackend,
+  asrProviderName,
   devices,
   selectedDeviceId,
   onDeviceChange,
@@ -37,16 +41,25 @@ export function ControlBar({
 }: ControlBarProps): React.ReactElement {
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const needsDownload = selectedModel && !selectedModel.downloaded;
-  const statusColor = isRecording
-    ? "var(--danger)"
-    : sidecarReady
-      ? "var(--success)"
-      : "var(--text-muted)";
-  const statusLabel = isRecording
-    ? "Recording"
-    : sidecarReady
-      ? "Ready"
-      : "Offline";
+
+  let statusColor: string;
+  let statusLabel: string;
+
+  if (isRecording) {
+    statusColor = "var(--danger)";
+    statusLabel = "Recording";
+  } else if (asrBackend === "external") {
+    if (asrProviderName) {
+      statusColor = "#3b82f6";
+      statusLabel = `External (${asrProviderName})`;
+    } else {
+      statusColor = "var(--text-muted)";
+      statusLabel = "Not Configured";
+    }
+  } else {
+    statusColor = sidecarReady ? "var(--success)" : "var(--text-muted)";
+    statusLabel = sidecarReady ? "Ready" : "Sidecar Offline";
+  }
 
   return (
     <div
@@ -101,78 +114,82 @@ export function ControlBar({
         ))}
       </select>
 
-      <select
-        value={selectedModelId}
-        onChange={(e) => onModelChange(e.target.value)}
-        disabled={isRecording}
-        style={{
-          backgroundColor: "var(--bg-tertiary)",
-          color: "var(--text-primary)",
-          border: "1px solid var(--border)",
-          borderRadius: "4px",
-          padding: "4px 8px",
-          fontSize: "12px",
-          maxWidth: "200px",
-        }}
-      >
-        {models.map((m) => (
-          <option key={m.id} value={m.id} disabled={!m.downloaded}>
-            [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
-            {!m.downloaded ? " (not downloaded)" : ""}
-          </option>
-        ))}
-      </select>
-
-      {isDownloading ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "11px",
-            color: "var(--text-secondary)",
-          }}
-        >
-          <div
+      {asrBackend === "builtin" && (
+        <>
+          <select
+            value={selectedModelId}
+            onChange={(e) => onModelChange(e.target.value)}
+            disabled={isRecording}
             style={{
-              width: "60px",
-              height: "4px",
               backgroundColor: "var(--bg-tertiary)",
-              borderRadius: "2px",
-              overflow: "hidden",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              borderRadius: "4px",
+              padding: "4px 8px",
+              fontSize: "12px",
+              maxWidth: "200px",
             }}
           >
+            {models.map((m) => (
+              <option key={m.id} value={m.id} disabled={!m.downloaded}>
+                [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
+                {!m.downloaded ? " (not downloaded)" : ""}
+              </option>
+            ))}
+          </select>
+
+          {isDownloading ? (
             <div
               style={{
-                width: `${downloadProgress}%`,
-                height: "100%",
-                backgroundColor: "var(--accent)",
-                transition: "width 0.3s",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "11px",
+                color: "var(--text-secondary)",
               }}
-            />
-          </div>
-          <span>{Math.round(downloadProgress)}%</span>
-        </div>
-      ) : needsDownload ? (
-        <button
-          onClick={onDownloadModel}
-          disabled={isRecording}
-          style={{
-            backgroundColor: "var(--accent)",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            padding: "4px 10px",
-            fontSize: "11px",
-            cursor: isRecording ? "not-allowed" : "pointer",
-            opacity: isRecording ? 0.5 : 1,
-            whiteSpace: "nowrap",
-          }}
-          title={`Download ${selectedModel.name} (${selectedModel.size_gb}GB)`}
-        >
-          Download
-        </button>
-      ) : null}
+            >
+              <div
+                style={{
+                  width: "60px",
+                  height: "4px",
+                  backgroundColor: "var(--bg-tertiary)",
+                  borderRadius: "2px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${downloadProgress}%`,
+                    height: "100%",
+                    backgroundColor: "var(--accent)",
+                    transition: "width 0.3s",
+                  }}
+                />
+              </div>
+              <span>{Math.round(downloadProgress)}%</span>
+            </div>
+          ) : needsDownload ? (
+            <button
+              onClick={onDownloadModel}
+              disabled={isRecording}
+              style={{
+                backgroundColor: "var(--accent)",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                padding: "4px 10px",
+                fontSize: "11px",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                opacity: isRecording ? 0.5 : 1,
+                whiteSpace: "nowrap",
+              }}
+              title={`Download ${selectedModel!.name} (${selectedModel!.size_gb}GB)`}
+            >
+              Download
+            </button>
+          ) : null}
+        </>
+      )}
 
       <button
         onClick={onSettings}

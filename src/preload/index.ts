@@ -45,6 +45,22 @@ const api = {
 
   // Sidecar
   getSidecarUrl: () => ipcRenderer.invoke("sidecar:get-url"),
+  checkSidecarHealth: () =>
+    ipcRenderer.invoke("sidecar:health-check") as Promise<{
+      online: boolean;
+      [key: string]: unknown;
+    }>,
+
+  // External ASR
+  asrTranscribe: (
+    pcmData: ArrayBuffer,
+    provider: { baseUrl: string; apiKey: string; model: string },
+  ) =>
+    ipcRenderer.invoke("asr:transcribe", pcmData, provider) as Promise<{
+      text: string;
+    }>,
+  asrTest: (provider: { baseUrl: string; apiKey: string; model: string }) =>
+    ipcRenderer.invoke("asr:test", provider) as Promise<{ success: boolean }>,
 
   // Models
   listModels: () => ipcRenderer.invoke("models:list"),
