@@ -309,6 +309,7 @@ pytest
   - **重新生成字幕** — 两种模式均支持：builtin 走 WebSocket，external 逐段 HTTP POST
   - **配置持久化** — `asrBackend` / `sidecarUrl` / `asrProvider` 保存到 config.json，重启后恢复
   - config.json 新增 3 个字段：`asrBackend`、`sidecarUrl`、`asrProvider`
+  - 所有外部 HTTPS 请求（ASR API、LLM API）改用 Electron `net.fetch`，走 Chromium 网络栈，修复 Node.js undici 的 TLS 兼容性问题
 
 ### 2026-03-26 (8)
 

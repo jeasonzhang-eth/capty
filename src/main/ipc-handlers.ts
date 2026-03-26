@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, app, shell } from "electron";
+import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
 import fs from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
@@ -526,7 +526,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
 
       const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-      const resp = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+      const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
@@ -584,7 +584,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
 
       const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-      const resp = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+      const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
@@ -837,7 +837,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       try {
         const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-        const resp = await fetch(`${baseUrl}/chat/completions`, {
+        const resp = await net.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -963,7 +963,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const timeout = setTimeout(() => controller.abort(), 10000);
       try {
         const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-        const resp = await fetch(`${baseUrl}/chat/completions`, {
+        const resp = await net.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
