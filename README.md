@@ -58,6 +58,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 │                                                              │
 │  Python Sidecar (FastAPI + uvicorn)                          │
 │  HTTP: /health, /models, /models/switch                      │
+│  REST: POST /v1/audio/transcriptions (OpenAI 兼容)           │
 │  WS:   /ws/transcribe                                        │
 │  ModelRunner → qwen-asr / whisper (MLX GPU 加速)             │
 ├──────────────────────────────────────────────────────────────┤
@@ -280,6 +281,16 @@ curl -X POST http://localhost:8765/models/switch \
   -d '{"model": "qwen3-asr-0.6b"}'
 ```
 
+REST 转写端点（OpenAI 兼容）：
+
+```bash
+# 转写音频文件
+curl -X POST http://localhost:8765/v1/audio/transcriptions \
+  -F "file=@audio.wav" \
+  -F "model=qwen3-asr-0.6b"
+# 返回 {"text": "..."}
+```
+
 WebSocket 转写端点为 `ws://localhost:8765/ws/transcribe`，协议流程：
 
 1. 发送 `{"type": "start", "model": "qwen3-asr-0.6b"}` 开始会话
@@ -310,6 +321,7 @@ pytest
   - **配置持久化** — `asrBackend` / `sidecarUrl` / `asrProvider` 保存到 config.json，重启后恢复
   - config.json 新增 3 个字段：`asrBackend`、`sidecarUrl`、`asrProvider`
   - 所有外部 HTTPS 请求（ASR API、LLM API）改用 Electron `net.fetch`，走 Chromium 网络栈，修复 Node.js undici 的 TLS 兼容性问题
+  - **Sidecar 新增 OpenAI 兼容 REST API** — `POST /v1/audio/transcriptions`，接受 multipart WAV + model 参数，返回 `{"text": "..."}`，sidecar 同时支持 WebSocket 和 HTTP 两种转录协议
 
 ### 2026-03-26 (8)
 

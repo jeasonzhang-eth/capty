@@ -1,14 +1,16 @@
-"""FastAPI server: HTTP endpoints and WebSocket for real-time ASR."""
+"""FastAPI server: HTTP endpoints, OpenAI-compatible REST API, and WebSocket for real-time ASR."""
 
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
+import wave
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
@@ -34,6 +36,22 @@ MAX_CONCURRENT = 1  # Must stay 1: MLX segfaults with concurrent GPU access
 
 class SwitchModelRequest(BaseModel):
     model: str
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _extract_pcm(raw_bytes: bytes) -> bytes:
+    """Extract raw 16-bit PCM data from a WAV file, or return as-is if not WAV."""
+    if raw_bytes[:4] == b"RIFF" and raw_bytes[8:12] == b"WAVE":
+        try:
+            with wave.open(io.BytesIO(raw_bytes), "rb") as wf:
+                return wf.readframes(wf.getnframes())
+        except Exception:
+            # Malformed WAV — skip 44-byte header as fallback
+            return raw_bytes[44:] if len(raw_bytes) > 44 else raw_bytes
+    return raw_bytes
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +119,72 @@ def create_app(models_dir: str) -> FastAPI:
             "status": "ok",
             "model": body.model,
         }
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible REST API
+    # ------------------------------------------------------------------
+
+    @app.post("/v1/audio/transcriptions")
+    async def transcriptions(
+        file: UploadFile = File(...),
+        model: str = Form(""),
+        language: Optional[str] = Form(None),
+    ):
+        """OpenAI Whisper-compatible transcription endpoint.
+
+        Accepts multipart/form-data with a WAV audio file and returns
+        ``{"text": "..."}`` — same schema as OpenAI's API.
+        """
+        # Load / switch model if requested and different from current
+        target_model = model.strip() if model else None
+        if target_model:
+            model_info = registry.get_model_info(target_model)
+            if model_info and registry.is_downloaded(target_model):
+                if not runner.is_loaded() or runner.current_model_id != target_model:
+                    runner.unload()
+                    try:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(
+                            _mlx_executor,
+                            lambda: runner.load(
+                                target_model,
+                                models_dir=Path(models_dir),
+                                model_type=model_info.get("type", "qwen-asr"),
+                                mlx_repo=model_info.get("mlx_repo"),
+                            ),
+                        )
+                    except Exception as exc:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Failed to load model: {exc}",
+                        ) from exc
+
+        if not runner.is_loaded():
+            raise HTTPException(
+                status_code=400,
+                detail="No model loaded. Send a model ID in the 'model' field or pre-load via /models/switch.",
+            )
+
+        # Read uploaded audio file
+        raw_bytes = await file.read()
+
+        # Extract PCM from WAV (skip header), or treat as raw PCM
+        pcm_data = _extract_pcm(raw_bytes)
+
+        if len(pcm_data) == 0:
+            return {"text": ""}
+
+        # Split long audio into chunks and transcribe
+        all_texts: list[str] = []
+        offset = 0
+        while offset < len(pcm_data):
+            chunk = pcm_data[offset : offset + MAX_CHUNK_BYTES]
+            offset += MAX_CHUNK_BYTES
+            text = await runner.transcribe(chunk)
+            if text and text.strip():
+                all_texts.append(text.strip())
+
+        return {"text": " ".join(all_texts)}
 
     # ------------------------------------------------------------------
     # WebSocket route
