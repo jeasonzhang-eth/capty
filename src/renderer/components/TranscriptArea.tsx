@@ -32,6 +32,8 @@ export function TranscriptArea({
   onSeekToTime,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const prevSegmentCountRef = useRef(0);
 
   const isPlayback = playbackTime !== null;
 
@@ -90,13 +92,36 @@ export function TranscriptArea({
     [segments, onSeekToTime],
   );
 
-  // Auto-scroll to bottom during recording
+  // Track whether user is near the bottom of the scroll container
+  const handleScroll = useCallback(() => {
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      const threshold = 80;
+      isNearBottomRef.current =
+        el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    }
+  }, []);
+
+  // Auto-scroll to bottom when new segments arrive AND user is near bottom.
+  // Works for both live recording and regeneration.
   useEffect(() => {
-    if (isRecording && scrollContainerRef.current) {
+    const newCount = segments.length;
+    const grew = newCount > prevSegmentCountRef.current;
+    prevSegmentCountRef.current = newCount;
+
+    if (grew && isNearBottomRef.current && scrollContainerRef.current) {
       const el = scrollContainerRef.current;
       el.scrollTop = el.scrollHeight;
     }
-  }, [segments, partialText, isRecording]);
+  }, [segments]);
+
+  // Also scroll on partial text updates during recording
+  useEffect(() => {
+    if (isRecording && isNearBottomRef.current && scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [partialText, isRecording]);
 
   return (
     <div
@@ -120,6 +145,7 @@ export function TranscriptArea({
       ) : (
         <div
           ref={scrollContainerRef}
+          onScroll={handleScroll}
           style={{
             flex: 1,
             overflowY: "auto",
