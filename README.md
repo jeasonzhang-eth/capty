@@ -17,7 +17,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - SummaryPanel 可选择 provider、拖拽调整宽度
 - **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片内嵌模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
-- **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
+- **模型市场** — 推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），自动转换为 16kHz WAV 并触发转录（需系统安装 ffmpeg）
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
@@ -296,6 +296,8 @@ pytest
   - 统一目录命名：所有模型目录名 = `repo.replace("/", "--")`
   - ControlBar 模型下拉：无已下载模型时显示 "No models" 占位提示
   - 启动时自动选中第一个已下载模型（当保存的 modelId 不存在时）
+  - 推荐模型更新：移除旧 `.npz` 格式 Whisper 模型，替换为 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式
+  - `isModelDownloaded` 增加 `.npz` 检测，兼容旧格式已下载模型
 
 ### 2026-03-27 (28)
 

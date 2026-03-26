@@ -275,10 +275,15 @@ export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
   if (!existsSync(modelPath)) return false;
   try {
     const entries = readdirSync(modelPath);
-    // Must have at least a model weight file (mlx-audio uses safetensors)
+    // Must have at least a model weight file
+    // .safetensors = modern MLX/HF format, .npz = legacy MLX format,
+    // .bin = PyTorch, .gguf = GGML
     return entries.some(
       (e) =>
-        e.endsWith(".safetensors") || e.endsWith(".bin") || e.endsWith(".gguf"),
+        e.endsWith(".safetensors") ||
+        e.endsWith(".npz") ||
+        e.endsWith(".bin") ||
+        e.endsWith(".gguf"),
     );
   } catch {
     return false;

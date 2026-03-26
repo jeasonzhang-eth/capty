@@ -1,50 +1,50 @@
 [
   {
-    "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
-    "name": "Qwen3-ASR-0.6B",
+    "repo": "mlx-community/Qwen3-ASR-0.6B-4bit",
+    "name": "Qwen3-ASR-0.6B-4bit",
     "type": "qwen-asr",
-    "size_gb": 0.7,
+    "size_gb": 0.25,
     "languages": ["zh", "en"],
-    "description": "Lightweight, bilingual Chinese-English, suitable for daily use"
+    "description": "Smallest Qwen3, fast, bilingual Chinese-English"
   },
   {
-    "repo": "mlx-community/whisper-tiny",
-    "name": "Whisper Tiny",
-    "type": "whisper",
-    "size_gb": 0.04,
-    "languages": ["multilingual"],
-    "description": "Tiny model, fast speed, ideal for low-spec devices"
+    "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
+    "name": "Qwen3-ASR-0.6B-8bit",
+    "type": "qwen-asr",
+    "size_gb": 0.35,
+    "languages": ["zh", "en"],
+    "description": "Lightweight Qwen3, bilingual Chinese-English, daily use"
   },
   {
-    "repo": "mlx-community/whisper-base-mlx",
-    "name": "Whisper Base",
-    "type": "whisper",
-    "size_gb": 0.07,
-    "languages": ["multilingual"],
-    "description": "Base model, balanced speed and quality"
+    "repo": "mlx-community/Qwen3-ASR-1.7B-4bit",
+    "name": "Qwen3-ASR-1.7B-4bit",
+    "type": "qwen-asr",
+    "size_gb": 0.6,
+    "languages": ["zh", "en"],
+    "description": "Better quality Qwen3, bilingual, compact"
   },
   {
-    "repo": "mlx-community/whisper-small-mlx",
-    "name": "Whisper Small",
-    "type": "whisper",
-    "size_gb": 0.24,
-    "languages": ["multilingual"],
-    "description": "Small model, 99 languages, good quality"
+    "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
+    "name": "Qwen3-ASR-1.7B-8bit",
+    "type": "qwen-asr",
+    "size_gb": 1.0,
+    "languages": ["zh", "en"],
+    "description": "Best quality Qwen3, bilingual Chinese-English"
   },
   {
-    "repo": "mlx-community/whisper-medium-mlx",
-    "name": "Whisper Medium",
+    "repo": "mlx-community/whisper-large-v3-turbo-4bit",
+    "name": "Whisper Large V3 Turbo 4bit",
     "type": "whisper",
-    "size_gb": 0.77,
+    "size_gb": 0.5,
     "languages": ["multilingual"],
-    "description": "Medium model, 99 languages, higher quality"
+    "description": "Best Whisper, 99 languages, quantized for speed"
   },
   {
-    "repo": "mlx-community/whisper-large-v3-turbo",
-    "name": "Whisper Large V3 Turbo",
+    "repo": "mlx-community/whisper-large-v3-turbo-8bit",
+    "name": "Whisper Large V3 Turbo 8bit",
     "type": "whisper",
-    "size_gb": 1.6,
+    "size_gb": 0.9,
     "languages": ["multilingual"],
-    "description": "Large turbo model, 99 languages, best quality"
+    "description": "Best Whisper, 99 languages, higher precision"
   }
 ]

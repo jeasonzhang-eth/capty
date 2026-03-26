@@ -13,7 +13,8 @@ from typing import Optional
 
 
 # Weight file extensions that indicate a valid downloaded model.
-_WEIGHT_EXTS = (".safetensors", ".bin", ".gguf")
+# .safetensors = modern MLX/HF, .npz = legacy MLX, .bin = PyTorch, .gguf = GGML
+_WEIGHT_EXTS = (".safetensors", ".npz", ".bin", ".gguf")
 
 
 def _has_weight_files(model_dir: Path) -> bool:
