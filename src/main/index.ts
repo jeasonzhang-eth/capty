@@ -116,9 +116,17 @@ app.whenReady().then(() => {
   // 3c. Repair WAV files left with placeholder headers from abnormal exits
   repairWavHeaders(audioBaseDir);
 
-  // 4. Ensure models directory exists
+  // 4. Ensure models directory exists; clean up legacy user-models.json
   const modelsDir = join(dataDir, "models");
   fs.mkdirSync(modelsDir, { recursive: true });
+  const legacyUserModels = join(configDir, "user-models.json");
+  if (fs.existsSync(legacyUserModels)) {
+    try {
+      fs.unlinkSync(legacyUserModels);
+    } catch {
+      // ignore cleanup errors
+    }
+  }
 
   // 5. Register IPC handlers
   registerIpcHandlers({

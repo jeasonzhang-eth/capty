@@ -58,129 +58,176 @@ interface ModelEntry {
   readonly downloaded?: boolean;
 }
 
-const USER_MODELS_FILE = "user-models.json";
+interface RecommendedModel {
+  readonly repo: string;
+  readonly name: string;
+  readonly type: string;
+  readonly size_gb: number;
+  readonly languages: readonly string[];
+  readonly description: string;
+}
 
-/** Read the builtin models.json shipped with the app. */
-function readBuiltinModels(): ModelEntry[] {
+/** Read recommended-models.json shipped with the app. */
+function readRecommendedModels(): RecommendedModel[] {
   try {
     const registryPath = join(
       app.isPackaged
         ? join(process.resourcesPath, "resources")
         : join(__dirname, "../../resources"),
-      "models.json",
+      "recommended-models.json",
     );
-    return JSON.parse(fs.readFileSync(registryPath, "utf-8")) as ModelEntry[];
+    return JSON.parse(
+      fs.readFileSync(registryPath, "utf-8"),
+    ) as RecommendedModel[];
   } catch {
     return [];
   }
 }
 
-/** Read user-models.json — the single source of truth at runtime. */
-function readUserModels(configDir: string): ModelEntry[] {
-  const filePath = join(configDir, USER_MODELS_FILE);
+/** Read model-meta.json from a model directory, fallback to inference. */
+function readModelMeta(dirPath: string, dirName: string): ModelEntry {
+  // Try model-meta.json first
+  const metaPath = join(dirPath, "model-meta.json");
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as ModelEntry[];
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+      return {
+        id: dirName,
+        name: meta.name ?? dirName,
+        type: meta.type ?? inferModelTypeFromDir(dirPath),
+        repo: meta.repo ?? dirName.replace(/--/g, "/"),
+        size_gb: meta.size_gb ?? 0,
+        languages: meta.languages ?? ["multilingual"],
+        description: meta.description ?? "",
+        downloaded: true,
+      };
+    }
   } catch {
-    return [];
+    // Fall through to inference
   }
+
+  // Infer from directory name + config.json
+  const repo = dirName.replace(/--/g, "/");
+  const name = dirName.includes("--")
+    ? (dirName.split("--").pop() ?? dirName)
+    : dirName;
+  return {
+    id: dirName,
+    name,
+    type: inferModelTypeFromDir(dirPath),
+    repo,
+    size_gb: calcDirSizeGb(dirPath),
+    languages: ["multilingual"],
+    description: repo,
+    downloaded: true,
+  };
 }
 
-function writeUserModels(configDir: string, models: ModelEntry[]): void {
-  fs.mkdirSync(configDir, { recursive: true });
-  const filePath = join(configDir, USER_MODELS_FILE);
-  fs.writeFileSync(filePath, JSON.stringify(models, null, 2), "utf-8");
-}
-
-function addUserModel(configDir: string, model: ModelEntry): void {
-  const existing = readUserModels(configDir);
-  const idx = existing.findIndex((m) => m.id === model.id);
-  if (idx >= 0) {
-    existing[idx] = model;
-  } else {
-    existing.push(model);
+/** Infer model type from config.json's model_type / architectures fields. */
+function inferModelTypeFromDir(dirPath: string): string {
+  const configPath = join(dirPath, "config.json");
+  try {
+    if (!fs.existsSync(configPath)) return "auto";
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const modelType = (cfg.model_type ?? "").toLowerCase();
+    const architectures = (cfg.architectures ?? [])
+      .map((a: string) => a.toLowerCase())
+      .join(" ");
+    const combined = `${modelType} ${architectures}`;
+    if (combined.includes("whisper")) return "whisper";
+    if (combined.includes("qwen")) return "qwen-asr";
+    if (combined.includes("parakeet")) return "parakeet";
+  } catch {
+    // Cannot read config.json
   }
-  writeUserModels(configDir, existing);
+  return "auto";
 }
 
-function removeUserModel(configDir: string, modelId: string): void {
-  const existing = readUserModels(configDir);
-  writeUserModels(
-    configDir,
-    existing.filter((m) => m.id !== modelId),
+/** Write model-meta.json into the model directory after download. */
+function writeModelMeta(
+  dirPath: string,
+  meta: {
+    repo: string;
+    name: string;
+    type: string;
+    size_gb: number;
+    languages: readonly string[];
+    description: string;
+  },
+): void {
+  const metaPath = join(dirPath, "model-meta.json");
+  fs.writeFileSync(
+    metaPath,
+    JSON.stringify(
+      {
+        repo: meta.repo,
+        name: meta.name,
+        type: meta.type,
+        size_gb: meta.size_gb,
+        languages: meta.languages,
+        description: meta.description,
+        downloaded_at: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    "utf-8",
   );
 }
 
-/**
- * Initialize user-models.json from builtin models.json on first run.
- * On subsequent runs, always rebuild: start from builtin list, then
- * pick up any HF-downloaded models from disk.
- */
-function ensureUserModels(configDir: string): void {
-  const builtin = readBuiltinModels();
-  const models: ModelEntry[] = [...builtin];
-  const knownIds = new Set(models.map((m) => m.id));
-
-  // Scan models directory for HF-downloaded models not in builtin list
+/** Load all models: disk-scanned downloaded + recommended (not yet downloaded). */
+function loadAllModels(configDir: string): ModelEntry[] {
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
 
+  // 1. Scan disk for downloaded models
+  const downloaded: ModelEntry[] = [];
+  const downloadedIds = new Set<string>();
+
   if (fs.existsSync(modelsDir)) {
     try {
       for (const dir of fs.readdirSync(modelsDir)) {
-        if (knownIds.has(dir)) continue;
+        const dirPath = join(modelsDir, dir);
+        if (!fs.statSync(dirPath).isDirectory()) continue;
         if (!isModelDownloaded(modelsDir, dir)) continue;
-        const repo = dir.replace(/--/g, "/");
-        const name = dir.split("--").pop() ?? dir;
-        models.push({
-          id: dir,
-          name,
-          type: "auto",
-          repo,
-          size_gb: calcDirSizeGb(join(modelsDir, dir)),
-          languages: ["multilingual"],
-          description: repo,
-        });
+        const entry = readModelMeta(dirPath, dir);
+        downloaded.push(entry);
+        downloadedIds.add(entry.id);
       }
     } catch {
       // Cannot read models dir
     }
   }
 
-  // Backfill size for builtin entries that have been downloaded
-  for (const m of models) {
-    if (m.size_gb === 0 && isModelDownloaded(modelsDir, m.id)) {
-      const size = calcDirSizeGb(join(modelsDir, m.id));
-      if (size > 0) {
-        (m as { size_gb: number }).size_gb = size;
-      }
-    }
-  }
+  // 2. Read recommended models, filter out already downloaded
+  const recommended = readRecommendedModels();
+  const notDownloaded: ModelEntry[] = recommended
+    .filter((r) => {
+      const id = r.repo.replace(/\//g, "--");
+      return !downloadedIds.has(id);
+    })
+    .map((r) => ({
+      id: r.repo.replace(/\//g, "--"),
+      name: r.name,
+      type: r.type,
+      repo: r.repo,
+      size_gb: r.size_gb,
+      languages: r.languages,
+      description: r.description,
+      downloaded: false,
+    }));
 
-  writeUserModels(configDir, models);
-}
-
-function loadAllModels(configDir: string): ModelEntry[] {
-  ensureUserModels(configDir);
-
-  const models = readUserModels(configDir);
-  const config = readConfig(configDir);
-  const dataDir = config.dataDir ?? join(configDir, "data");
-  const modelsDir = join(dataDir, "models");
-
-  const withStatus = models.map((m) => ({
-    ...m,
-    downloaded: isModelDownloaded(modelsDir, m.id),
-  }));
+  const all = [...downloaded, ...notDownloaded];
 
   // Sort: group by type (alphabetically), then by size within each group
-  withStatus.sort((a, b) => {
+  all.sort((a, b) => {
     const typeCmp = a.type.localeCompare(b.type);
     if (typeCmp !== 0) return typeCmp;
     return a.size_gb - b.size_gb;
   });
 
-  return withStatus;
+  return all;
 }
 
 interface HFSearchResult {
@@ -618,11 +665,27 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return loadAllModels(configDir);
   });
 
-  // Add a model to the user registry (called after downloading from search)
+  // Write model-meta.json into a model directory (called after download)
   ipcMain.handle(
     "models:save-meta",
-    (_event, _modelId: string, meta: Record<string, unknown>) => {
-      addUserModel(configDir, meta as unknown as ModelEntry);
+    (_event, modelId: string, meta: Record<string, unknown>) => {
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+      const modelsDir = join(dataDir, "models");
+      const dirPath = join(modelsDir, modelId);
+      if (fs.existsSync(dirPath)) {
+        writeModelMeta(
+          dirPath,
+          meta as unknown as {
+            repo: string;
+            name: string;
+            type: string;
+            size_gb: number;
+            languages: readonly string[];
+            description: string;
+          },
+        );
+      }
     },
   );
 
@@ -640,7 +703,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }));
   });
 
-  // Delete a downloaded model
+  // Delete a downloaded model — just remove the directory
   ipcMain.handle("models:delete", async (_event, modelId: string) => {
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
@@ -648,28 +711,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const modelPath = join(modelsDir, modelId);
 
     if (fs.existsSync(modelPath)) {
-      // Notify sidecar to unload if it's the active model
-      try {
-        const cfg = readConfig(configDir);
-        const sidecarProvider = (cfg.asrProviders ?? []).find(
-          (p) => p.isSidecar,
-        );
-        const sidecarUrl = sidecarProvider?.baseUrl ?? "http://localhost:8765";
-        const healthResp = await fetch(`${sidecarUrl}/health`, {
-          signal: AbortSignal.timeout(2000),
-        });
-        if (healthResp.ok) {
-          // Sidecar is online — it will handle the missing model gracefully
-        }
-      } catch {
-        // Sidecar not available, proceed with deletion
-      }
-
       fs.rmSync(modelPath, { recursive: true, force: true });
     }
-
-    // Also remove from user registry
-    removeUserModel(configDir, modelId);
   });
 
   // Layout persistence

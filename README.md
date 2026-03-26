@@ -80,11 +80,13 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 
 活跃 Provider 的 `baseUrl` 指向对应的 ASR 服务（本地 Sidecar 或外部服务器），所有 Provider 使用完全相同的 OpenAI 兼容 HTTP 协议。
 
-**模型管理**（Electron IPC）：
+**模型管理**（磁盘驱动，无静态注册表）：
 
-1. 前端通过 `window.capty.listModels()` → IPC → 主进程读取 `user-models.json`
-2. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，通过 IPC 事件推送进度
-3. 切换模型：前端调用 `window.capty` IPC 更新 `config.json`，下次录音时 HTTP 请求的 `model` 字段携带新的 model ID，Sidecar 自动加载对应模型
+1. 前端通过 `window.capty.listModels()` → IPC → 主进程扫描 `models/` 目录获取已下载模型 + 读取 `recommended-models.json` 获取推荐模型
+2. 每个模型目录内含 `model-meta.json` 自描述元数据，fallback 从目录名 + `config.json` 推断
+3. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，完成后写入 `model-meta.json`
+4. 删除模型：直接删除模型目录，无需操作任何 JSON 注册表
+5. 切换模型：前端更新 `config.json`，下次录音时 HTTP 请求的 `model` 字段携带新的 model ID
 
 ## 项目结构
 
@@ -138,7 +140,6 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 ```
 ~/Library/Application Support/capty/
 ├── config.json          # 应用配置（见下方字段说明）
-├── user-models.json     # 模型注册表（单一数据源）
 ├── Cache/               # ← Electron/Chromium 自动生成，以下均可忽略
 ├── Code Cache/
 ├── GPUCache/
@@ -168,20 +169,6 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `asrProviders` | `AsrProvider[]` | ASR Provider 列表，每个含 id / name / baseUrl / apiKey / model / isSidecar；默认含一个 Local Sidecar |
 | `selectedAsrProviderId` | `string \| null` | 当前激活的 ASR Provider ID |
 
-#### user-models.json
-
-模型注册表，运行时的唯一数据源。首次启动时从内置 `resources/models.json` 复制生成，之后所有变更（下载、删除、搜索安装）都写入此文件。每条记录包含：
-
-| 字段 | 说明 |
-|------|------|
-| `id` | 模型唯一标识，同时也是 `models/` 下的目录名 |
-| `name` | 显示名称 |
-| `type` | 模型类型标签（`whisper` / `qwen-asr` / `parakeet` / `auto`），仅用于 UI 显示，mlx-audio 自动检测 |
-| `repo` | HuggingFace 仓库路径，如 `Qwen/Qwen3-ASR-0.6B` |
-| `size_gb` | 模型大小（GB），首次启动时从磁盘计算回填 |
-| `languages` | 支持的语言列表 |
-| `description` | 模型描述 |
-
 ### 数据目录
 
 位置：用户自定义（默认 `~/Library/Application Support/capty/data/`）
@@ -196,21 +183,22 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 │   │   ├── seg_001.wav
 │   │   └── ...
 │   └── ...
-└── models/              # 已下载的 ASR 模型
-    ├── qwen3-asr-0.6b/         # 内置模型（目录名 = model id）
+└── models/              # 已下载的 ASR 模型（磁盘即注册表）
+    ├── mlx-community--Qwen3-ASR-0.6B-8bit/  # 目录名 = repo.replace("/", "--")
+    │   ├── model-meta.json      # 自描述元数据（下载时写入）
     │   ├── config.json
     │   ├── model.safetensors
     │   ├── tokenizer.json
     │   └── ...
-    ├── whisper-tiny/
-    └── Qwen--Qwen3-ASR-1.7B/   # 从 HuggingFace 搜索下载的模型
+    ├── mlx-community--whisper-tiny/
+    └── mlx-community--whisper-large-v3-turbo/
 ```
 
 | 路径 | 说明 |
 |------|------|
 | `capty.db` | SQLite 数据库，存储会话元数据（时间、时长、模型名）和转写字幕段落（时间戳 + 文本） |
 | `audio/<session>/` | 每次录音的音频目录，`full.wav` 是完整录音，`seg_NNN.wav` 是 VAD 分段 |
-| `models/<model-id>/` | 已下载的模型文件，目录名对应 `user-models.json` 中的 `id` 字段 |
+| `models/<model-id>/` | 已下载的模型文件，目录名 = `repo.replace("/", "--")`，内含 `model-meta.json` 自描述元数据 |
 
 ## 开发
 
@@ -294,6 +282,18 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (29)
+
+- **模型管理重构：磁盘驱动，无静态注册表** — 移除双重注册表（`resources/models.json` + `user-models.json`），改为纯磁盘扫描
+  - 删除 `resources/models.json`，新建 `resources/recommended-models.json`（纯推荐列表，无 `id` 字段，`id` 由 `repo.replace("/", "--")` 派生）
+  - 删除 `user-models.json`，启动时自动清理残留文件
+  - 每个模型目录内含 `model-meta.json` 自描述元数据（下载时自动写入），fallback 从目录名 + `config.json` 推断
+  - `models:list` 重写：扫描 `models/` 目录获取已下载模型（`downloaded: true`）+ 推荐列表中未下载的（`downloaded: false`）
+  - `models:delete` 简化为直接删除目录，不操作任何 JSON
+  - sidecar `model_registry.py` 重写：删除 `BUILTIN_MODELS`，纯磁盘扫描 + `model-meta.json` 读取
+  - `appStore.ts` 默认 `selectedModelId` 改为空字符串（不再硬编码模型 ID）
+  - 统一目录命名：所有模型目录名 = `repo.replace("/", "--")`
 
 ### 2026-03-27 (28)
 

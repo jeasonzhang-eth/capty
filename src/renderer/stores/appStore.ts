@@ -96,7 +96,7 @@ const initialState = {
   audioDevices: [] as MediaDeviceInfo[],
   selectedDeviceId: null as string | null,
   models: [] as ModelInfo[],
-  selectedModelId: "qwen3-asr-0.6b",
+  selectedModelId: "",
 };
 
 export const useAppStore = create<AppState>((set) => ({
