@@ -89,6 +89,78 @@ export function createDatabase(dbPath: string): Database.Database {
 }
 
 /**
+ * Migrate old UTC timestamps to local time.
+ * Returns audio paths that need directory renaming on disk.
+ */
+export function migrateUtcToLocal(
+  db: Database.Database,
+): { id: number; oldPath: string; newPath: string }[] {
+  const version = db.pragma("user_version", { simple: true }) as number;
+  if (version >= 1) return [];
+
+  const migrate = db.transaction(() => {
+    // Convert UTC → local for sessions
+    db.exec(`
+      UPDATE sessions SET
+        started_at = datetime(started_at, 'localtime'),
+        ended_at = CASE WHEN ended_at IS NOT NULL
+                        THEN datetime(ended_at, 'localtime') ELSE NULL END,
+        title = CASE WHEN title GLOB
+          '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]'
+          THEN datetime(title, 'localtime') ELSE title END
+    `);
+
+    // Convert UTC → local for summaries
+    db.exec(
+      "UPDATE summaries SET created_at = datetime(created_at, 'localtime')",
+    );
+
+    // Collect audio paths that need renaming (timestamp-format only)
+    const sessions = db
+      .prepare(
+        "SELECT id, audio_path FROM sessions WHERE audio_path IS NOT NULL AND audio_path GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9]'",
+      )
+      .all() as { id: number; audio_path: string }[];
+
+    const renames: { id: number; oldPath: string; newPath: string }[] = [];
+    const pad = (n: number): string => String(n).padStart(2, "0");
+
+    for (const s of sessions) {
+      const m = s.audio_path.match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})$/,
+      );
+      if (!m) continue;
+
+      const utcDate = new Date(
+        Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]),
+      );
+      const newPath = `${utcDate.getFullYear()}-${pad(utcDate.getMonth() + 1)}-${pad(utcDate.getDate())}T${pad(utcDate.getHours())}-${pad(utcDate.getMinutes())}-${pad(utcDate.getSeconds())}`;
+
+      if (newPath !== s.audio_path) {
+        renames.push({ id: s.id, oldPath: s.audio_path, newPath });
+      }
+    }
+
+    // Update audio_path in DB
+    const updateStmt = db.prepare(
+      "UPDATE sessions SET audio_path = ? WHERE id = ?",
+    );
+    for (const r of renames) {
+      updateStmt.run(r.newPath, r.id);
+    }
+
+    db.pragma("user_version = 1");
+    return renames;
+  });
+
+  const renames = migrate();
+  console.log(
+    `[db] Migrated UTC timestamps to local time (${renames.length} audio path(s) to rename)`,
+  );
+  return renames;
+}
+
+/**
  * Fix sessions stuck in 'recording' status due to abnormal exit
  * (e.g. crash, dev server restart, force quit).
  */

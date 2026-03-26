@@ -9,7 +9,7 @@ import { join } from "path";
 import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
-import { createDatabase } from "./database";
+import { createDatabase, migrateUtcToLocal } from "./database";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { repairWavHeaders } from "./audio-files";
 import Database from "better-sqlite3";
@@ -89,9 +89,32 @@ app.whenReady().then(() => {
   const dbPath = join(dataDir, "capty.db");
   db = createDatabase(dbPath);
 
-  // 3b. Repair WAV files left with placeholder headers from abnormal exits
-  const audioDir = join(dataDir, "audio");
-  repairWavHeaders(audioDir);
+  // 3b. Migrate old UTC timestamps to local time (one-time, guarded by user_version)
+  const audioRenames = migrateUtcToLocal(db);
+  const audioBaseDir = join(dataDir, "audio");
+  for (const { oldPath, newPath } of audioRenames) {
+    const oldDir = join(audioBaseDir, oldPath);
+    const newDir = join(audioBaseDir, newPath);
+    try {
+      if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+        fs.renameSync(oldDir, newDir);
+        // Rename main WAV file inside the directory
+        const oldWav = join(newDir, `${oldPath}.wav`);
+        const newWav = join(newDir, `${newPath}.wav`);
+        if (fs.existsSync(oldWav)) {
+          fs.renameSync(oldWav, newWav);
+        }
+      }
+    } catch (err) {
+      console.error(
+        `[migration] Failed to rename audio dir ${oldPath} -> ${newPath}:`,
+        err,
+      );
+    }
+  }
+
+  // 3c. Repair WAV files left with placeholder headers from abnormal exits
+  repairWavHeaders(audioBaseDir);
 
   // 4. Ensure models directory exists
   const modelsDir = join(dataDir, "models");

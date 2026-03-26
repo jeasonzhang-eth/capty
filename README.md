@@ -313,6 +313,16 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (17)
+
+- **旧数据 UTC→本地时间迁移** — 一次性自动迁移旧数据中的 UTC 时间戳到本地时间
+  - 使用 `PRAGMA user_version` 作为迁移版本控制，确保只执行一次
+  - 迁移 `sessions` 表的 `started_at`、`ended_at`、`title`（仅日期格式的 title）
+  - 迁移 `summaries` 表的 `created_at`
+  - 自动重命名磁盘上的音频目录和 WAV 文件（UTC 时间戳→本地时间戳）
+  - 整个迁移包裹在 SQLite 事务中，保证原子性
+  - 影响文件：`database.ts`（新增 `migrateUtcToLocal`）、`index.ts`（调用迁移 + 文件重命名）
+
 ### 2026-03-26 (16)
 
 - **修复时间戳使用 UTC 而非本地时间** — 所有时间记录统一改为本地时间
