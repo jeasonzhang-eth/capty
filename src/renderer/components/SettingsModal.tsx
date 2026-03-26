@@ -59,21 +59,71 @@ interface SettingsModalProps {
   readonly onClose: () => void;
 }
 
-const sectionStyle: React.CSSProperties = {
-  marginBottom: "24px",
+/* ─── Shared style constants ─── */
+
+const cardStyle: React.CSSProperties = {
+  backgroundColor: "var(--bg-tertiary)",
+  borderRadius: "10px",
+  border: "1px solid var(--border)",
+  padding: "16px",
+  marginBottom: "16px",
 };
 
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: "14px",
   fontWeight: 600,
-  marginBottom: "12px",
   color: "var(--text-primary)",
+  marginBottom: "8px",
+};
+
+const sectionDescStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "var(--text-muted)",
+  marginBottom: "8px",
 };
 
 const labelStyle: React.CSSProperties = {
   fontSize: "12px",
   color: "var(--text-muted)",
   marginBottom: "4px",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  height: "32px",
+  padding: "0 10px",
+  fontSize: "12px",
+  backgroundColor: "var(--bg-primary)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border-color 0.15s",
+};
+
+const primaryBtnStyle: React.CSSProperties = {
+  height: "32px",
+  padding: "0 14px",
+  fontSize: "12px",
+  borderRadius: "6px",
+  border: "none",
+  backgroundColor: "var(--accent)",
+  color: "white",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  height: "32px",
+  padding: "0 14px",
+  fontSize: "12px",
+  borderRadius: "6px",
+  border: "1px solid var(--border)",
+  backgroundColor: "transparent",
+  color: "var(--text-primary)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const tagStyle: React.CSSProperties = {
@@ -85,14 +135,68 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-type TabId = "general" | "speech-backend" | "speech-models" | "language-models";
+type TabId = "general" | "speech" | "language-models";
 
-const TABS: readonly { readonly id: TabId; readonly label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "speech-backend", label: "Speech Backend" },
-  { id: "speech-models", label: "Speech Models" },
-  { id: "language-models", label: "Language Models" },
+const TABS: readonly { readonly id: TabId; readonly icon: string; readonly label: string }[] = [
+  { id: "general", icon: "\u2699\ufe0f", label: "General" },
+  { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "Speech" },
+  { id: "language-models", icon: "\ud83e\udde0", label: "Language Models" },
 ];
+
+/* ─── Segmented Control ─── */
+
+function SegmentedControl({
+  value,
+  onChange,
+  disabled,
+  options,
+}: {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly disabled?: boolean;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+}): React.ReactElement {
+  return (
+    <div
+      style={{
+        display: "flex",
+        height: "36px",
+        borderRadius: "8px",
+        backgroundColor: "var(--bg-primary)",
+        padding: "3px",
+        opacity: disabled ? 0.6 : 1,
+        cursor: disabled ? "not-allowed" : "default",
+      }}
+    >
+      {options.map((opt) => {
+        const isSelected = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => {
+              if (!disabled) onChange(opt.value);
+            }}
+            disabled={disabled}
+            style={{
+              flex: 1,
+              height: "100%",
+              borderRadius: "6px",
+              border: "none",
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: disabled ? "not-allowed" : "pointer",
+              transition: "all 0.2s ease",
+              backgroundColor: isSelected ? "var(--accent)" : "transparent",
+              color: isSelected ? "white" : "var(--text-muted)",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ─── Small reusable components ─── */
 
@@ -257,16 +361,13 @@ function ModelCard({
               onClick={() => onDownloadModel(model)}
               disabled={isRecording || isDownloading}
               style={{
-                padding: "5px 12px",
+                ...primaryBtnStyle,
+                height: "28px",
+                padding: "0 12px",
                 fontSize: "11px",
-                borderRadius: "5px",
-                border: "none",
-                backgroundColor: "var(--accent)",
-                color: "white",
                 cursor:
                   isRecording || isDownloading ? "not-allowed" : "pointer",
                 opacity: isRecording || isDownloading ? 0.5 : 1,
-                whiteSpace: "nowrap",
               }}
             >
               Download
@@ -277,15 +378,14 @@ function ModelCard({
               onClick={() => onSelectModel(model.id)}
               disabled={isRecording}
               style={{
-                padding: "5px 12px",
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 12px",
                 fontSize: "11px",
-                borderRadius: "5px",
-                border: "1px solid var(--accent)",
-                backgroundColor: "transparent",
+                borderColor: "var(--accent)",
                 color: "var(--accent)",
                 cursor: isRecording ? "not-allowed" : "pointer",
                 opacity: isRecording ? 0.5 : 1,
-                whiteSpace: "nowrap",
               }}
             >
               Use
@@ -294,7 +394,7 @@ function ModelCard({
           {isSelected && model.downloaded && (
             <span
               style={{
-                padding: "5px 12px",
+                padding: "0 12px",
                 fontSize: "11px",
                 color: "var(--accent)",
                 fontWeight: 600,
@@ -309,16 +409,14 @@ function ModelCard({
               onClick={() => onDelete(model.id)}
               disabled={isRecording || isDownloading}
               style={{
-                padding: "5px 8px",
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 8px",
                 fontSize: "11px",
-                borderRadius: "5px",
-                border: "1px solid var(--border)",
-                backgroundColor: "transparent",
                 color: "var(--text-muted)",
                 cursor:
                   isRecording || isDownloading ? "not-allowed" : "pointer",
                 opacity: isRecording || isDownloading ? 0.5 : 1,
-                whiteSpace: "nowrap",
               }}
               title="Delete model"
             >
@@ -364,7 +462,7 @@ function ModelCard({
   );
 }
 
-/* ─── Tab: General ─── */
+/* ─── Page: General ─── */
 
 function GeneralTab({
   dataDir,
@@ -380,26 +478,28 @@ function GeneralTab({
   return (
     <>
       {/* Data Directory */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Data Directory</div>
-        <div style={labelStyle}>
-          Recordings, transcripts, and models are stored here.
-        </div>
+      <div style={sectionTitleStyle}>Data Directory</div>
+      <div style={sectionDescStyle}>
+        Recordings, transcripts, and models are stored here.
+      </div>
+      <div style={cardStyle}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            marginTop: "8px",
           }}
         >
           <div
             style={{
               flex: 1,
-              padding: "8px 12px",
-              backgroundColor: "var(--bg-tertiary)",
+              padding: "0 10px",
+              height: "32px",
+              lineHeight: "32px",
+              backgroundColor: "var(--bg-primary)",
               borderRadius: "6px",
               fontSize: "13px",
+              fontFamily: "monospace",
               color: "var(--text-secondary)",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -413,15 +513,9 @@ function GeneralTab({
             onClick={onChangeDataDir}
             disabled={isRecording}
             style={{
-              padding: "8px 14px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--bg-tertiary)",
-              color: "var(--text-primary)",
+              ...secondaryBtnStyle,
               cursor: isRecording ? "not-allowed" : "pointer",
               opacity: isRecording ? 0.5 : 1,
-              whiteSpace: "nowrap",
             }}
           >
             Change
@@ -430,26 +524,28 @@ function GeneralTab({
       </div>
 
       {/* Config Directory */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Config Directory</div>
-        <div style={labelStyle}>
-          Application configuration files are stored here.
-        </div>
+      <div style={sectionTitleStyle}>Config Directory</div>
+      <div style={sectionDescStyle}>
+        Application configuration files are stored here.
+      </div>
+      <div style={cardStyle}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            marginTop: "8px",
           }}
         >
           <div
             style={{
               flex: 1,
-              padding: "8px 12px",
-              backgroundColor: "var(--bg-tertiary)",
+              padding: "0 10px",
+              height: "32px",
+              lineHeight: "32px",
+              backgroundColor: "var(--bg-primary)",
               borderRadius: "6px",
               fontSize: "13px",
+              fontFamily: "monospace",
               color: "var(--text-secondary)",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -461,16 +557,7 @@ function GeneralTab({
           </div>
           <button
             onClick={() => window.capty.openConfigDir()}
-            style={{
-              padding: "8px 14px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--bg-tertiary)",
-              color: "var(--text-primary)",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
+            style={secondaryBtnStyle}
           >
             Open
           </button>
@@ -480,53 +567,87 @@ function GeneralTab({
   );
 }
 
-/* ─── Tab: Speech Models ─── */
+/* ─── Page: Speech (merged Backend + Models) ─── */
 
-function SpeechModelsTab({
+function SpeechTab({
+  asrBackend,
+  sidecarUrl,
+  asrProvider,
+  isRecording,
+  dataDir,
   models,
   selectedModelId,
   isDownloading,
   downloadingModelId,
   downloadProgress,
   downloadError,
-  isRecording,
   hfMirrorUrl,
   defaultHfUrl,
+  onSaveAsrSettings,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
 }: {
+  readonly asrBackend: "builtin" | "external";
+  readonly sidecarUrl: string;
+  readonly asrProvider: AsrProviderConfig | null;
+  readonly isRecording: boolean;
+  readonly dataDir: string | null;
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
   readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
   readonly downloadError: string | null;
-  readonly isRecording: boolean;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly onSaveAsrSettings: (settings: {
+    asrBackend: "builtin" | "external";
+    sidecarUrl: string;
+    asrProvider: AsrProviderConfig | null;
+  }) => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
 }): React.ReactElement {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Backend state (from SpeechBackendTab)
+  const [backend, setBackend] = useState(asrBackend);
+  const [editSidecarUrl, setEditSidecarUrl] = useState(sidecarUrl);
+  const [editProvider, setEditProvider] = useState({
+    name: asrProvider?.name ?? "",
+    baseUrl: asrProvider?.baseUrl ?? "",
+    apiKey: asrProvider?.apiKey ?? "",
+    model: asrProvider?.model ?? "",
+  });
+  const [sidecarStatus, setSidecarStatus] = useState<
+    "checking" | "online" | "offline" | null
+  >(null);
+  const [asrTestResult, setAsrTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+  const [asrTesting, setAsrTesting] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [modelsFetching, setModelsFetching] = useState(false);
+  const [useCustomModel, setUseCustomModel] = useState(false);
 
-  // Search state
+  // Models state (from SpeechModelsTab)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-
-  // HuggingFace Mirror URL state
   const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
   const [hfUrlSaved, setHfUrlSaved] = useState(false);
   const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
 
-  // Sync search results' downloaded status when models list changes
+  // Sync search results' downloaded status
   useEffect(() => {
     if (searchResults.length === 0) return;
     const downloadedIds = new Set(
@@ -544,6 +665,111 @@ function SpeechModelsTab({
     }
   }, [models, searchResults]);
 
+  const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
+
+  // Backend handlers
+  const handleBackendChange = useCallback(
+    (newBackend: string) => {
+      if (isRecording) return;
+      const nb = newBackend as "builtin" | "external";
+      setBackend(nb);
+      if (nb === "builtin") {
+        onSaveAsrSettings({
+          asrBackend: "builtin",
+          sidecarUrl: editSidecarUrl,
+          asrProvider: asrProvider,
+        });
+      } else {
+        onSaveAsrSettings({
+          asrBackend: "external",
+          sidecarUrl: editSidecarUrl,
+          asrProvider: editProvider.baseUrl
+            ? {
+                id: asrProvider?.id ?? `ext-${Date.now()}`,
+                name: editProvider.name || "External ASR",
+                baseUrl: editProvider.baseUrl,
+                apiKey: editProvider.apiKey,
+                model: editProvider.model,
+              }
+            : null,
+        });
+      }
+    },
+    [isRecording, editSidecarUrl, editProvider, asrProvider, onSaveAsrSettings],
+  );
+
+  const handleTestSidecar = useCallback(async () => {
+    setSidecarStatus("checking");
+    try {
+      const result = await window.capty.checkSidecarHealth();
+      setSidecarStatus(result.online ? "online" : "offline");
+    } catch {
+      setSidecarStatus("offline");
+    }
+    setTimeout(() => setSidecarStatus(null), 5000);
+  }, []);
+
+  const handleSaveSidecarUrl = useCallback(() => {
+    onSaveAsrSettings({
+      asrBackend: backend,
+      sidecarUrl: editSidecarUrl,
+      asrProvider: asrProvider,
+    });
+  }, [backend, editSidecarUrl, asrProvider, onSaveAsrSettings]);
+
+  const handleSaveAsrProvider = useCallback(() => {
+    const provider: AsrProviderConfig = {
+      id: asrProvider?.id ?? `ext-${Date.now()}`,
+      name: editProvider.name || "External ASR",
+      baseUrl: editProvider.baseUrl,
+      apiKey: editProvider.apiKey,
+      model: editProvider.model,
+    };
+    onSaveAsrSettings({
+      asrBackend: backend,
+      sidecarUrl: editSidecarUrl,
+      asrProvider: provider,
+    });
+  }, [backend, editSidecarUrl, editProvider, asrProvider, onSaveAsrSettings]);
+
+  const handleTestAsr = useCallback(async () => {
+    if (!editProvider.baseUrl || !editProvider.model) return;
+    setAsrTesting(true);
+    setAsrTestResult(null);
+    try {
+      await window.capty.asrTest({
+        baseUrl: editProvider.baseUrl,
+        apiKey: editProvider.apiKey,
+        model: editProvider.model,
+      });
+      setAsrTestResult({ ok: true, message: "Connection OK" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Connection failed";
+      setAsrTestResult({ ok: false, message: msg });
+    } finally {
+      setAsrTesting(false);
+      setTimeout(() => setAsrTestResult(null), 5000);
+    }
+  }, [editProvider]);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editProvider.baseUrl) return;
+    setModelsFetching(true);
+    try {
+      const fetched = await window.capty.asrFetchModels({
+        baseUrl: editProvider.baseUrl,
+        apiKey: editProvider.apiKey,
+      });
+      setFetchedModels(fetched);
+      setUseCustomModel(false);
+    } catch {
+      setFetchedModels([]);
+    } finally {
+      setModelsFetching(false);
+    }
+  }, [editProvider.baseUrl, editProvider.apiKey]);
+
+  // Models handlers
   const handleDelete = useCallback(
     (modelId: string) => {
       if (modelId === selectedModelId) return;
@@ -594,231 +820,500 @@ function SpeechModelsTab({
 
   return (
     <>
-      {/* HuggingFace Mirror URL */}
-      <div
-        style={{
-          marginBottom: "16px",
-          padding: "10px 12px",
-          backgroundColor: "var(--bg-tertiary)",
-          borderRadius: "6px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "11px",
-            color: "var(--text-muted)",
-            marginBottom: "6px",
-          }}
-        >
-          HuggingFace Mirror (model download source)
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input
-            type="text"
-            value={editingHfUrl}
-            onChange={(e) => setEditingHfUrl(e.target.value)}
-            placeholder={defaultHfUrl}
-            style={{
-              flex: 1,
-              padding: "6px 8px",
-              fontSize: "11px",
-              backgroundColor: "var(--bg-primary)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border)",
-              borderRadius: "4px",
-              outline: "none",
-              fontFamily: "monospace",
-            }}
-          />
-          {hfUrlChanged && (
-            <button
-              onClick={handleSaveHfUrl}
-              style={{
-                padding: "5px 10px",
-                fontSize: "11px",
-                borderRadius: "4px",
-                border: "none",
-                backgroundColor: "var(--accent)",
-                color: "white",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Save
-            </button>
-          )}
-          {!hfUrlChanged && hfUrlSaved && (
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#22c55e",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Saved
-            </span>
-          )}
-          <button
-            onClick={handleResetHfUrl}
-            disabled={editingHfUrl === defaultHfUrl}
-            style={{
-              padding: "5px 8px",
-              fontSize: "10px",
-              borderRadius: "4px",
-              border: "1px solid var(--border)",
-              backgroundColor: "transparent",
-              color: "var(--text-muted)",
-              cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
-              opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
-              whiteSpace: "nowrap",
-            }}
-            title="Reset to default"
-          >
-            Reset
-          </button>
-        </div>
+      {/* Section 1: Backend */}
+      <div style={sectionTitleStyle}>Backend</div>
+      <div style={{ marginBottom: "16px" }}>
+        <SegmentedControl
+          value={backend}
+          onChange={handleBackendChange}
+          disabled={isRecording}
+          options={[
+            { value: "builtin", label: "Built-in Sidecar" },
+            { value: "external", label: "External ASR" },
+          ]}
+        />
       </div>
 
-      {/* Download error */}
-      {downloadError && (
-        <div
-          style={{
-            padding: "8px 12px",
-            marginBottom: "12px",
-            backgroundColor: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            borderRadius: "6px",
-            fontSize: "12px",
-            color: "#ef4444",
-            lineHeight: "18px",
-          }}
-        >
-          {downloadError}
+      {/* Built-in config */}
+      {backend === "builtin" && (
+        <div style={cardStyle}>
+          <div style={labelStyle}>Sidecar URL</div>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+            <input
+              type="text"
+              value={editSidecarUrl}
+              onChange={(e) => setEditSidecarUrl(e.target.value)}
+              placeholder="http://localhost:8765"
+              style={{
+                ...inputStyle,
+                flex: 1,
+                fontFamily: "monospace",
+              }}
+            />
+            {editSidecarUrl !== sidecarUrl && (
+              <button onClick={handleSaveSidecarUrl} style={primaryBtnStyle}>
+                Save
+              </button>
+            )}
+            <button
+              onClick={handleTestSidecar}
+              disabled={sidecarStatus === "checking"}
+              style={{
+                ...secondaryBtnStyle,
+                color: "var(--text-muted)",
+                cursor:
+                  sidecarStatus === "checking" ? "not-allowed" : "pointer",
+              }}
+            >
+              {sidecarStatus === "checking" ? "Checking..." : "Test"}
+            </button>
+          </div>
+          {sidecarStatus === "online" && (
+            <div
+              style={{
+                marginBottom: "12px",
+                fontSize: "11px",
+                color: "#22c55e",
+              }}
+            >
+              Sidecar is online
+            </div>
+          )}
+          {sidecarStatus === "offline" && (
+            <div
+              style={{
+                marginBottom: "12px",
+                fontSize: "11px",
+                color: "#ef4444",
+              }}
+            >
+              Sidecar is offline
+            </div>
+          )}
+
+          <div
+            style={{
+              padding: "10px 12px",
+              backgroundColor: "var(--bg-primary)",
+              borderRadius: "6px",
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              lineHeight: "18px",
+            }}
+          >
+            <div style={{ marginBottom: "4px", fontWeight: 600 }}>
+              Start command:
+            </div>
+            <code
+              style={{
+                display: "block",
+                padding: "6px 8px",
+                backgroundColor: "var(--bg-tertiary)",
+                borderRadius: "4px",
+                fontFamily: "monospace",
+                fontSize: "11px",
+                wordBreak: "break-all",
+              }}
+            >
+              capty-sidecar --models-dir {modelsDir} --port 8765
+            </code>
+          </div>
         </div>
       )}
 
-      {/* Search HuggingFace */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Search HuggingFace</div>
-        <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Search ASR models, e.g. whisper, wav2vec2..."
-            style={{
-              flex: 1,
-              padding: "8px 10px",
-              fontSize: "12px",
-              backgroundColor: "var(--bg-tertiary)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border)",
-              borderRadius: "6px",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={isSearching || !searchQuery.trim()}
-            style={{
-              padding: "8px 14px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "none",
-              backgroundColor: "var(--accent)",
-              color: "white",
-              cursor:
-                isSearching || !searchQuery.trim() ? "not-allowed" : "pointer",
-              opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {isSearching ? "Searching..." : "Search"}
-          </button>
-        </div>
-
-        {/* Search results */}
-        {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
+      {/* External config */}
+      {backend === "external" && (
+        <div style={cardStyle}>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "8px",
+              gap: "10px",
             }}
           >
-            {searchResults.map((model) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                isSelected={model.id === selectedModelId}
-                isThisDownloading={
-                  isDownloading && downloadingModelId === model.id
+            <div>
+              <div style={labelStyle}>Name</div>
+              <input
+                type="text"
+                value={editProvider.name}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, name: e.target.value })
                 }
-                downloadProgress={downloadProgress}
-                isRecording={isRecording}
-                isDownloading={isDownloading}
-                onDownloadModel={onDownloadModel}
-                onSelectModel={onSelectModel}
-                onDelete={null}
+                placeholder="My ASR Server"
+                style={inputStyle}
               />
-            ))}
-            {hasSearched && !isSearching && searchResults.length === 0 && (
-              <div
+            </div>
+            <div>
+              <div style={labelStyle}>Base URL</div>
+              <input
+                type="text"
+                value={editProvider.baseUrl}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, baseUrl: e.target.value })
+                }
+                placeholder="http://localhost:8080"
+                style={{ ...inputStyle, fontFamily: "monospace" }}
+              />
+            </div>
+            <div>
+              <div style={labelStyle}>API Key (optional)</div>
+              <input
+                type="password"
+                value={editProvider.apiKey}
+                onChange={(e) =>
+                  setEditProvider({ ...editProvider, apiKey: e.target.value })
+                }
+                placeholder="sk-..."
+                style={{ ...inputStyle, fontFamily: "monospace" }}
+              />
+            </div>
+            <div>
+              <div style={labelStyle}>Model</div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {fetchedModels.length > 0 && !useCustomModel ? (
+                  <select
+                    value={editProvider.model}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setUseCustomModel(true);
+                      } else {
+                        setEditProvider({
+                          ...editProvider,
+                          model: e.target.value,
+                        });
+                      }
+                    }}
+                    style={{
+                      ...inputStyle,
+                      flex: 1,
+                      width: "auto",
+                    }}
+                  >
+                    <option value="" disabled>
+                      Select a model...
+                    </option>
+                    {fetchedModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom...</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={editProvider.model}
+                    onChange={(e) =>
+                      setEditProvider({
+                        ...editProvider,
+                        model: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. whisper-1"
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                )}
+                <button
+                  onClick={handleFetchModels}
+                  disabled={modelsFetching || !editProvider.baseUrl}
+                  style={{
+                    ...secondaryBtnStyle,
+                    color: "var(--text-muted)",
+                    cursor:
+                      modelsFetching || !editProvider.baseUrl
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity: modelsFetching || !editProvider.baseUrl ? 0.5 : 1,
+                  }}
+                >
+                  {modelsFetching ? "Fetching..." : "Fetch Models"}
+                </button>
+              </div>
+              {useCustomModel && fetchedModels.length > 0 && (
+                <button
+                  onClick={() => setUseCustomModel(false)}
+                  style={{
+                    marginTop: "4px",
+                    padding: "0",
+                    fontSize: "11px",
+                    color: "var(--accent)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Back to model list
+                </button>
+              )}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+                marginTop: "4px",
+              }}
+            >
+              <button
+                onClick={handleTestAsr}
+                disabled={
+                  asrTesting || !editProvider.baseUrl || !editProvider.model
+                }
                 style={{
-                  padding: "12px",
-                  textAlign: "center",
+                  ...secondaryBtnStyle,
                   color: "var(--text-muted)",
-                  fontSize: "12px",
+                  cursor:
+                    asrTesting || !editProvider.baseUrl || !editProvider.model
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    asrTesting || !editProvider.baseUrl || !editProvider.model
+                      ? 0.5
+                      : 1,
                 }}
               >
-                No models found. Try different keywords.
+                {asrTesting ? "Testing..." : "Test"}
+              </button>
+              <button
+                onClick={handleSaveAsrProvider}
+                disabled={!editProvider.baseUrl || !editProvider.model}
+                style={{
+                  ...primaryBtnStyle,
+                  cursor:
+                    !editProvider.baseUrl || !editProvider.model
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    !editProvider.baseUrl || !editProvider.model ? 0.5 : 1,
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {asrTestResult && (
+              <div
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  backgroundColor: asrTestResult.ok
+                    ? "rgba(34, 197, 94, 0.1)"
+                    : "rgba(239, 68, 68, 0.1)",
+                  color: asrTestResult.ok ? "#22c55e" : "#ef4444",
+                  wordBreak: "break-word",
+                }}
+              >
+                {asrTestResult.message}
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* My Models */}
-      <div>
-        <div style={sectionTitleStyle}>My Models</div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-          }}
-        >
-          {models.map((model) => (
-            <ModelCard
-              key={model.id}
-              model={model}
-              isSelected={model.id === selectedModelId}
-              isThisDownloading={
-                isDownloading && downloadingModelId === model.id
-              }
-              downloadProgress={downloadProgress}
-              isRecording={isRecording}
-              isDownloading={isDownloading}
-              onDownloadModel={onDownloadModel}
-              onSelectModel={onSelectModel}
-              onDelete={handleDelete}
-            />
-          ))}
-          {models.length === 0 && (
+      {/* Section 2: My Models (Built-in only) */}
+      {backend === "builtin" && (
+        <>
+          <div style={sectionTitleStyle}>My Models</div>
+          <div style={cardStyle}>
             <div
               style={{
-                padding: "12px",
-                textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: "13px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
               }}
             >
-              No models yet. Search HuggingFace above to add models.
+              {models.map((model) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  isSelected={model.id === selectedModelId}
+                  isThisDownloading={
+                    isDownloading && downloadingModelId === model.id
+                  }
+                  downloadProgress={downloadProgress}
+                  isRecording={isRecording}
+                  isDownloading={isDownloading}
+                  onDownloadModel={onDownloadModel}
+                  onSelectModel={onSelectModel}
+                  onDelete={handleDelete}
+                />
+              ))}
+              {models.length === 0 && (
+                <div
+                  style={{
+                    padding: "12px",
+                    textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: "13px",
+                  }}
+                >
+                  No models yet. Search HuggingFace below to add models.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Section 3: Download Models (Built-in only) */}
+      {backend === "builtin" && (
+        <>
+          <div style={sectionTitleStyle}>Download Models</div>
+
+          {/* HuggingFace Mirror URL */}
+          <div style={cardStyle}>
+            <div
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                marginBottom: "8px",
+              }}
+            >
+              HuggingFace Mirror (model download source)
+            </div>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <input
+                type="text"
+                value={editingHfUrl}
+                onChange={(e) => setEditingHfUrl(e.target.value)}
+                placeholder={defaultHfUrl}
+                style={{
+                  ...inputStyle,
+                  flex: 1,
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                }}
+              />
+              {hfUrlChanged && (
+                <button
+                  onClick={handleSaveHfUrl}
+                  style={{ ...primaryBtnStyle, fontSize: "11px" }}
+                >
+                  Save
+                </button>
+              )}
+              {!hfUrlChanged && hfUrlSaved && (
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "#22c55e",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleResetHfUrl}
+                disabled={editingHfUrl === defaultHfUrl}
+                style={{
+                  ...secondaryBtnStyle,
+                  fontSize: "11px",
+                  padding: "0 8px",
+                  color: "var(--text-muted)",
+                  cursor:
+                    editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+                  opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
+                }}
+                title="Reset to default"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* Download error */}
+          {downloadError && (
+            <div
+              style={{
+                padding: "8px 12px",
+                marginBottom: "12px",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "#ef4444",
+                lineHeight: "18px",
+              }}
+            >
+              {downloadError}
             </div>
           )}
-        </div>
-      </div>
+
+          {/* Search HuggingFace */}
+          <div style={{ marginBottom: "16px" }}>
+            <div
+              style={{ display: "flex", gap: "6px", marginBottom: "8px" }}
+            >
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search ASR models, e.g. whisper, wav2vec2..."
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={handleSearch}
+                disabled={isSearching || !searchQuery.trim()}
+                style={{
+                  ...primaryBtnStyle,
+                  cursor:
+                    isSearching || !searchQuery.trim()
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+                }}
+              >
+                {isSearching ? "Searching..." : "Search"}
+              </button>
+            </div>
+
+            {/* Search results */}
+            {(searchResults.length > 0 ||
+              (hasSearched && !isSearching)) && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                {searchResults.map((model) => (
+                  <ModelCard
+                    key={model.id}
+                    model={model}
+                    isSelected={model.id === selectedModelId}
+                    isThisDownloading={
+                      isDownloading && downloadingModelId === model.id
+                    }
+                    downloadProgress={downloadProgress}
+                    isRecording={isRecording}
+                    isDownloading={isDownloading}
+                    onDownloadModel={onDownloadModel}
+                    onSelectModel={onSelectModel}
+                    onDelete={null}
+                  />
+                ))}
+                {hasSearched && !isSearching && searchResults.length === 0 && (
+                  <div
+                    style={{
+                      padding: "12px",
+                      textAlign: "center",
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    No models found. Try different keywords.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Delete confirmation dialog */}
       {confirmDeleteId !== null && (
@@ -883,607 +1378,20 @@ function SpeechModelsTab({
             >
               <button
                 onClick={() => setConfirmDeleteId(null)}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  borderRadius: "6px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "var(--bg-tertiary)",
-                  color: "var(--text-primary)",
-                  cursor: "pointer",
-                }}
+                style={secondaryBtnStyle}
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 style={{
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  borderRadius: "6px",
-                  border: "none",
+                  ...primaryBtnStyle,
                   backgroundColor: "#ef4444",
-                  color: "white",
-                  cursor: "pointer",
                 }}
               >
                 Delete
               </button>
             </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-/* ─── Tab: Speech Backend ─── */
-
-function SpeechBackendTab({
-  asrBackend,
-  sidecarUrl,
-  asrProvider,
-  isRecording,
-  dataDir,
-  onSave,
-}: {
-  readonly asrBackend: "builtin" | "external";
-  readonly sidecarUrl: string;
-  readonly asrProvider: AsrProviderConfig | null;
-  readonly isRecording: boolean;
-  readonly dataDir: string | null;
-  readonly onSave: (settings: {
-    asrBackend: "builtin" | "external";
-    sidecarUrl: string;
-    asrProvider: AsrProviderConfig | null;
-  }) => void;
-}): React.ReactElement {
-  const [backend, setBackend] = useState(asrBackend);
-  const [editSidecarUrl, setEditSidecarUrl] = useState(sidecarUrl);
-  const [editProvider, setEditProvider] = useState({
-    name: asrProvider?.name ?? "",
-    baseUrl: asrProvider?.baseUrl ?? "",
-    apiKey: asrProvider?.apiKey ?? "",
-    model: asrProvider?.model ?? "",
-  });
-  const [sidecarStatus, setSidecarStatus] = useState<
-    "checking" | "online" | "offline" | null
-  >(null);
-  const [asrTestResult, setAsrTestResult] = useState<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
-  const [asrTesting, setAsrTesting] = useState(false);
-  const [fetchedModels, setFetchedModels] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
-  const [modelsFetching, setModelsFetching] = useState(false);
-  const [useCustomModel, setUseCustomModel] = useState(false);
-
-  const handleBackendChange = useCallback(
-    (newBackend: "builtin" | "external") => {
-      if (isRecording) return;
-      setBackend(newBackend);
-      if (newBackend === "builtin") {
-        onSave({
-          asrBackend: "builtin",
-          sidecarUrl: editSidecarUrl,
-          asrProvider: asrProvider,
-        });
-      } else {
-        onSave({
-          asrBackend: "external",
-          sidecarUrl: editSidecarUrl,
-          asrProvider: editProvider.baseUrl
-            ? {
-                id: asrProvider?.id ?? `ext-${Date.now()}`,
-                name: editProvider.name || "External ASR",
-                baseUrl: editProvider.baseUrl,
-                apiKey: editProvider.apiKey,
-                model: editProvider.model,
-              }
-            : null,
-        });
-      }
-    },
-    [isRecording, editSidecarUrl, editProvider, asrProvider, onSave],
-  );
-
-  const handleTestSidecar = useCallback(async () => {
-    setSidecarStatus("checking");
-    try {
-      const result = await window.capty.checkSidecarHealth();
-      setSidecarStatus(result.online ? "online" : "offline");
-    } catch {
-      setSidecarStatus("offline");
-    }
-    setTimeout(() => setSidecarStatus(null), 5000);
-  }, []);
-
-  const handleSaveSidecarUrl = useCallback(() => {
-    onSave({
-      asrBackend: backend,
-      sidecarUrl: editSidecarUrl,
-      asrProvider: asrProvider,
-    });
-  }, [backend, editSidecarUrl, asrProvider, onSave]);
-
-  const handleSaveAsrProvider = useCallback(() => {
-    const provider: AsrProviderConfig = {
-      id: asrProvider?.id ?? `ext-${Date.now()}`,
-      name: editProvider.name || "External ASR",
-      baseUrl: editProvider.baseUrl,
-      apiKey: editProvider.apiKey,
-      model: editProvider.model,
-    };
-    onSave({
-      asrBackend: backend,
-      sidecarUrl: editSidecarUrl,
-      asrProvider: provider,
-    });
-  }, [backend, editSidecarUrl, editProvider, asrProvider, onSave]);
-
-  const handleTestAsr = useCallback(async () => {
-    if (!editProvider.baseUrl || !editProvider.model) return;
-    setAsrTesting(true);
-    setAsrTestResult(null);
-    try {
-      await window.capty.asrTest({
-        baseUrl: editProvider.baseUrl,
-        apiKey: editProvider.apiKey,
-        model: editProvider.model,
-      });
-      setAsrTestResult({ ok: true, message: "Connection OK" });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Connection failed";
-      setAsrTestResult({ ok: false, message: msg });
-    } finally {
-      setAsrTesting(false);
-      setTimeout(() => setAsrTestResult(null), 5000);
-    }
-  }, [editProvider]);
-
-  const handleFetchModels = useCallback(async () => {
-    if (!editProvider.baseUrl) return;
-    setModelsFetching(true);
-    try {
-      const models = await window.capty.asrFetchModels({
-        baseUrl: editProvider.baseUrl,
-        apiKey: editProvider.apiKey,
-      });
-      setFetchedModels(models);
-      setUseCustomModel(false);
-      // Auto-select current model if it exists in the list
-      if (
-        models.length > 0 &&
-        editProvider.model &&
-        !models.some((m) => m.id === editProvider.model)
-      ) {
-        // Current model not in list — keep it as-is
-      }
-    } catch {
-      setFetchedModels([]);
-    } finally {
-      setModelsFetching(false);
-    }
-  }, [editProvider.baseUrl, editProvider.apiKey, editProvider.model]);
-
-  const cardStyle = (isActive: boolean): React.CSSProperties => ({
-    padding: "14px",
-    border: isActive ? "2px solid var(--accent)" : "1px solid var(--border)",
-    borderRadius: "8px",
-    cursor: isRecording ? "not-allowed" : "pointer",
-    opacity: isRecording ? 0.6 : 1,
-    backgroundColor: isActive ? "rgba(59, 130, 246, 0.08)" : "transparent",
-    transition: "border-color 0.2s, background-color 0.2s",
-  });
-
-  const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
-
-  return (
-    <>
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Backend Type</div>
-        <div style={{ display: "flex", gap: "12px" }}>
-          <div
-            style={cardStyle(backend === "builtin")}
-            onClick={() => handleBackendChange("builtin")}
-          >
-            <div
-              style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                marginBottom: "4px",
-              }}
-            >
-              Built-in Sidecar
-            </div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-              WebSocket protocol. Run sidecar process manually.
-            </div>
-          </div>
-          <div
-            style={cardStyle(backend === "external")}
-            onClick={() => handleBackendChange("external")}
-          >
-            <div
-              style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                marginBottom: "4px",
-              }}
-            >
-              External ASR Server
-            </div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-              OpenAI-compatible HTTP API.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {backend === "builtin" && (
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Sidecar Configuration</div>
-          <div style={{ marginBottom: "12px" }}>
-            <div style={labelStyle}>Sidecar URL</div>
-            <div style={{ display: "flex", gap: "6px" }}>
-              <input
-                type="text"
-                value={editSidecarUrl}
-                onChange={(e) => setEditSidecarUrl(e.target.value)}
-                placeholder="http://localhost:8765"
-                style={{
-                  flex: 1,
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  fontFamily: "monospace",
-                  boxSizing: "border-box",
-                }}
-              />
-              {editSidecarUrl !== sidecarUrl && (
-                <button
-                  onClick={handleSaveSidecarUrl}
-                  style={{
-                    padding: "5px 10px",
-                    fontSize: "11px",
-                    borderRadius: "4px",
-                    border: "none",
-                    backgroundColor: "var(--accent)",
-                    color: "white",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Save
-                </button>
-              )}
-              <button
-                onClick={handleTestSidecar}
-                disabled={sidecarStatus === "checking"}
-                style={{
-                  padding: "5px 10px",
-                  fontSize: "11px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "transparent",
-                  color: "var(--text-muted)",
-                  cursor:
-                    sidecarStatus === "checking" ? "not-allowed" : "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {sidecarStatus === "checking" ? "Checking..." : "Test"}
-              </button>
-            </div>
-            {sidecarStatus === "online" && (
-              <div
-                style={{
-                  marginTop: "6px",
-                  fontSize: "11px",
-                  color: "#22c55e",
-                }}
-              >
-                Sidecar is online
-              </div>
-            )}
-            {sidecarStatus === "offline" && (
-              <div
-                style={{
-                  marginTop: "6px",
-                  fontSize: "11px",
-                  color: "#ef4444",
-                }}
-              >
-                Sidecar is offline
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              padding: "10px 12px",
-              backgroundColor: "var(--bg-tertiary)",
-              borderRadius: "6px",
-              fontSize: "11px",
-              color: "var(--text-muted)",
-              lineHeight: "18px",
-            }}
-          >
-            <div style={{ marginBottom: "4px", fontWeight: 600 }}>
-              Start command:
-            </div>
-            <code
-              style={{
-                display: "block",
-                padding: "6px 8px",
-                backgroundColor: "var(--bg-primary)",
-                borderRadius: "4px",
-                fontFamily: "monospace",
-                fontSize: "11px",
-                wordBreak: "break-all",
-              }}
-            >
-              capty-sidecar --models-dir {modelsDir} --port 8765
-            </code>
-          </div>
-        </div>
-      )}
-
-      {backend === "external" && (
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>External ASR Server</div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-            }}
-          >
-            <div>
-              <div style={labelStyle}>Name</div>
-              <input
-                type="text"
-                value={editProvider.name}
-                onChange={(e) =>
-                  setEditProvider({ ...editProvider, name: e.target.value })
-                }
-                placeholder="My ASR Server"
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <div style={labelStyle}>Base URL</div>
-              <input
-                type="text"
-                value={editProvider.baseUrl}
-                onChange={(e) =>
-                  setEditProvider({ ...editProvider, baseUrl: e.target.value })
-                }
-                placeholder="http://localhost:8080"
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  fontFamily: "monospace",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <div style={labelStyle}>API Key (optional)</div>
-              <input
-                type="password"
-                value={editProvider.apiKey}
-                onChange={(e) =>
-                  setEditProvider({ ...editProvider, apiKey: e.target.value })
-                }
-                placeholder="sk-..."
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  fontFamily: "monospace",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-            <div>
-              <div style={labelStyle}>Model</div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {fetchedModels.length > 0 && !useCustomModel ? (
-                  <select
-                    value={editProvider.model}
-                    onChange={(e) => {
-                      if (e.target.value === "__custom__") {
-                        setUseCustomModel(true);
-                      } else {
-                        setEditProvider({
-                          ...editProvider,
-                          model: e.target.value,
-                        });
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: "6px 8px",
-                      fontSize: "12px",
-                      backgroundColor: "var(--bg-primary)",
-                      color: "var(--text-primary)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "4px",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <option value="" disabled>
-                      Select a model...
-                    </option>
-                    {fetchedModels.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                    <option value="__custom__">Custom...</option>
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={editProvider.model}
-                    onChange={(e) =>
-                      setEditProvider({
-                        ...editProvider,
-                        model: e.target.value,
-                      })
-                    }
-                    placeholder="e.g. whisper-1"
-                    style={{
-                      flex: 1,
-                      padding: "6px 8px",
-                      fontSize: "12px",
-                      backgroundColor: "var(--bg-primary)",
-                      color: "var(--text-primary)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "4px",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                )}
-                <button
-                  onClick={handleFetchModels}
-                  disabled={modelsFetching || !editProvider.baseUrl}
-                  style={{
-                    padding: "5px 10px",
-                    fontSize: "11px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--border)",
-                    backgroundColor: "transparent",
-                    color: "var(--text-muted)",
-                    cursor:
-                      modelsFetching || !editProvider.baseUrl
-                        ? "not-allowed"
-                        : "pointer",
-                    opacity: modelsFetching || !editProvider.baseUrl ? 0.5 : 1,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {modelsFetching ? "Fetching..." : "Fetch Models"}
-                </button>
-              </div>
-              {useCustomModel && fetchedModels.length > 0 && (
-                <button
-                  onClick={() => setUseCustomModel(false)}
-                  style={{
-                    marginTop: "4px",
-                    padding: "0",
-                    fontSize: "11px",
-                    color: "var(--accent)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  Back to model list
-                </button>
-              )}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-                marginTop: "4px",
-              }}
-            >
-              <button
-                onClick={handleTestAsr}
-                disabled={
-                  asrTesting || !editProvider.baseUrl || !editProvider.model
-                }
-                style={{
-                  padding: "6px 12px",
-                  fontSize: "11px",
-                  borderRadius: "5px",
-                  border: "1px solid var(--border)",
-                  backgroundColor: "transparent",
-                  color: "var(--text-muted)",
-                  cursor:
-                    asrTesting || !editProvider.baseUrl || !editProvider.model
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity:
-                    asrTesting || !editProvider.baseUrl || !editProvider.model
-                      ? 0.5
-                      : 1,
-                }}
-              >
-                {asrTesting ? "Testing..." : "Test"}
-              </button>
-              <button
-                onClick={handleSaveAsrProvider}
-                disabled={!editProvider.baseUrl || !editProvider.model}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: "11px",
-                  borderRadius: "5px",
-                  border: "none",
-                  backgroundColor: "var(--accent)",
-                  color: "white",
-                  cursor:
-                    !editProvider.baseUrl || !editProvider.model
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity:
-                    !editProvider.baseUrl || !editProvider.model ? 0.5 : 1,
-                }}
-              >
-                Save
-              </button>
-            </div>
-            {asrTestResult && (
-              <div
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: "4px",
-                  fontSize: "11px",
-                  backgroundColor: asrTestResult.ok
-                    ? "rgba(34, 197, 94, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)",
-                  color: asrTestResult.ok ? "#22c55e" : "#ef4444",
-                  wordBreak: "break-word",
-                }}
-              >
-                {asrTestResult.message}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1511,7 +1419,7 @@ const PRESET_PROVIDERS: readonly {
   },
 ];
 
-/* ─── Tab: Language Models ─── */
+/* ─── Page: Language Models ─── */
 
 function LanguageModelsTab({
   llmProviders,
@@ -1556,7 +1464,6 @@ function LanguageModelsTab({
       };
       const next = [...providers, newProvider];
       save(next);
-      // Open edit form for the new provider
       setEditingId(newProvider.id);
       setEditForm({
         name: newProvider.name,
@@ -1660,7 +1567,6 @@ function LanguageModelsTab({
       }));
     } finally {
       setTestingId(null);
-      // Auto-clear result after 5 seconds
       setTimeout(() => {
         setTestResults((prev) => {
           const next = { ...prev };
@@ -1687,12 +1593,9 @@ function LanguageModelsTab({
             }}
             defaultValue=""
             style={{
-              padding: "6px 10px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--bg-tertiary)",
-              color: "var(--text-primary)",
+              ...inputStyle,
+              width: "auto",
+              padding: "0 10px",
               cursor: "pointer",
             }}
           >
@@ -1706,18 +1609,7 @@ function LanguageModelsTab({
             ))}
           </select>
         )}
-        <button
-          onClick={handleAddCustom}
-          style={{
-            padding: "6px 14px",
-            fontSize: "12px",
-            borderRadius: "6px",
-            border: "1px solid var(--border)",
-            backgroundColor: "var(--bg-tertiary)",
-            color: "var(--text-primary)",
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={handleAddCustom} style={secondaryBtnStyle}>
           + Custom
         </button>
       </div>
@@ -1746,11 +1638,8 @@ function LanguageModelsTab({
             <div
               key={provider.id}
               style={{
-                padding: "12px",
-                backgroundColor: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                transition: "border-color 0.2s",
+                ...cardStyle,
+                marginBottom: "8px",
               }}
             >
               <div
@@ -1826,16 +1715,16 @@ function LanguageModelsTab({
                       onClick={() => handleTest(provider)}
                       disabled={testingId === provider.id}
                       style={{
-                        padding: "5px 10px",
+                        ...secondaryBtnStyle,
+                        height: "28px",
+                        padding: "0 10px",
                         fontSize: "11px",
-                        borderRadius: "5px",
-                        border: "1px solid var(--border)",
-                        backgroundColor: "transparent",
                         color: "var(--text-muted)",
                         cursor:
-                          testingId === provider.id ? "not-allowed" : "pointer",
+                          testingId === provider.id
+                            ? "not-allowed"
+                            : "pointer",
                         opacity: testingId === provider.id ? 0.6 : 1,
-                        whiteSpace: "nowrap",
                       }}
                     >
                       {testingId === provider.id ? "Testing..." : "Test"}
@@ -1844,14 +1733,11 @@ function LanguageModelsTab({
                   <button
                     onClick={() => handleEdit(provider)}
                     style={{
-                      padding: "5px 10px",
+                      ...secondaryBtnStyle,
+                      height: "28px",
+                      padding: "0 10px",
                       fontSize: "11px",
-                      borderRadius: "5px",
-                      border: "1px solid var(--border)",
-                      backgroundColor: "transparent",
                       color: "var(--text-muted)",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
                     }}
                   >
                     {isEditing ? "Cancel" : "Edit"}
@@ -1860,14 +1746,11 @@ function LanguageModelsTab({
                     <button
                       onClick={() => handleDelete(provider.id)}
                       style={{
-                        padding: "5px 8px",
+                        ...secondaryBtnStyle,
+                        height: "28px",
+                        padding: "0 8px",
                         fontSize: "11px",
-                        borderRadius: "5px",
-                        border: "1px solid var(--border)",
-                        backgroundColor: "transparent",
                         color: "var(--text-muted)",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
                       }}
                       title="Delete provider"
                     >
@@ -1883,7 +1766,7 @@ function LanguageModelsTab({
                   style={{
                     marginTop: "8px",
                     padding: "6px 10px",
-                    borderRadius: "4px",
+                    borderRadius: "6px",
                     fontSize: "11px",
                     lineHeight: "16px",
                     backgroundColor: testResults[provider.id].ok
@@ -1904,7 +1787,7 @@ function LanguageModelsTab({
                     marginTop: "12px",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "8px",
+                    gap: "10px",
                   }}
                 >
                   {!provider.isPreset && (
@@ -1920,17 +1803,7 @@ function LanguageModelsTab({
                               name: e.target.value,
                             })
                           }
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            fontSize: "12px",
-                            backgroundColor: "var(--bg-primary)",
-                            color: "var(--text-primary)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "4px",
-                            outline: "none",
-                            boxSizing: "border-box",
-                          }}
+                          style={inputStyle}
                         />
                       </div>
                       <div>
@@ -1945,18 +1818,7 @@ function LanguageModelsTab({
                             })
                           }
                           placeholder="https://api.example.com/v1"
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            fontSize: "12px",
-                            backgroundColor: "var(--bg-primary)",
-                            color: "var(--text-primary)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "4px",
-                            outline: "none",
-                            fontFamily: "monospace",
-                            boxSizing: "border-box",
-                          }}
+                          style={{ ...inputStyle, fontFamily: "monospace" }}
                         />
                       </div>
                     </>
@@ -1973,18 +1835,7 @@ function LanguageModelsTab({
                         })
                       }
                       placeholder="sk-..."
-                      style={{
-                        width: "100%",
-                        padding: "6px 8px",
-                        fontSize: "12px",
-                        backgroundColor: "var(--bg-primary)",
-                        color: "var(--text-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "4px",
-                        outline: "none",
-                        fontFamily: "monospace",
-                        boxSizing: "border-box",
-                      }}
+                      style={{ ...inputStyle, fontFamily: "monospace" }}
                     />
                   </div>
                   <div>
@@ -1999,17 +1850,7 @@ function LanguageModelsTab({
                         })
                       }
                       placeholder="e.g. gpt-4o, deepseek-chat"
-                      style={{
-                        width: "100%",
-                        padding: "6px 8px",
-                        fontSize: "12px",
-                        backgroundColor: "var(--bg-primary)",
-                        color: "var(--text-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "4px",
-                        outline: "none",
-                        boxSizing: "border-box",
-                      }}
+                      style={inputStyle}
                     />
                   </div>
                   <div
@@ -2023,17 +1864,13 @@ function LanguageModelsTab({
                       onClick={handleSaveEdit}
                       disabled={!editForm.apiKey || !editForm.model}
                       style={{
-                        padding: "6px 14px",
-                        fontSize: "12px",
-                        borderRadius: "6px",
-                        border: "none",
-                        backgroundColor: "var(--accent)",
-                        color: "white",
+                        ...primaryBtnStyle,
                         cursor:
                           !editForm.apiKey || !editForm.model
                             ? "not-allowed"
                             : "pointer",
-                        opacity: !editForm.apiKey || !editForm.model ? 0.5 : 1,
+                        opacity:
+                          !editForm.apiKey || !editForm.model ? 0.5 : 1,
                       }}
                     >
                       Save
@@ -2107,11 +1944,14 @@ export function SettingsModal({
           backgroundColor: "var(--bg-secondary)",
           border: "1px solid var(--border)",
           borderRadius: "12px",
-          width: "520px",
+          width: "640px",
+          minWidth: "640px",
+          maxWidth: "90vw",
           maxHeight: "85vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          overflow: "hidden",
         }}
       >
         {/* Header */}
@@ -2120,10 +1960,12 @@ export function SettingsModal({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            padding: "20px 24px 0",
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
           }}
         >
-          <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, margin: 0 }}>
             Settings
           </h2>
           <button
@@ -2135,97 +1977,124 @@ export function SettingsModal({
               fontSize: "18px",
               cursor: "pointer",
               padding: "4px 8px",
+              borderRadius: "4px",
             }}
           >
             &times;
           </button>
         </div>
 
-        {/* Tab Bar */}
+        {/* Body: Sidebar + Content */}
         <div
           style={{
             display: "flex",
-            gap: "0",
-            padding: "16px 24px 0",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: "8px 16px",
-                fontSize: "13px",
-                fontWeight: activeTab === tab.id ? 600 : 400,
-                color:
-                  activeTab === tab.id ? "var(--accent)" : "var(--text-muted)",
-                background: "none",
-                border: "none",
-                borderBottom:
-                  activeTab === tab.id
-                    ? "2px solid var(--accent)"
-                    : "2px solid transparent",
-                cursor: "pointer",
-                marginBottom: "-1px",
-                transition: "color 0.15s, border-color 0.15s",
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        <div
-          style={{
-            padding: "20px 24px 24px",
-            overflowY: "auto",
             flex: 1,
+            overflow: "hidden",
           }}
         >
-          {activeTab === "general" && (
-            <GeneralTab
-              dataDir={dataDir}
-              configDir={configDir}
-              isRecording={isRecording}
-              onChangeDataDir={onChangeDataDir}
-            />
-          )}
-          {activeTab === "speech-backend" && (
-            <SpeechBackendTab
-              asrBackend={asrBackend}
-              sidecarUrl={sidecarUrl}
-              asrProvider={asrProvider}
-              isRecording={isRecording}
-              dataDir={dataDir}
-              onSave={onSaveAsrSettings}
-            />
-          )}
-          {activeTab === "speech-models" && (
-            <SpeechModelsTab
-              models={models}
-              selectedModelId={selectedModelId}
-              isDownloading={isDownloading}
-              downloadingModelId={downloadingModelId}
-              downloadProgress={downloadProgress}
-              downloadError={downloadError}
-              isRecording={isRecording}
-              hfMirrorUrl={hfMirrorUrl}
-              defaultHfUrl={defaultHfUrl}
-              onSelectModel={onSelectModel}
-              onDownloadModel={onDownloadModel}
-              onDeleteModel={onDeleteModel}
-              onSearchModels={onSearchModels}
-              onChangeHfMirrorUrl={onChangeHfMirrorUrl}
-            />
-          )}
-          {activeTab === "language-models" && (
-            <LanguageModelsTab
-              llmProviders={llmProviders}
-              onSave={onSaveLlmProviders}
-            />
-          )}
+          {/* Left sidebar */}
+          <div
+            style={{
+              width: "160px",
+              flexShrink: 0,
+              backgroundColor: "var(--bg-tertiary)",
+              padding: "12px 8px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px",
+              borderRight: "1px solid var(--border)",
+              borderBottomLeftRadius: "12px",
+            }}
+          >
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: isActive ? "var(--accent)" : "transparent",
+                    color: isActive ? "white" : "var(--text-secondary)",
+                    fontSize: "13px",
+                    fontWeight: isActive ? 600 : 400,
+                    cursor: "pointer",
+                    transition: "background-color 0.15s ease",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(255,255,255,0.08)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
+                >
+                  <span style={{ fontSize: "16px", lineHeight: 1 }}>
+                    {tab.icon}
+                  </span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right content */}
+          <div
+            style={{
+              flex: 1,
+              padding: "24px",
+              overflowY: "auto",
+            }}
+          >
+            {activeTab === "general" && (
+              <GeneralTab
+                dataDir={dataDir}
+                configDir={configDir}
+                isRecording={isRecording}
+                onChangeDataDir={onChangeDataDir}
+              />
+            )}
+            {activeTab === "speech" && (
+              <SpeechTab
+                asrBackend={asrBackend}
+                sidecarUrl={sidecarUrl}
+                asrProvider={asrProvider}
+                isRecording={isRecording}
+                dataDir={dataDir}
+                models={models}
+                selectedModelId={selectedModelId}
+                isDownloading={isDownloading}
+                downloadingModelId={downloadingModelId}
+                downloadProgress={downloadProgress}
+                downloadError={downloadError}
+                hfMirrorUrl={hfMirrorUrl}
+                defaultHfUrl={defaultHfUrl}
+                onSaveAsrSettings={onSaveAsrSettings}
+                onSelectModel={onSelectModel}
+                onDownloadModel={onDownloadModel}
+                onDeleteModel={onDeleteModel}
+                onSearchModels={onSearchModels}
+                onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+              />
+            )}
+            {activeTab === "language-models" && (
+              <LanguageModelsTab
+                llmProviders={llmProviders}
+                onSave={onSaveLlmProviders}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

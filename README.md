@@ -15,7 +15,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — 四个 Tab：General（数据目录、配置目录）、Speech Backend（ASR 后端切换）、Speech Models（模型管理）、Language Models（LLM provider 配置与测试）
+- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（ASR 后端切换 + 模型管理，合并为一页）、Language Models（LLM provider 配置与测试）；Segmented Control 切换 Built-in / External 模式
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
@@ -312,6 +312,20 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (11)
+
+- **Settings Modal 重新设计** — macOS 系统设置风格
+  - 布局从顶部 4 Tab 栏改为左侧边栏 + 右侧内容区双栏布局
+  - 合并 Speech Backend + Speech Models 为单一 Speech 页面
+  - 4 个 Tab（General / Speech Backend / Speech Models / Language Models）精简为 3 个页面（General / Speech / Language Models）
+  - 左侧边栏 160px 宽，带 emoji 图标，选中项 accent 高亮
+  - 新增 Segmented Control 组件替代两张大卡片切换 Built-in / External 模式
+  - External 模式下 My Models 和 Download Models 区域完全隐藏
+  - 所有页面采用分组卡片样式（`border-radius: 10px`, `background: var(--bg-tertiary)`）
+  - 统一表单控件样式：输入框高度 32px、圆角 6px、focus 时 accent 边框
+  - Modal 宽度从 520px 扩展到 640px
+  - Props 接口完全保持不变，App.tsx 无需改动
 
 ### 2026-03-26 (10)
 
