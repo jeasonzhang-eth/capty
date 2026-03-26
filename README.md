@@ -315,6 +315,7 @@ pytest
 
 ### 2026-03-26 (10)
 
+- **ControlBar 模型下拉列表只显示已下载模型** — 移除未下载模型的 disabled 选项，未下载的模型不再出现在快速选择下拉中（在 Settings > Speech Models 中管理下载）
 - **External ASR 模型列表自动获取** — Model 字段从纯文本输入升级为下拉选择 + 手动输入混合模式
   - 新增 "Fetch Models" 按钮，点击后自动从 ASR 服务器获取可用模型列表
   - 兼容两种 API 格式：Capty sidecar（`GET /models`，数组，自动过滤 `downloaded: false`）和 OpenAI 兼容（`GET /v1/models`，`{data: [...]}`）

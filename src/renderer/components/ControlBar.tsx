@@ -130,12 +130,13 @@ export function ControlBar({
               maxWidth: "200px",
             }}
           >
-            {models.map((m) => (
-              <option key={m.id} value={m.id} disabled={!m.downloaded}>
-                [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
-                {!m.downloaded ? " (not downloaded)" : ""}
-              </option>
-            ))}
+            {models
+              .filter((m) => m.downloaded)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
+                </option>
+              ))}
           </select>
 
           {isDownloading ? (
