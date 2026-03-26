@@ -98,6 +98,7 @@ function App(): React.JSX.Element {
     number | null
   >(null);
   const [regenerationProgress, setRegenerationProgress] = useState(0);
+  const cancelRegenerationRef = useRef(false);
 
   // Model download state
   const [isDownloading, setIsDownloading] = useState(false);
@@ -528,6 +529,7 @@ function App(): React.JSX.Element {
 
       setRegeneratingSessionId(sessionId);
       setRegenerationProgress(0);
+      cancelRegenerationRef.current = false;
 
       try {
         // 1. Read audio file
@@ -566,193 +568,83 @@ function App(): React.JSX.Element {
         }
         const totalSegments = audioSegments.length;
 
+        // Determine provider: external ASR or builtin sidecar (both use HTTP)
+        let provider: { baseUrl: string; apiKey: string; model: string };
         if (store.asrBackend === "external" && store.asrProvider) {
-          // External mode: sequential HTTP POST for each segment
-          const provider = store.asrProvider;
-          for (let i = 0; i < totalSegments; i++) {
-            const seg = audioSegments[i];
-            const startTime = Math.round(seg.startByte / bytesPerSecond);
-            const endTime = Math.round(
-              Math.min(seg.startByte + segmentBytes, totalBytes) /
-                bytesPerSecond,
+          provider = {
+            baseUrl: store.asrProvider.baseUrl,
+            apiKey: store.asrProvider.apiKey,
+            model: store.asrProvider.model,
+          };
+        } else {
+          const sidecarUrl = await window.capty.getSidecarUrl();
+          provider = {
+            baseUrl: sidecarUrl,
+            apiKey: "",
+            model: store.selectedModelId,
+          };
+        }
+
+        // Sequential HTTP POST for each segment (unified for both backends)
+        for (let i = 0; i < totalSegments; i++) {
+          if (cancelRegenerationRef.current) break;
+
+          const seg = audioSegments[i];
+          const startTime = Math.round(seg.startByte / bytesPerSecond);
+          const endTime = Math.round(
+            Math.min(seg.startByte + segmentBytes, totalBytes) / bytesPerSecond,
+          );
+
+          try {
+            const result = await window.capty.asrTranscribe(
+              seg.data.buffer.slice(
+                seg.data.byteOffset,
+                seg.data.byteOffset + seg.data.byteLength,
+              ),
+              provider,
             );
 
-            try {
-              const result = await window.capty.asrTranscribe(
-                seg.data.buffer.slice(
-                  seg.data.byteOffset,
-                  seg.data.byteOffset + seg.data.byteLength,
-                ),
-                {
-                  baseUrl: provider.baseUrl,
-                  apiKey: provider.apiKey,
-                  model: provider.model,
-                },
-              );
+            if (cancelRegenerationRef.current) break;
 
-              const text = result.text;
-              if (text.trim()) {
-                await window.capty.addSegment({
-                  sessionId,
-                  startTime,
-                  endTime,
+            const text = result.text;
+            if (text.trim()) {
+              await window.capty.addSegment({
+                sessionId,
+                startTime,
+                endTime,
+                text,
+                audioPath: "",
+                isFinal: true,
+              });
+              if (store.currentSessionId === sessionId) {
+                store.addSegment({
+                  id: Date.now(),
+                  start_time: startTime,
+                  end_time: endTime,
                   text,
-                  audioPath: "",
-                  isFinal: true,
                 });
-                if (store.currentSessionId === sessionId) {
-                  store.addSegment({
-                    id: Date.now(),
-                    start_time: startTime,
-                    end_time: endTime,
-                    text,
-                  });
-                }
               }
-            } catch (err) {
-              console.error("Regeneration segment error:", err);
             }
-
-            setRegenerationProgress(
-              Math.round(((i + 1) / totalSegments) * 100),
-            );
+          } catch (err) {
+            if (cancelRegenerationRef.current) break;
+            console.error("Regeneration segment error:", err);
           }
 
-          setRegeneratingSessionId(null);
-          setRegenerationProgress(0);
-        } else {
-          // Builtin mode: WebSocket to sidecar
-          const sidecarUrl = await window.capty.getSidecarUrl();
-          const wsUrl = sidecarUrl.replace(/^http/, "ws") + "/ws/transcribe";
-          const ws = new WebSocket(wsUrl);
-
-          await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(
-              () => reject(new Error("Connection timeout")),
-              15000,
-            );
-
-            const cleanup = (): void => {
-              setRegeneratingSessionId(null);
-              setRegenerationProgress(0);
-            };
-
-            let segmentIdx = 0;
-            let waitingForFinal = false;
-
-            const sendNextSegment = (): void => {
-              if (segmentIdx >= totalSegments) {
-                setRegenerationProgress(100);
-                ws.send(JSON.stringify({ type: "stop" }));
-                ws.close();
-                return;
-              }
-
-              const seg = audioSegments[segmentIdx];
-              const chunkSize = bytesPerSecond;
-              for (let i = 0; i < seg.data.length; i += chunkSize) {
-                ws.send(
-                  seg.data.slice(i, Math.min(i + chunkSize, seg.data.length)),
-                );
-              }
-              ws.send(JSON.stringify({ type: "segment_end" }));
-              waitingForFinal = true;
-            };
-
-            ws.onopen = () => {
-              ws.send(
-                JSON.stringify({
-                  type: "start",
-                  model: store.selectedModelId,
-                  language: "auto",
-                }),
-              );
-            };
-
-            ws.onmessage = (event) => {
-              const msg = JSON.parse(event.data as string) as {
-                type: string;
-                text?: string;
-                segment_id?: number;
-                message?: string;
-              };
-
-              if (msg.type === "ready") {
-                clearTimeout(timeout);
-                sendNextSegment();
-              } else if (msg.type === "partial") {
-                if (store.currentSessionId === sessionId) {
-                  store.setPartialText(msg.text ?? "");
-                }
-              } else if (msg.type === "final" && waitingForFinal) {
-                waitingForFinal = false;
-
-                if (store.currentSessionId === sessionId) {
-                  store.setPartialText("");
-                }
-
-                const text = msg.text ?? "";
-                if (text.trim()) {
-                  const seg = audioSegments[segmentIdx];
-                  const startTime = Math.round(seg.startByte / bytesPerSecond);
-                  const endTime = Math.round(
-                    Math.min(seg.startByte + segmentBytes, totalBytes) /
-                      bytesPerSecond,
-                  );
-
-                  window.capty
-                    .addSegment({
-                      sessionId,
-                      startTime,
-                      endTime,
-                      text,
-                      audioPath: "",
-                      isFinal: true,
-                    })
-                    .then(() => {
-                      if (store.currentSessionId === sessionId) {
-                        store.addSegment({
-                          id: Date.now(),
-                          start_time: startTime,
-                          end_time: endTime,
-                          text,
-                        });
-                      }
-                    });
-                }
-
-                segmentIdx++;
-                setRegenerationProgress(
-                  Math.round((segmentIdx / totalSegments) * 100),
-                );
-                sendNextSegment();
-              } else if (msg.type === "error") {
-                console.error("Regeneration transcription error:", msg.message);
-                segmentIdx++;
-                sendNextSegment();
-              }
-            };
-
-            ws.onclose = () => {
-              cleanup();
-              resolve();
-            };
-
-            ws.onerror = () => {
-              clearTimeout(timeout);
-              cleanup();
-              reject(new Error("WebSocket connection failed"));
-            };
-          });
+          setRegenerationProgress(Math.round(((i + 1) / totalSegments) * 100));
         }
       } catch (err) {
         console.error("Failed to regenerate subtitles:", err);
+      } finally {
         setRegeneratingSessionId(null);
         setRegenerationProgress(0);
       }
     },
     [regeneratingSessionId, store],
   );
+
+  const handleCancelRegeneration = useCallback(() => {
+    cancelRegenerationRef.current = true;
+  }, []);
 
   const handleDeviceChange = useCallback(
     async (deviceId: string) => {
@@ -1120,6 +1012,7 @@ function App(): React.JSX.Element {
           onStopPlayback={audioPlayer.stop}
           onRenameSession={handleRenameSession}
           onRegenerateSubtitles={handleRegenerateSubtitles}
+          onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
         />
         <TranscriptArea

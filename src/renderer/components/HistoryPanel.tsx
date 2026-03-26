@@ -33,6 +33,7 @@ interface HistoryPanelProps {
   readonly onStopPlayback: () => void;
   readonly onRenameSession: (id: number, newTitle: string) => void;
   readonly onRegenerateSubtitles: (id: number) => void;
+  readonly onCancelRegeneration: () => void;
   readonly onOpenFolder: (id: number) => void;
 }
 
@@ -138,6 +139,7 @@ export function HistoryPanel({
   onStopPlayback,
   onRenameSession,
   onRegenerateSubtitles,
+  onCancelRegeneration,
   onOpenFolder,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
@@ -597,14 +599,43 @@ export function HistoryPanel({
                         <div style={{ marginTop: "4px" }}>
                           <div
                             style={{
-                              fontSize: "10px",
-                              color: "var(--accent)",
-                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
                               marginBottom: "3px",
-                              fontFamily: "'JetBrains Mono', monospace",
                             }}
                           >
-                            Regenerating... {regenerationProgress}%
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--accent)",
+                                fontWeight: 600,
+                                fontFamily: "'JetBrains Mono', monospace",
+                              }}
+                            >
+                              Regenerating... {regenerationProgress}%
+                            </span>
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCancelRegeneration();
+                              }}
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--danger)",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                padding: "0 4px",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.opacity = "0.7")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.opacity = "1")
+                              }
+                            >
+                              Cancel
+                            </span>
                           </div>
                           <div
                             style={{
