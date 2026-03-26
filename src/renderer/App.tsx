@@ -310,15 +310,6 @@ function App(): React.JSX.Element {
     init();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlePlaySession = useCallback(
-    (sessionId: number) => {
-      if (!store.isRecording) {
-        audioPlayer.play(sessionId);
-      }
-    },
-    [store.isRecording, audioPlayer],
-  );
-
   const handleStart = useCallback(async () => {
     // Block recording during subtitle regeneration
     if (regeneratingSessionId !== null) return;
@@ -470,6 +461,24 @@ function App(): React.JSX.Element {
       }
     },
     [store, activePromptType],
+  );
+
+  const handlePlaySession = useCallback(
+    (sessionId: number) => {
+      if (!store.isRecording) {
+        audioPlayer.play(sessionId);
+        // Also select the session so transcript segments load for sync scrolling
+        if (store.currentSessionId !== sessionId) {
+          handleSelectSession(sessionId);
+        }
+      }
+    },
+    [
+      store.isRecording,
+      store.currentSessionId,
+      audioPlayer,
+      handleSelectSession,
+    ],
   );
 
   const handleDeleteSession = useCallback(
