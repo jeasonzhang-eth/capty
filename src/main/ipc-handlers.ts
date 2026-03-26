@@ -52,7 +52,6 @@ interface ModelEntry {
   readonly name: string;
   readonly type: string;
   readonly repo: string;
-  readonly mlx_repo?: string;
   readonly size_gb: number;
   readonly languages: readonly string[];
   readonly description: string;
@@ -138,11 +137,11 @@ function ensureUserModels(configDir: string): void {
       current.push(bm);
       currentIds.add(bm.id);
       changed = true;
-    } else if (bm.mlx_repo) {
-      // Backfill mlx_repo for existing entries from builtin updates
+    } else {
+      // Update repo for existing entries from builtin updates (e.g. mlx-audio migration)
       const existing = current.find((m) => m.id === bm.id);
-      if (existing && !existing.mlx_repo) {
-        (existing as { mlx_repo?: string }).mlx_repo = bm.mlx_repo;
+      if (existing && existing.repo !== bm.repo) {
+        (existing as { repo: string }).repo = bm.repo;
         changed = true;
       }
     }
@@ -763,13 +762,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const config = readConfig(configDir);
       const mirrorUrl = config.hfMirrorUrl ?? undefined;
 
-      // For Whisper models, prefer mlx_repo (MLX weights from mlx-community)
-      const models = readUserModels(configDir);
-      const model = models.find((m) => m.repo === repo);
-      const effectiveRepo = model?.mlx_repo ?? repo;
-
       await downloadModel(
-        effectiveRepo,
+        repo,
         destDir,
         (progress) => {
           win?.webContents.send("models:download-progress", progress);

@@ -13,7 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
-from capty_sidecar.model_runner import ModelRunner, _mlx_executor
+from capty_sidecar.model_runner import ModelRunner, _mlx_executor as _mlx_executor
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +96,7 @@ def create_app(models_dir: str) -> FastAPI:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 _mlx_executor,
-                lambda: runner.load(
-                    body.model,
-                    models_dir=Path(models_dir),
-                    model_type=model_info.get("type", "qwen-asr"),
-                    mlx_repo=model_info.get("mlx_repo"),
-                ),
+                lambda: runner.load(body.model, models_dir=Path(models_dir)),
             )
         except Exception as exc:
             logger.exception("Failed to load model %s", body.model)
@@ -143,8 +138,6 @@ def create_app(models_dir: str) -> FastAPI:
                             lambda: runner.load(
                                 target_model,
                                 models_dir=Path(models_dir),
-                                model_type=model_info.get("type", "qwen-asr"),
-                                mlx_repo=model_info.get("mlx_repo"),
                             ),
                         )
                     except Exception as exc:

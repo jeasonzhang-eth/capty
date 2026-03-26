@@ -33,7 +33,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
+| ML 推理 | Python sidecar (FastAPI + mlx-audio, Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 架构
@@ -294,6 +294,17 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (28)
+
+- **统一 ASR 后端为 mlx-audio** — 将 sidecar 从 `mlx-qwen3-asr` + `mlx-whisper` 双库迁移到 `mlx-audio` 统一库
+  - 单一 `mlx_audio.stt.load()` + `model.generate()` API 支持 Whisper、Qwen3-ASR 等 12+ 种模型
+  - 删除 model_runner.py 中两条独立的推理路径（`_load_qwen_asr` / `_load_whisper`、`_run_qwen_inference` / `_run_whisper_inference`），代码量减半
+  - 模型注册表 repo 统一改为 `mlx-community/` 前缀（如 `mlx-community/Qwen3-ASR-0.6B-8bit`），移除 `mlx_repo` 字段
+  - server.py 简化：移除 `model_type` / `mlx_repo` 参数传递
+  - ipc-handlers.ts 简化：移除 `mlx_repo` 字段和 effectiveRepo 下载逻辑
+  - 已下载的旧模型（含 `config.json`）可被 mlx-audio 自动识别并加载
+  - 应用更新时自动同步新 repo ID 到 `user-models.json`
 
 ### 2026-03-26 (27)
 

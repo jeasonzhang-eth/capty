@@ -10,8 +10,8 @@ BUILTIN_MODELS: list[dict] = [
         "id": "qwen3-asr-0.6b",
         "name": "Qwen3-ASR-0.6B",
         "type": "qwen-asr",
-        "repo": "Qwen/Qwen3-ASR-0.6B",
-        "size_gb": 1.2,
+        "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
+        "size_gb": 0.7,
         "languages": ["zh", "en"],
         "streaming": True,
         "description": "Lightweight, bilingual Chinese-English, suitable for daily use",
@@ -20,8 +20,7 @@ BUILTIN_MODELS: list[dict] = [
         "id": "whisper-tiny",
         "name": "Whisper Tiny",
         "type": "whisper",
-        "repo": "openai/whisper-tiny",
-        "mlx_repo": "mlx-community/whisper-tiny",
+        "repo": "mlx-community/whisper-tiny",
         "size_gb": 0.04,
         "languages": ["multilingual"],
         "streaming": False,
@@ -31,8 +30,7 @@ BUILTIN_MODELS: list[dict] = [
         "id": "whisper-base",
         "name": "Whisper Base",
         "type": "whisper",
-        "repo": "openai/whisper-base",
-        "mlx_repo": "mlx-community/whisper-base-mlx",
+        "repo": "mlx-community/whisper-base-mlx",
         "size_gb": 0.07,
         "languages": ["multilingual"],
         "streaming": False,
@@ -42,8 +40,7 @@ BUILTIN_MODELS: list[dict] = [
         "id": "whisper-small",
         "name": "Whisper Small",
         "type": "whisper",
-        "repo": "openai/whisper-small",
-        "mlx_repo": "mlx-community/whisper-small-mlx",
+        "repo": "mlx-community/whisper-small-mlx",
         "size_gb": 0.24,
         "languages": ["multilingual"],
         "streaming": False,
@@ -53,8 +50,7 @@ BUILTIN_MODELS: list[dict] = [
         "id": "whisper-medium",
         "name": "Whisper Medium",
         "type": "whisper",
-        "repo": "openai/whisper-medium",
-        "mlx_repo": "mlx-community/whisper-medium-mlx",
+        "repo": "mlx-community/whisper-medium-mlx",
         "size_gb": 0.77,
         "languages": ["multilingual"],
         "streaming": False,
@@ -64,8 +60,7 @@ BUILTIN_MODELS: list[dict] = [
         "id": "whisper-large-v3-turbo",
         "name": "Whisper Large V3 Turbo",
         "type": "whisper",
-        "repo": "openai/whisper-large-v3-turbo",
-        "mlx_repo": "mlx-community/whisper-large-v3-turbo",
+        "repo": "mlx-community/whisper-large-v3-turbo",
         "size_gb": 1.6,
         "languages": ["multilingual"],
         "streaming": False,
@@ -107,17 +102,11 @@ class ModelRegistry:
 
         # Fallback: if model directory exists on disk, infer metadata
         if self.is_downloaded(model_id):
-            lower = model_id.lower()
-            model_type = (
-                "qwen-asr"
-                if "qwen" in lower
-                else "whisper"
-            )
             repo = model_id.replace("--", "/")
             return {
                 "id": model_id,
                 "name": model_id.split("--")[-1] if "--" in model_id else model_id,
-                "type": model_type,
+                "type": "unknown",
                 "repo": repo,
                 "size_gb": 0,
                 "languages": ["multilingual"],
