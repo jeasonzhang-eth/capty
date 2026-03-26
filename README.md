@@ -303,7 +303,7 @@ pytest
 - **上传音频文件** — HistoryPanel 顶部新增 Upload Audio 按钮，支持导入已有音频文件并自动转录
   - 支持 WAV / MP3 / M4A / FLAC / OGG / AAC / WMA / OPUS 格式
   - 通过 ffmpeg 自动转换为 16kHz mono WAV（需系统安装 ffmpeg：`brew install ffmpeg`）
-  - 导入后自动创建 session（标题为文件创建时间），自动触发转录
+  - 导入后自动创建 session（标题和 started_at 均使用文件创建时间），自动触发转录
   - 新增 IPC handler `audio:import`，preload 新增 `importAudio` API
 
 ### 2026-03-26 (25)

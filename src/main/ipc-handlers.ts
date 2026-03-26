@@ -1096,23 +1096,29 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
 
-    // 3. Format timestamp (same as useSession.ts)
-    const formatTs = (d: Date): string =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`;
-    const timestamp = formatTs(birthtime);
+    // 3. Format timestamps
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    // Filesystem-safe format for audio directory (same as useSession.ts)
+    const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
+    // Human-readable format for title and started_at (matches existing sessions)
+    const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 4. Create session
+    // 4. Create session with file's birthtime
     const sessionId = createSession(db, { modelName: "imported" });
-    updateSession(db, sessionId, { audioPath: timestamp, title: timestamp });
+    updateSession(db, sessionId, {
+      audioPath: dirTimestamp,
+      title: readableTimestamp,
+      startedAt: readableTimestamp,
+    });
 
     // 5. Create audio directory
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    const sessionDir = join(dataDir, "audio", timestamp);
+    const sessionDir = join(dataDir, "audio", dirTimestamp);
     fs.mkdirSync(sessionDir, { recursive: true });
 
     // 6. Convert to 16kHz mono WAV via ffmpeg
-    const outputPath = join(sessionDir, `${timestamp}.wav`);
+    const outputPath = join(sessionDir, `${dirTimestamp}.wav`);
     await convertToWav(filePath, outputPath);
 
     // 7. Calculate duration and update session
@@ -1124,7 +1130,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       durationSeconds,
     });
 
-    return { sessionId, timestamp };
+    return { sessionId, timestamp: dirTimestamp };
   });
 
   // Export save file

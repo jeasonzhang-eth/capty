@@ -26,6 +26,7 @@ export interface UpdateSessionFields {
   readonly durationSeconds?: number;
   readonly title?: string;
   readonly audioPath?: string;
+  readonly startedAt?: string;
   readonly endedAt?: string;
 }
 
@@ -267,6 +268,10 @@ export function updateSession(
   if (fields.audioPath !== undefined) {
     setClauses.push("audio_path = ?");
     values.push(fields.audioPath);
+  }
+  if (fields.startedAt !== undefined) {
+    setClauses.push("started_at = ?");
+    values.push(fields.startedAt);
   }
   if (fields.endedAt !== undefined) {
     setClauses.push("ended_at = ?");
