@@ -954,6 +954,11 @@ function SpeechBackendTab({
     message: string;
   } | null>(null);
   const [asrTesting, setAsrTesting] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [modelsFetching, setModelsFetching] = useState(false);
+  const [useCustomModel, setUseCustomModel] = useState(false);
 
   const handleBackendChange = useCallback(
     (newBackend: "builtin" | "external") => {
@@ -1037,6 +1042,31 @@ function SpeechBackendTab({
       setTimeout(() => setAsrTestResult(null), 5000);
     }
   }, [editProvider]);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editProvider.baseUrl) return;
+    setModelsFetching(true);
+    try {
+      const models = await window.capty.asrFetchModels({
+        baseUrl: editProvider.baseUrl,
+        apiKey: editProvider.apiKey,
+      });
+      setFetchedModels(models);
+      setUseCustomModel(false);
+      // Auto-select current model if it exists in the list
+      if (
+        models.length > 0 &&
+        editProvider.model &&
+        !models.some((m) => m.id === editProvider.model)
+      ) {
+        // Current model not in list — keep it as-is
+      }
+    } catch {
+      setFetchedModels([]);
+    } finally {
+      setModelsFetching(false);
+    }
+  }, [editProvider.baseUrl, editProvider.apiKey, editProvider.model]);
 
   const cardStyle = (isActive: boolean): React.CSSProperties => ({
     padding: "14px",
@@ -1287,25 +1317,103 @@ function SpeechBackendTab({
             </div>
             <div>
               <div style={labelStyle}>Model</div>
-              <input
-                type="text"
-                value={editProvider.model}
-                onChange={(e) =>
-                  setEditProvider({ ...editProvider, model: e.target.value })
-                }
-                placeholder="e.g. whisper-1"
-                style={{
-                  width: "100%",
-                  padding: "6px 8px",
-                  fontSize: "12px",
-                  backgroundColor: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "4px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
+              <div style={{ display: "flex", gap: "6px" }}>
+                {fetchedModels.length > 0 && !useCustomModel ? (
+                  <select
+                    value={editProvider.model}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setUseCustomModel(true);
+                      } else {
+                        setEditProvider({
+                          ...editProvider,
+                          model: e.target.value,
+                        });
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "6px 8px",
+                      fontSize: "12px",
+                      backgroundColor: "var(--bg-primary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "4px",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="" disabled>
+                      Select a model...
+                    </option>
+                    {fetchedModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom...</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={editProvider.model}
+                    onChange={(e) =>
+                      setEditProvider({
+                        ...editProvider,
+                        model: e.target.value,
+                      })
+                    }
+                    placeholder="e.g. whisper-1"
+                    style={{
+                      flex: 1,
+                      padding: "6px 8px",
+                      fontSize: "12px",
+                      backgroundColor: "var(--bg-primary)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "4px",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+                <button
+                  onClick={handleFetchModels}
+                  disabled={modelsFetching || !editProvider.baseUrl}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-muted)",
+                    cursor:
+                      modelsFetching || !editProvider.baseUrl
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity: modelsFetching || !editProvider.baseUrl ? 0.5 : 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {modelsFetching ? "Fetching..." : "Fetch Models"}
+                </button>
+              </div>
+              {useCustomModel && fetchedModels.length > 0 && (
+                <button
+                  onClick={() => setUseCustomModel(false)}
+                  style={{
+                    marginTop: "4px",
+                    padding: "0",
+                    fontSize: "11px",
+                    color: "var(--accent)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Back to model list
+                </button>
+              )}
             </div>
             <div
               style={{

@@ -313,6 +313,16 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (10)
+
+- **External ASR 模型列表自动获取** — Model 字段从纯文本输入升级为下拉选择 + 手动输入混合模式
+  - 新增 "Fetch Models" 按钮，点击后自动从 ASR 服务器获取可用模型列表
+  - 兼容两种 API 格式：Capty sidecar（`GET /models`，数组）和 OpenAI 兼容（`GET /v1/models`，`{data: [...]}`）
+  - 获取成功后 Model 字段变为下拉选择框，已有值自动选中
+  - 下拉列表末尾提供 "Custom..." 选项，选择后切回手动输入模式（可点击 "Back to model list" 返回）
+  - 获取失败时静默降级，保持原有文本输入框
+  - 新增 IPC handler `asr:fetch-models`，5 秒超时，使用 Electron `net.fetch`
+
 ### 2026-03-26 (9)
 
 - **Sidecar 解耦 + 外部 ASR 支持** — 将 sidecar 从受管子进程变为独立服务，同时支持外部 ASR 服务器

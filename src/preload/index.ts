@@ -61,6 +61,10 @@ const api = {
     }>,
   asrTest: (provider: { baseUrl: string; apiKey: string; model: string }) =>
     ipcRenderer.invoke("asr:test", provider) as Promise<{ success: boolean }>,
+  asrFetchModels: (provider: { baseUrl: string; apiKey: string }) =>
+    ipcRenderer.invoke("asr:fetch-models", provider) as Promise<
+      Array<{ id: string; name: string }>
+    >,
 
   // Models
   listModels: () => ipcRenderer.invoke("models:list"),

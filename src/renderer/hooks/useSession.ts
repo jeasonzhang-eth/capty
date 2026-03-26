@@ -64,6 +64,10 @@ declare global {
         apiKey: string;
         model: string;
       }) => Promise<{ success: boolean }>;
+      asrFetchModels: (provider: {
+        baseUrl: string;
+        apiKey: string;
+      }) => Promise<Array<{ id: string; name: string }>>;
       listModels: () => Promise<unknown[]>;
       searchModels: (query: string) => Promise<unknown[]>;
       deleteModel: (modelId: string) => Promise<void>;

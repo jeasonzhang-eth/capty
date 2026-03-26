@@ -531,6 +531,48 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // External ASR: fetch available models from server
+  ipcMain.handle(
+    "asr:fetch-models",
+    async (_event, provider: { baseUrl: string; apiKey: string }) => {
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+      const headers: Record<string, string> = {};
+      if (provider.apiKey)
+        headers["Authorization"] = `Bearer ${provider.apiKey}`;
+
+      const endpoints = [`${baseUrl}/models`, `${baseUrl}/v1/models`];
+
+      for (const url of endpoints) {
+        try {
+          const resp = await net.fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+
+          // Sidecar format: array [{id, name, ...}, ...]
+          if (Array.isArray(data)) {
+            return data.map((m: { id: string; name?: string }) => ({
+              id: m.id,
+              name: m.name || m.id,
+            }));
+          }
+          // OpenAI format: {data: [{id, ...}, ...]}
+          if (data.data && Array.isArray(data.data)) {
+            return data.data.map((m: { id: string }) => ({
+              id: m.id,
+              name: m.id,
+            }));
+          }
+        } catch {
+          continue;
+        }
+      }
+      return [];
+    },
+  );
+
   // External ASR connectivity test (send short silent audio)
   ipcMain.handle(
     "asr:test",
