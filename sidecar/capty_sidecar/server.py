@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
-from capty_sidecar.model_runner import ModelRunner
+from capty_sidecar.model_runner import ModelRunner, _mlx_executor
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,10 @@ BYTES_PER_SECOND = SAMPLE_RATE * 2  # 16-bit PCM = 2 bytes/sample
 MAX_CHUNK_SECONDS = 30  # Max audio duration per transcription call
 MAX_CHUNK_BYTES = MAX_CHUNK_SECONDS * BYTES_PER_SECOND
 
-# Concurrency control
-MAX_CONCURRENT = 3  # Max concurrent transcription tasks
+# Concurrency control — MLX is NOT thread-safe; concurrent GPU calls cause
+# segfaults in the native C++ layer, crashing the entire process.  All MLX
+# inference MUST be serialized to a single thread.
+MAX_CONCURRENT = 1  # Must stay 1: MLX segfaults with concurrent GPU access
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +83,7 @@ def create_app(models_dir: str) -> FastAPI:
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
-                None,
+                _mlx_executor,
                 lambda: runner.load(
                     body.model,
                     models_dir=Path(models_dir),

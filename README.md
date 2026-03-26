@@ -283,6 +283,14 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (5)
+
+- **修复 Sidecar 录音中崩溃** — MLX 并发推理导致 segfault
+  - 根因：`MAX_CONCURRENT = 3` 允许多个 segment 同时在不同线程跑 MLX GPU 推理，MLX 原生 C++ 层非线程安全，并发访问导致 segfault 杀死整个进程
+  - 修复：引入 `ThreadPoolExecutor(max_workers=1)` 专用单线程执行器，所有 MLX 操作（模型加载 + 推理）严格串行化到同一线程
+  - `MAX_CONCURRENT` 改为 1，确保 asyncio 层面也不会并发进入推理代码
+  - 模型加载 (`server.py`) 的 `run_in_executor` 也改为使用 MLX 专用执行器
+
 ### 2026-03-26 (4)
 
 - **Sidecar 自动重启** — Python sidecar 进程崩溃后自动重启

@@ -1,9 +1,16 @@
-"""Model runner: loads and runs ASR inference using MLX (GPU-accelerated)."""
+"""Model runner: loads and runs ASR inference using MLX (GPU-accelerated).
+
+IMPORTANT: MLX is NOT thread-safe.  All MLX operations (model loading and
+inference) MUST run on the same single thread.  This module uses a dedicated
+``ThreadPoolExecutor(max_workers=1)`` for that purpose — never call MLX
+functions from arbitrary threads or via the default executor.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +22,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_SAMPLE_RATE = 16000
 PCM_DTYPE = np.int16
 PCM_MAX = 32768.0
+
+# Single-thread executor dedicated to MLX operations.  MLX's native C++
+# layer segfaults when accessed concurrently from multiple threads.
+_mlx_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
 
 
 def _pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
@@ -152,7 +163,7 @@ class ModelRunner:
         session = self._session
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            None,
+            _mlx_executor,
             lambda: session.transcribe((audio_float, sample_rate)),
         )
 
@@ -171,7 +182,7 @@ class ModelRunner:
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            None,
+            _mlx_executor,
             lambda: mlx_whisper.transcribe(
                 audio_float,
                 path_or_hf_repo=model_path,
