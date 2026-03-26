@@ -96,8 +96,32 @@ class ModelRegistry:
         return self._models_dir / model_id
 
     def get_model_info(self, model_id: str) -> Optional[dict]:
-        """Return the config dict for *model_id*, or ``None`` if unknown."""
+        """Return the config dict for *model_id*, or ``None`` if unknown.
+
+        For non-builtin models that exist on disk, infer metadata from
+        the directory name so that sidecar can load them dynamically.
+        """
         for model in BUILTIN_MODELS:
             if model["id"] == model_id:
                 return dict(model)  # return a copy
+
+        # Fallback: if model directory exists on disk, infer metadata
+        if self.is_downloaded(model_id):
+            lower = model_id.lower()
+            model_type = (
+                "qwen-asr"
+                if "qwen" in lower
+                else "whisper"
+            )
+            repo = model_id.replace("--", "/")
+            return {
+                "id": model_id,
+                "name": model_id.split("--")[-1] if "--" in model_id else model_id,
+                "type": model_type,
+                "repo": repo,
+                "size_gb": 0,
+                "languages": ["multilingual"],
+                "description": repo,
+            }
+
         return None

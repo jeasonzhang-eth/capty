@@ -295,6 +295,12 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (27)
+
+- **修复非内置模型无法通过 sidecar 转录** — `ModelRegistry.get_model_info()` 只搜索内置模型列表，导致从 HuggingFace 搜索下载的模型（如 `Qwen--Qwen3-ASR-1.7B`）虽已下载但 sidecar 无法识别、拒绝加载
+  - 新增 fallback：如果模型目录存在于 `models/` 下，自动从目录名推断 model type（qwen/whisper）和 repo 信息
+  - 同时影响实时录音和上传音频的转录
+
 ### 2026-03-26 (26)
 
 - **Export 按钮迁移** — 将 Export 按钮从底部录音控制栏移至 TranscriptArea 右上角，更符合操作逻辑（导出属于转录内容的操作）
