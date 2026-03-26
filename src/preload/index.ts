@@ -91,6 +91,13 @@ const api = {
     };
   },
 
+  // Streaming audio write (crash-safe)
+  openAudioStream: (sessionDir: string, fileName: string) =>
+    ipcRenderer.invoke("audio:stream-open", sessionDir, fileName),
+  appendAudioStream: (pcmData: ArrayBuffer) =>
+    ipcRenderer.invoke("audio:stream-write", pcmData),
+  closeAudioStream: () => ipcRenderer.invoke("audio:stream-close"),
+
   // Segments
   deleteSegments: (sessionId: number) =>
     ipcRenderer.invoke("segment:delete-by-session", sessionId),

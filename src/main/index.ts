@@ -12,6 +12,7 @@ import { readConfig, writeConfig, type WindowBounds } from "./config";
 import { createDatabase } from "./database";
 import { SidecarManager } from "./sidecar";
 import { registerIpcHandlers } from "./ipc-handlers";
+import { repairWavHeaders } from "./audio-files";
 import Database from "better-sqlite3";
 
 let mainWindow: BrowserWindow | null = null;
@@ -89,6 +90,10 @@ app.whenReady().then(() => {
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = join(dataDir, "capty.db");
   db = createDatabase(dbPath);
+
+  // 3b. Repair WAV files left with placeholder headers from abnormal exits
+  const audioDir = join(dataDir, "audio");
+  repairWavHeaders(audioDir);
 
   // 4. Create SidecarManager
   const modelsDir = join(dataDir, "models");

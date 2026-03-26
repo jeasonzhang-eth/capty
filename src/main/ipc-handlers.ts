@@ -20,6 +20,9 @@ import {
   saveSegmentAudio,
   saveFullAudio,
   deleteSessionAudio,
+  openAudioStream,
+  appendAudioStream,
+  finalizeAudioStream,
 } from "./audio-files";
 import { exportTXT, exportSRT, exportMarkdown } from "./export";
 import {
@@ -598,6 +601,22 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       );
     },
   );
+
+  // Streaming audio write (crash-safe)
+  ipcMain.handle(
+    "audio:stream-open",
+    (_event, sessionDir: string, fileName: string) => {
+      openAudioStream(sessionDir, fileName);
+    },
+  );
+
+  ipcMain.handle("audio:stream-write", (_event, pcmData: ArrayBuffer) => {
+    appendAudioStream(Buffer.from(pcmData));
+  });
+
+  ipcMain.handle("audio:stream-close", () => {
+    finalizeAudioStream();
+  });
 
   // Audio read
   ipcMain.handle("audio:read-file", (_event, sessionId: number) => {

@@ -31,6 +31,12 @@ declare global {
         pcmData: ArrayBuffer,
         fileName?: string,
       ) => Promise<void>;
+      openAudioStream: (
+        sessionDir: string,
+        fileName: string,
+      ) => Promise<void>;
+      appendAudioStream: (pcmData: ArrayBuffer) => Promise<void>;
+      closeAudioStream: () => Promise<void>;
       exportTxt: (
         sessionId: number,
         opts: Record<string, unknown>,
@@ -87,6 +93,9 @@ declare global {
         prompt_type: string;
         created_at: string;
       }>;
+      onSummaryChunk: (
+        callback: (data: { content: string; done: boolean }) => void,
+      ) => () => void;
       listSummaries: (
         sessionId: number,
         promptType?: string,
@@ -128,6 +137,9 @@ interface SessionState {
   readonly segmentCount: number;
 }
 
+/** How often to flush buffered audio to disk (ms). */
+const FLUSH_INTERVAL_MS = 2000;
+
 export function useSession() {
   const [state, setState] = useState<SessionState>({
     isRecording: false,
@@ -137,7 +149,28 @@ export function useSession() {
 
   const sessionDirRef = useRef<string>("");
   const sessionTimestampRef = useRef<string>("");
-  const fullAudioBufferRef = useRef<Int16Array[]>([]);
+
+  // In-memory buffer that accumulates between flushes
+  const pendingChunksRef = useRef<Int16Array[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** Merge pending chunks and send to main process for disk write. */
+  const flushAudio = useCallback(() => {
+    const chunks = pendingChunksRef.current;
+    if (chunks.length === 0) return;
+    pendingChunksRef.current = [];
+
+    const totalLength = chunks.reduce((sum, buf) => sum + buf.length, 0);
+    const merged = new Int16Array(totalLength);
+    let offset = 0;
+    for (const buf of chunks) {
+      merged.set(buf, offset);
+      offset += buf.length;
+    }
+
+    // Fire-and-forget — don't await to avoid blocking audio callback
+    window.capty.appendAudioStream(merged.buffer as ArrayBuffer);
+  }, []);
 
   const startSession = useCallback(async (model: string): Promise<number> => {
     const sessionId = await window.capty.createSession(model);
@@ -146,12 +179,19 @@ export function useSession() {
       .toISOString()
       .replace(/[:.]/g, "-")
       .slice(0, 19);
-    sessionDirRef.current = `${dataDir}/audio/${timestamp}`;
+    const sessionDir = `${dataDir}/audio/${timestamp}`;
+    sessionDirRef.current = sessionDir;
     sessionTimestampRef.current = timestamp;
-    fullAudioBufferRef.current = [];
+    pendingChunksRef.current = [];
 
     // Save audio path to DB so delete can find the audio files
     await window.capty.updateSession(sessionId, { audioPath: timestamp });
+
+    // Open streaming WAV file on disk — audio is written incrementally
+    await window.capty.openAudioStream(sessionDir, `${timestamp}.wav`);
+
+    // Start periodic flush timer
+    flushTimerRef.current = setInterval(flushAudio, FLUSH_INTERVAL_MS);
 
     setState({
       isRecording: true,
@@ -160,10 +200,10 @@ export function useSession() {
     });
 
     return sessionId;
-  }, []);
+  }, [flushAudio]);
 
   const feedAudio = useCallback((pcm: Int16Array) => {
-    fullAudioBufferRef.current.push(new Int16Array(pcm));
+    pendingChunksRef.current.push(new Int16Array(pcm));
   }, []);
 
   const addSegmentResult = useCallback(
@@ -193,9 +233,6 @@ export function useSession() {
         pcmData.buffer as ArrayBuffer,
       );
 
-      // Accumulate audio for full session
-      fullAudioBufferRef.current.push(new Int16Array(pcmData));
-
       setState((prev) => ({ ...prev, segmentCount: prev.segmentCount + 1 }));
     },
     [state.currentSessionId, state.segmentCount],
@@ -205,24 +242,17 @@ export function useSession() {
     async (durationSeconds?: number) => {
       if (!state.currentSessionId) return;
 
-      // Concatenate all audio buffers
-      const totalLength = fullAudioBufferRef.current.reduce(
-        (sum, buf) => sum + buf.length,
-        0,
-      );
-      const fullAudio = new Int16Array(totalLength);
-      let offset = 0;
-      for (const buf of fullAudioBufferRef.current) {
-        fullAudio.set(buf, offset);
-        offset += buf.length;
+      // Stop flush timer
+      if (flushTimerRef.current) {
+        clearInterval(flushTimerRef.current);
+        flushTimerRef.current = null;
       }
 
-      // Save full audio with timestamp-based filename
-      await window.capty.saveFullAudio(
-        sessionDirRef.current,
-        fullAudio.buffer as ArrayBuffer,
-        `${sessionTimestampRef.current}.wav`,
-      );
+      // Final flush of any remaining buffered audio
+      flushAudio();
+
+      // Finalize the WAV file (fix header sizes)
+      await window.capty.closeAudioStream();
 
       // Update session status with duration
       await window.capty.updateSession(state.currentSessionId, {
@@ -231,14 +261,14 @@ export function useSession() {
         endedAt: new Date().toISOString(),
       });
 
-      fullAudioBufferRef.current = [];
+      pendingChunksRef.current = [];
       setState({
         isRecording: false,
         currentSessionId: null,
         segmentCount: 0,
       });
     },
-    [state.currentSessionId],
+    [state.currentSessionId, flushAudio],
   );
 
   return {
