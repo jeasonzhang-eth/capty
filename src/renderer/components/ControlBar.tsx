@@ -44,21 +44,38 @@ export function ControlBar({
 
   let statusColor: string;
   let statusLabel: string;
+  let statusGlow: string;
+  let statusAnimation: string | undefined;
 
   if (isRecording) {
     statusColor = "var(--danger)";
     statusLabel = "Recording";
+    statusGlow = "0 0 6px rgba(239, 68, 68, 0.6)";
+    statusAnimation = "breathe 1.5s ease-in-out infinite";
   } else if (asrBackend === "external") {
     if (asrProviderName) {
       statusColor = "#3b82f6";
       statusLabel = `External (${asrProviderName})`;
+      statusGlow = "0 0 6px rgba(59, 130, 246, 0.5)";
+      statusAnimation = undefined;
     } else {
       statusColor = "var(--text-muted)";
       statusLabel = "Not Configured";
+      statusGlow = "none";
+      statusAnimation = undefined;
     }
   } else {
-    statusColor = sidecarReady ? "var(--success)" : "var(--text-muted)";
-    statusLabel = sidecarReady ? "Ready" : "Sidecar Offline";
+    if (sidecarReady) {
+      statusColor = "var(--accent)";
+      statusLabel = "Ready";
+      statusGlow = "0 0 6px rgba(245, 166, 35, 0.5)";
+      statusAnimation = undefined;
+    } else {
+      statusColor = "var(--text-muted)";
+      statusLabel = "Sidecar Offline";
+      statusGlow = "none";
+      statusAnimation = undefined;
+    }
   }
 
   return (
@@ -67,7 +84,9 @@ export function ControlBar({
         display: "flex",
         alignItems: "center",
         padding: "8px 16px",
-        backgroundColor: "var(--bg-secondary)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(28, 28, 31, 0.85)",
         borderBottom: "1px solid var(--border)",
         gap: "16px",
         height: "48px",
@@ -75,7 +94,16 @@ export function ControlBar({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <span style={{ fontWeight: "bold", fontSize: "16px" }}>Capty</span>
+        <span
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontWeight: 700,
+            fontSize: "16px",
+            color: "var(--text-primary)",
+          }}
+        >
+          Capty
+        </span>
         <span
           style={{
             width: "8px",
@@ -83,6 +111,8 @@ export function ControlBar({
             borderRadius: "50%",
             backgroundColor: statusColor,
             display: "inline-block",
+            boxShadow: statusGlow,
+            animation: statusAnimation,
           }}
         />
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -97,13 +127,20 @@ export function ControlBar({
         onChange={(e) => onDeviceChange(e.target.value)}
         disabled={isRecording}
         style={{
-          backgroundColor: "var(--bg-tertiary)",
+          backgroundColor: "var(--bg-surface)",
           color: "var(--text-primary)",
           border: "1px solid var(--border)",
-          borderRadius: "4px",
+          borderRadius: "6px",
           padding: "4px 8px",
           fontSize: "12px",
           maxWidth: "200px",
+          outline: "none",
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = "var(--accent)";
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = "var(--border)";
         }}
       >
         <option value="">Default Microphone</option>
@@ -121,13 +158,20 @@ export function ControlBar({
             onChange={(e) => onModelChange(e.target.value)}
             disabled={isRecording}
             style={{
-              backgroundColor: "var(--bg-tertiary)",
+              backgroundColor: "var(--bg-surface)",
               color: "var(--text-primary)",
               border: "1px solid var(--border)",
-              borderRadius: "4px",
+              borderRadius: "6px",
               padding: "4px 8px",
               fontSize: "12px",
               maxWidth: "200px",
+              outline: "none",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "var(--accent)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
             {models
@@ -162,7 +206,8 @@ export function ControlBar({
                   style={{
                     width: `${downloadProgress}%`,
                     height: "100%",
-                    backgroundColor: "var(--accent)",
+                    background:
+                      "linear-gradient(90deg, var(--accent), var(--accent-hover))",
                     transition: "width 0.3s",
                   }}
                 />
@@ -177,7 +222,7 @@ export function ControlBar({
                 backgroundColor: "var(--accent)",
                 color: "white",
                 border: "none",
-                borderRadius: "4px",
+                borderRadius: "6px",
                 padding: "4px 10px",
                 fontSize: "11px",
                 cursor: isRecording ? "not-allowed" : "pointer",
@@ -194,13 +239,23 @@ export function ControlBar({
 
       <button
         onClick={onSettings}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--text-primary)";
+          e.currentTarget.style.textShadow =
+            "0 0 8px rgba(245, 166, 35, 0.4)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--text-muted)";
+          e.currentTarget.style.textShadow = "none";
+        }}
         style={{
           backgroundColor: "transparent",
           border: "none",
-          color: "var(--text-secondary)",
+          color: "var(--text-muted)",
           cursor: "pointer",
-          fontSize: "16px",
+          fontSize: "18px",
           padding: "4px 8px",
+          transition: "color 0.2s, text-shadow 0.2s",
         }}
         title="Settings"
       >

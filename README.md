@@ -313,6 +313,17 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (12)
+
+- **ControlBar "Studio Noir" 视觉重设计** — 纯样式重写，功能逻辑不变
+  - 毛玻璃背景：`backdrop-filter: blur(12px)`，半透明深色底色
+  - "Capty" 品牌文字使用 DM Sans 字体，fontWeight 700
+  - 状态指示灯升级为发光圆点：Ready 琥珀色辉光、Recording 红色呼吸动画、Offline 暗灰无辉光
+  - 下拉选择器使用 `--bg-surface` 深色背景，圆角 6px，聚焦时琥珀色边框
+  - 设置按钮 hover 时显示琥珀色文字辉光效果
+  - 下载进度条使用琥珀色渐变填充
+  - 下载按钮圆角从 4px 调整为 6px
+
 ### 2026-03-26 (11)
 
 - **Settings Modal 重新设计** — macOS 系统设置风格
