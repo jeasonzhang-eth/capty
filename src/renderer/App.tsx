@@ -269,18 +269,26 @@ function App(): React.JSX.Element {
           const models = await window.capty.listModels();
           store.setModels(models as Parameters<typeof store.setModels>[0]);
 
+          const modelsList = models as Array<{
+            id: string;
+            downloaded: boolean;
+          }>;
           const savedModelId = config.selectedModelId as string | null;
           if (savedModelId) {
-            const modelsList = models as Array<{
-              id: string;
-              downloaded: boolean;
-            }>;
             const exists = modelsList.some(
               (m) => m.id === savedModelId && m.downloaded,
             );
             if (exists) {
               store.setSelectedModelId(savedModelId);
+            } else {
+              // Saved model no longer exists — auto-select first downloaded
+              const first = modelsList.find((m) => m.downloaded);
+              if (first) store.setSelectedModelId(first.id);
             }
+          } else {
+            // No saved model — auto-select first downloaded
+            const first = modelsList.find((m) => m.downloaded);
+            if (first) store.setSelectedModelId(first.id);
           }
         } catch {
           // Models not available yet

@@ -172,6 +172,11 @@ export function ControlBar({
               e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
+            {models.filter((m) => m.downloaded).length === 0 && (
+              <option value="" disabled>
+                No models — download in Settings
+              </option>
+            )}
             {models
               .filter((m) => m.downloaded)
               .map((m) => (
