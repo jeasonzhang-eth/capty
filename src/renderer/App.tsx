@@ -395,27 +395,6 @@ function App(): React.JSX.Element {
     await store.loadSessions();
   }, [session, store, transcription, audioCapture]);
 
-  const handleUploadAudio = useCallback(async () => {
-    if (store.isRecording || regeneratingSessionId !== null) return;
-
-    const result = await window.capty.importAudio();
-    if (!result) return; // user cancelled
-
-    // Refresh session list
-    await store.loadSessions();
-
-    // Select the new session and load its segments (empty initially)
-    await handleSelectSession(result.sessionId);
-
-    // Auto-trigger transcription (reuse regeneration flow)
-    handleRegenerateSubtitles(result.sessionId);
-  }, [
-    store,
-    regeneratingSessionId,
-    handleSelectSession,
-    handleRegenerateSubtitles,
-  ]);
-
   const handleWizardComplete = useCallback(
     (dataDir: string) => {
       store.setDataDir(dataDir);
@@ -565,12 +544,18 @@ function App(): React.JSX.Element {
           setRegeneratingSessionId(null);
           return;
         }
+        const model = activeProvider.isSidecar
+          ? store.selectedModelId || activeProvider.model
+          : activeProvider.model;
+        if (!model) {
+          console.error("No ASR model selected");
+          setRegeneratingSessionId(null);
+          return;
+        }
         const provider = {
           baseUrl: activeProvider.baseUrl,
           apiKey: activeProvider.apiKey,
-          model: activeProvider.isSidecar
-            ? store.selectedModelId
-            : activeProvider.model,
+          model,
         };
 
         // Sequential HTTP POST for each segment (unified for both backends)
@@ -634,6 +619,27 @@ function App(): React.JSX.Element {
   const handleCancelRegeneration = useCallback(() => {
     cancelRegenerationRef.current = true;
   }, []);
+
+  const handleUploadAudio = useCallback(async () => {
+    if (store.isRecording || regeneratingSessionId !== null) return;
+
+    const result = await window.capty.importAudio();
+    if (!result) return; // user cancelled
+
+    // Refresh session list
+    await store.loadSessions();
+
+    // Select the new session and load its segments (empty initially)
+    await handleSelectSession(result.sessionId);
+
+    // Auto-trigger transcription (reuse regeneration flow)
+    handleRegenerateSubtitles(result.sessionId);
+  }, [
+    store,
+    regeneratingSessionId,
+    handleSelectSession,
+    handleRegenerateSubtitles,
+  ]);
 
   const handleDeviceChange = useCallback(
     async (deviceId: string) => {
