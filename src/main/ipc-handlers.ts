@@ -950,7 +950,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           model_name: actualModel,
           provider_id: provider.id,
           prompt_type: promptType || "summarize",
-          created_at: new Date().toISOString(),
+          created_at: new Date().toLocaleString("sv-SE").replace(" ", "T"),
         };
       } catch (err) {
         // Signal error to renderer so streaming card can clean up

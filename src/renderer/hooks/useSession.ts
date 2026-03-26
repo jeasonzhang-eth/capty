@@ -190,10 +190,9 @@ export function useSession() {
     async (model: string): Promise<number> => {
       const sessionId = await window.capty.createSession(model);
       const dataDir = await window.capty.getDataDir();
-      const timestamp = new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")
-        .slice(0, 19);
+      // Use local time for directory/file naming so it matches user's timezone
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
       const sessionDir = `${dataDir}/audio/${timestamp}`;
       sessionDirRef.current = sessionDir;
       sessionTimestampRef.current = timestamp;
@@ -275,7 +274,7 @@ export function useSession() {
       await window.capty.updateSession(state.currentSessionId, {
         status: "completed",
         durationSeconds: durationSeconds ?? 0,
-        endedAt: new Date().toISOString(),
+        endedAt: new Date().toLocaleString("sv-SE").replace(" ", "T"),
       });
 
       pendingChunksRef.current = [];

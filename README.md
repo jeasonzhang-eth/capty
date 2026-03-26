@@ -313,6 +313,14 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (16)
+
+- **修复时间戳使用 UTC 而非本地时间** — 所有时间记录统一改为本地时间
+  - SQLite `datetime('now')` 全部改为 `datetime('now', 'localtime')`（`started_at`、`created_at`、孤儿会话修复）
+  - 音频目录/文件命名从 `toISOString()`（UTC）改为手工格式化的本地时间
+  - 会话 `ended_at` 和 LLM 摘要 `created_at` 从 `toISOString()` 改为本地时间格式
+  - 影响文件：`database.ts`、`useSession.ts`、`ipc-handlers.ts`
+
 ### 2026-03-26 (15)
 
 - **修复右键菜单被面板裁剪** — HistoryPanel 的右键菜单和删除确认弹窗改用 React Portal 渲染到 `document.body`，避免父容器 `overflow: hidden` + `backdrop-filter` 创建的 stacking context 导致 `position: fixed` 元素被裁剪

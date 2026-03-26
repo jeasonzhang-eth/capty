@@ -34,7 +34,7 @@ function initTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT DEFAULT (datetime('now', 'localtime')),
-      started_at DATETIME DEFAULT (datetime('now')),
+      started_at DATETIME DEFAULT (datetime('now', 'localtime')),
       ended_at DATETIME,
       duration_seconds INTEGER,
       audio_path TEXT,
@@ -64,7 +64,7 @@ function initTables(db: Database.Database): void {
       model_name TEXT NOT NULL,
       provider_id TEXT NOT NULL,
       prompt_type TEXT NOT NULL DEFAULT 'summarize',
-      created_at DATETIME DEFAULT (datetime('now')),
+      created_at DATETIME DEFAULT (datetime('now', 'localtime')),
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     )
   `);
@@ -95,7 +95,7 @@ export function createDatabase(dbPath: string): Database.Database {
 function fixOrphanedRecordings(db: Database.Database): void {
   const result = db
     .prepare(
-      "UPDATE sessions SET status = 'completed', ended_at = COALESCE(ended_at, datetime('now')) WHERE status = 'recording'",
+      "UPDATE sessions SET status = 'completed', ended_at = COALESCE(ended_at, datetime('now', 'localtime')) WHERE status = 'recording'",
     )
     .run();
   if (result.changes > 0) {
