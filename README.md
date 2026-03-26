@@ -15,7 +15,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（ASR Provider 列表 + 本地模型管理）、Language Models（LLM provider 配置与测试）
+- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片内嵌模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
@@ -293,6 +293,17 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (23)
+
+- **Cherry Studio 风格 Provider 管理** — 重构 Settings > Speech 为展开/收起卡片模式
+  - Provider 卡片支持展开/收起：点击卡片标题区域或 Edit/Collapse 按钮切换，带 ▼/▶ 箭头指示
+  - 同一时间只允许一个 Provider 展开，展开一个自动收起其他
+  - Sidecar 展开内容包含三个区域：配置（Base URL + 启动命令 + Save）、Models 列表（含 Use/Delete/Download）、Download Models（HuggingFace 搜索）
+  - External 展开内容包含：Name / Base URL / API Key / Model（含 Fetch Models）+ Save
+  - 移除全局 "Local Models" 和 "Download Models" 独立区域，模型管理完全内嵌到 Sidecar Provider 卡片中
+  - 新增 Provider 时自动展开该卡片
+  - `editingId` 语义重构为 `expandedId`，Save 后保持展开状态（不再自动收起）
 
 ### 2026-03-26 (22)
 

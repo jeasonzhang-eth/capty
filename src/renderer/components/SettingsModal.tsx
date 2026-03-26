@@ -572,7 +572,7 @@ function SpeechTab({
   const [selectedId, setSelectedId] = useState<string | null>(
     initialSelectedId,
   );
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     baseUrl: "",
@@ -645,7 +645,7 @@ function SpeechTab({
     };
     const next = [...providers, newProvider];
     saveProviders(next, selectedId);
-    setEditingId(id);
+    setExpandedId(id);
     setEditForm({ name: "New Provider", baseUrl: "", apiKey: "", model: "" });
   }, [providers, selectedId, saveProviders]);
 
@@ -656,13 +656,13 @@ function SpeechTab({
     [providers, saveProviders],
   );
 
-  const handleEditProvider = useCallback(
+  const handleToggleExpand = useCallback(
     (provider: AsrProviderConfig) => {
-      if (editingId === provider.id) {
-        setEditingId(null);
+      if (expandedId === provider.id) {
+        setExpandedId(null);
         return;
       }
-      setEditingId(provider.id);
+      setExpandedId(provider.id);
       setEditForm({
         name: provider.name,
         baseUrl: provider.baseUrl,
@@ -670,13 +670,13 @@ function SpeechTab({
         model: provider.model,
       });
     },
-    [editingId],
+    [expandedId],
   );
 
   const handleSaveEdit = useCallback(() => {
-    if (!editingId) return;
+    if (!expandedId) return;
     const next = providers.map((p) =>
-      p.id === editingId
+      p.id === expandedId
         ? {
             ...p,
             name: p.isSidecar ? p.name : editForm.name || "External ASR",
@@ -687,8 +687,7 @@ function SpeechTab({
         : p,
     );
     saveProviders(next, selectedId);
-    setEditingId(null);
-  }, [editingId, editForm, providers, selectedId, saveProviders]);
+  }, [expandedId, editForm, providers, selectedId, saveProviders]);
 
   const handleDeleteProvider = useCallback(
     (providerId: string) => {
@@ -696,9 +695,9 @@ function SpeechTab({
       const nextSelectedId =
         selectedId === providerId ? (next[0]?.id ?? null) : selectedId;
       saveProviders(next, nextSelectedId);
-      if (editingId === providerId) setEditingId(null);
+      if (expandedId === providerId) setExpandedId(null);
     },
-    [providers, selectedId, editingId, saveProviders],
+    [providers, selectedId, expandedId, saveProviders],
   );
 
   const handleTestProvider = useCallback(
@@ -889,7 +888,7 @@ function SpeechTab({
       >
         {providers.map((provider) => {
           const isActive = selectedId === provider.id;
-          const isEditing = editingId === provider.id;
+          const isExpanded = expandedId === provider.id;
           const providerFetchedModels = fetchedModels[provider.id] ?? [];
           const providerUseCustom = useCustomModel[provider.id] ?? false;
 
@@ -910,7 +909,10 @@ function SpeechTab({
                   alignItems: "center",
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                  onClick={() => handleToggleExpand(provider)}
+                >
                   <div
                     style={{
                       display: "flex",
@@ -918,6 +920,21 @@ function SpeechTab({
                       gap: "6px",
                     }}
                   >
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        color: "var(--text-muted)",
+                        display: "inline-block",
+                        transition: "transform 0.2s",
+                        transform: isExpanded
+                          ? "rotate(0deg)"
+                          : "rotate(-90deg)",
+                        width: "12px",
+                        textAlign: "center" as const,
+                      }}
+                    >
+                      &#9660;
+                    </span>
                     <span
                       style={{
                         fontSize: "13px",
@@ -968,6 +985,7 @@ function SpeechTab({
                       fontSize: "11px",
                       color: "var(--text-muted)",
                       marginTop: "4px",
+                      paddingLeft: "18px",
                     }}
                   >
                     {provider.baseUrl || "No URL set"}
@@ -1003,7 +1021,7 @@ function SpeechTab({
                     {testingId === provider.id ? "Testing..." : "Test"}
                   </button>
                   <button
-                    onClick={() => handleEditProvider(provider)}
+                    onClick={() => handleToggleExpand(provider)}
                     style={{
                       ...secondaryBtnStyle,
                       height: "28px",
@@ -1012,7 +1030,7 @@ function SpeechTab({
                       color: "var(--text-muted)",
                     }}
                   >
-                    {isEditing ? "Cancel" : "Edit"}
+                    {isExpanded ? "Collapse" : "Edit"}
                   </button>
                   {!isActive && (
                     <button
@@ -1073,442 +1091,532 @@ function SpeechTab({
                 </div>
               )}
 
-              {/* Edit form */}
-              {isEditing && (
+              {/* Expanded content */}
+              {isExpanded && (
                 <div
                   style={{
                     marginTop: "12px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "10px",
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: "12px",
                   }}
                 >
                   {provider.isSidecar ? (
                     <>
-                      <div>
-                        <div style={labelStyle}>Base URL</div>
-                        <input
-                          type="text"
-                          value={editForm.baseUrl}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              baseUrl: e.target.value,
-                            })
-                          }
-                          placeholder="http://localhost:8765"
-                          style={{
-                            ...inputStyle,
-                            fontFamily: "'JetBrains Mono', monospace",
-                          }}
-                        />
-                      </div>
                       <div
                         style={{
-                          padding: "10px 12px",
-                          backgroundColor: "var(--bg-primary)",
-                          borderRadius: "6px",
-                          fontSize: "11px",
-                          color: "var(--text-muted)",
-                          lineHeight: "18px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
                         }}
                       >
-                        <div style={{ marginBottom: "4px", fontWeight: 600 }}>
-                          Start command:
+                        <div>
+                          <div style={labelStyle}>Base URL</div>
+                          <input
+                            type="text"
+                            value={editForm.baseUrl}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                baseUrl: e.target.value,
+                              })
+                            }
+                            placeholder="http://localhost:8765"
+                            style={{
+                              ...inputStyle,
+                              fontFamily: "'JetBrains Mono', monospace",
+                            }}
+                          />
                         </div>
-                        <code
+                        <div
                           style={{
-                            display: "block",
-                            padding: "6px 8px",
-                            backgroundColor: "var(--bg-tertiary)",
-                            borderRadius: "4px",
-                            fontFamily: "'JetBrains Mono', monospace",
+                            padding: "10px 12px",
+                            backgroundColor: "var(--bg-primary)",
+                            borderRadius: "6px",
                             fontSize: "11px",
-                            wordBreak: "break-all",
+                            color: "var(--text-muted)",
+                            lineHeight: "18px",
                           }}
                         >
-                          capty-sidecar --models-dir {modelsDir} --port 8765
-                        </code>
+                          <div style={{ marginBottom: "4px", fontWeight: 600 }}>
+                            Start command:
+                          </div>
+                          <code
+                            style={{
+                              display: "block",
+                              padding: "6px 8px",
+                              backgroundColor: "var(--bg-tertiary)",
+                              borderRadius: "4px",
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "11px",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            capty-sidecar --models-dir {modelsDir} --port 8765
+                          </code>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            marginTop: "4px",
+                          }}
+                        >
+                          <button
+                            onClick={handleSaveEdit}
+                            disabled={!editForm.baseUrl}
+                            style={{
+                              ...primaryBtnStyle,
+                              cursor: !editForm.baseUrl
+                                ? "not-allowed"
+                                : "pointer",
+                              opacity: !editForm.baseUrl ? 0.5 : 1,
+                            }}
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Models */}
+                      <div
+                        style={{
+                          marginTop: "16px",
+                          borderTop: "1px solid var(--border)",
+                          paddingTop: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...sectionTitleStyle,
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Models ({models.length})
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                          }}
+                        >
+                          {models.map((model) => (
+                            <ModelCard
+                              key={model.id}
+                              model={model}
+                              isSelected={model.id === selectedModelId}
+                              isThisDownloading={
+                                isDownloading && downloadingModelId === model.id
+                              }
+                              downloadProgress={downloadProgress}
+                              isRecording={isRecording}
+                              isDownloading={isDownloading}
+                              onDownloadModel={onDownloadModel}
+                              onSelectModel={onSelectModel}
+                              onDelete={handleDeleteModel}
+                            />
+                          ))}
+                          {models.length === 0 && (
+                            <div
+                              style={{
+                                padding: "12px",
+                                textAlign: "center",
+                                color: "var(--text-muted)",
+                                fontSize: "13px",
+                              }}
+                            >
+                              No models yet. Search HuggingFace below to add
+                              models.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Download Models */}
+                      <div
+                        style={{
+                          marginTop: "16px",
+                          borderTop: "1px solid var(--border)",
+                          paddingTop: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            ...sectionTitleStyle,
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Download Models
+                        </div>
+
+                        {/* HuggingFace Mirror URL */}
+                        <div
+                          style={{
+                            ...cardStyle,
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "var(--text-muted)",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            HuggingFace Mirror (model download source)
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              value={editingHfUrl}
+                              onChange={(e) => setEditingHfUrl(e.target.value)}
+                              placeholder={defaultHfUrl}
+                              style={{
+                                ...inputStyle,
+                                flex: 1,
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: "11px",
+                              }}
+                            />
+                            {hfUrlChanged && (
+                              <button
+                                onClick={handleSaveHfUrl}
+                                style={{
+                                  ...primaryBtnStyle,
+                                  fontSize: "11px",
+                                }}
+                              >
+                                Save
+                              </button>
+                            )}
+                            {!hfUrlChanged && hfUrlSaved && (
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  color: "#4ADE80",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                Saved
+                              </span>
+                            )}
+                            <button
+                              onClick={handleResetHfUrl}
+                              disabled={editingHfUrl === defaultHfUrl}
+                              style={{
+                                ...secondaryBtnStyle,
+                                fontSize: "11px",
+                                padding: "0 8px",
+                                color: "var(--text-muted)",
+                                cursor:
+                                  editingHfUrl === defaultHfUrl
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  editingHfUrl === defaultHfUrl ? 0.4 : 1,
+                              }}
+                              title="Reset to default"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Download error */}
+                        {downloadError && (
+                          <div
+                            style={{
+                              padding: "8px 12px",
+                              marginBottom: "8px",
+                              backgroundColor: "rgba(239, 68, 68, 0.1)",
+                              border: "1px solid rgba(239, 68, 68, 0.3)",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              color: "#EF4444",
+                              lineHeight: "18px",
+                            }}
+                          >
+                            {downloadError}
+                          </div>
+                        )}
+
+                        {/* Search */}
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "6px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              onKeyDown={handleSearchKeyDown}
+                              placeholder="Search ASR models, e.g. whisper, wav2vec2..."
+                              style={{
+                                ...inputStyle,
+                                flex: 1,
+                              }}
+                            />
+                            <button
+                              onClick={handleSearch}
+                              disabled={isSearching || !searchQuery.trim()}
+                              style={{
+                                ...primaryBtnStyle,
+                                cursor:
+                                  isSearching || !searchQuery.trim()
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  isSearching || !searchQuery.trim() ? 0.5 : 1,
+                              }}
+                            >
+                              {isSearching ? "Searching..." : "Search"}
+                            </button>
+                          </div>
+
+                          {/* Search results */}
+                          {(searchResults.length > 0 ||
+                            (hasSearched && !isSearching)) && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "8px",
+                              }}
+                            >
+                              {searchResults.map((model) => (
+                                <ModelCard
+                                  key={model.id}
+                                  model={model}
+                                  isSelected={model.id === selectedModelId}
+                                  isThisDownloading={
+                                    isDownloading &&
+                                    downloadingModelId === model.id
+                                  }
+                                  downloadProgress={downloadProgress}
+                                  isRecording={isRecording}
+                                  isDownloading={isDownloading}
+                                  onDownloadModel={onDownloadModel}
+                                  onSelectModel={onSelectModel}
+                                  onDelete={null}
+                                />
+                              ))}
+                              {hasSearched &&
+                                !isSearching &&
+                                searchResults.length === 0 && (
+                                  <div
+                                    style={{
+                                      padding: "12px",
+                                      textAlign: "center",
+                                      color: "var(--text-muted)",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    No models found. Try different keywords.
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div>
-                        <div style={labelStyle}>Name</div>
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              name: e.target.value,
-                            })
-                          }
-                          placeholder="My ASR Server"
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <div style={labelStyle}>Base URL</div>
-                        <input
-                          type="text"
-                          value={editForm.baseUrl}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              baseUrl: e.target.value,
-                            })
-                          }
-                          placeholder="http://localhost:8080"
-                          style={{
-                            ...inputStyle,
-                            fontFamily: "monospace",
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div style={labelStyle}>API Key (optional)</div>
-                        <input
-                          type="password"
-                          value={editForm.apiKey}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              apiKey: e.target.value,
-                            })
-                          }
-                          placeholder="sk-..."
-                          style={{
-                            ...inputStyle,
-                            fontFamily: "monospace",
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div style={labelStyle}>Model</div>
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          {providerFetchedModels.length > 0 &&
-                          !providerUseCustom ? (
-                            <select
-                              value={editForm.model}
-                              onChange={(e) => {
-                                if (e.target.value === "__custom__") {
-                                  setUseCustomModel((prev) => ({
-                                    ...prev,
-                                    [provider.id]: true,
-                                  }));
-                                } else {
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <div style={labelStyle}>Name</div>
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                name: e.target.value,
+                              })
+                            }
+                            placeholder="My ASR Server"
+                            style={inputStyle}
+                          />
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Base URL</div>
+                          <input
+                            type="text"
+                            value={editForm.baseUrl}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                baseUrl: e.target.value,
+                              })
+                            }
+                            placeholder="http://localhost:8080"
+                            style={{
+                              ...inputStyle,
+                              fontFamily: "monospace",
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <div style={labelStyle}>API Key (optional)</div>
+                          <input
+                            type="password"
+                            value={editForm.apiKey}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                apiKey: e.target.value,
+                              })
+                            }
+                            placeholder="sk-..."
+                            style={{
+                              ...inputStyle,
+                              fontFamily: "monospace",
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <div style={labelStyle}>Model</div>
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            {providerFetchedModels.length > 0 &&
+                            !providerUseCustom ? (
+                              <select
+                                value={editForm.model}
+                                onChange={(e) => {
+                                  if (e.target.value === "__custom__") {
+                                    setUseCustomModel((prev) => ({
+                                      ...prev,
+                                      [provider.id]: true,
+                                    }));
+                                  } else {
+                                    setEditForm({
+                                      ...editForm,
+                                      model: e.target.value,
+                                    });
+                                  }
+                                }}
+                                style={{
+                                  ...inputStyle,
+                                  flex: 1,
+                                  width: "auto",
+                                }}
+                              >
+                                <option value="" disabled>
+                                  Select a model...
+                                </option>
+                                {providerFetchedModels.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}
+                                  </option>
+                                ))}
+                                <option value="__custom__">Custom...</option>
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                value={editForm.model}
+                                onChange={(e) =>
                                   setEditForm({
                                     ...editForm,
                                     model: e.target.value,
-                                  });
+                                  })
                                 }
-                              }}
+                                placeholder="e.g. whisper-1"
+                                style={{ ...inputStyle, flex: 1 }}
+                              />
+                            )}
+                            <button
+                              onClick={() => handleFetchModels(provider.id)}
+                              disabled={
+                                modelsFetchingId === provider.id ||
+                                !editForm.baseUrl
+                              }
                               style={{
-                                ...inputStyle,
-                                flex: 1,
-                                width: "auto",
+                                ...secondaryBtnStyle,
+                                color: "var(--text-muted)",
+                                cursor:
+                                  modelsFetchingId === provider.id ||
+                                  !editForm.baseUrl
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity:
+                                  modelsFetchingId === provider.id ||
+                                  !editForm.baseUrl
+                                    ? 0.5
+                                    : 1,
                               }}
                             >
-                              <option value="" disabled>
-                                Select a model...
-                              </option>
-                              {providerFetchedModels.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                              <option value="__custom__">Custom...</option>
-                            </select>
-                          ) : (
-                            <input
-                              type="text"
-                              value={editForm.model}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  model: e.target.value,
-                                })
-                              }
-                              placeholder="e.g. whisper-1"
-                              style={{ ...inputStyle, flex: 1 }}
-                            />
-                          )}
+                              {modelsFetchingId === provider.id
+                                ? "Fetching..."
+                                : "Fetch Models"}
+                            </button>
+                          </div>
+                          {providerUseCustom &&
+                            providerFetchedModels.length > 0 && (
+                              <button
+                                onClick={() =>
+                                  setUseCustomModel((prev) => ({
+                                    ...prev,
+                                    [provider.id]: false,
+                                  }))
+                                }
+                                style={{
+                                  marginTop: "4px",
+                                  padding: "0",
+                                  fontSize: "11px",
+                                  color: "var(--accent)",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Back to model list
+                              </button>
+                            )}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            marginTop: "4px",
+                          }}
+                        >
                           <button
-                            onClick={() => handleFetchModels(provider.id)}
-                            disabled={
-                              modelsFetchingId === provider.id ||
-                              !editForm.baseUrl
-                            }
+                            onClick={handleSaveEdit}
+                            disabled={!editForm.baseUrl}
                             style={{
-                              ...secondaryBtnStyle,
-                              color: "var(--text-muted)",
-                              cursor:
-                                modelsFetchingId === provider.id ||
-                                !editForm.baseUrl
-                                  ? "not-allowed"
-                                  : "pointer",
-                              opacity:
-                                modelsFetchingId === provider.id ||
-                                !editForm.baseUrl
-                                  ? 0.5
-                                  : 1,
+                              ...primaryBtnStyle,
+                              cursor: !editForm.baseUrl
+                                ? "not-allowed"
+                                : "pointer",
+                              opacity: !editForm.baseUrl ? 0.5 : 1,
                             }}
                           >
-                            {modelsFetchingId === provider.id
-                              ? "Fetching..."
-                              : "Fetch Models"}
+                            Save
                           </button>
                         </div>
-                        {providerUseCustom &&
-                          providerFetchedModels.length > 0 && (
-                            <button
-                              onClick={() =>
-                                setUseCustomModel((prev) => ({
-                                  ...prev,
-                                  [provider.id]: false,
-                                }))
-                              }
-                              style={{
-                                marginTop: "4px",
-                                padding: "0",
-                                fontSize: "11px",
-                                color: "var(--accent)",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Back to model list
-                            </button>
-                          )}
                       </div>
                     </>
                   )}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      marginTop: "4px",
-                    }}
-                  >
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={!editForm.baseUrl}
-                      style={{
-                        ...primaryBtnStyle,
-                        cursor: !editForm.baseUrl ? "not-allowed" : "pointer",
-                        opacity: !editForm.baseUrl ? 0.5 : 1,
-                      }}
-                    >
-                      Save
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
           );
         })}
-      </div>
-
-      {/* Section 2: Local Models (always visible) */}
-      <div
-        style={{
-          borderTop: "1px solid var(--border)",
-          paddingTop: "16px",
-          marginBottom: "16px",
-        }}
-      >
-        <div style={sectionTitleStyle}>Local Models</div>
-        <div style={sectionDescStyle}>
-          Download and manage models used by the local sidecar.
-        </div>
-        <div style={cardStyle}>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-            }}
-          >
-            {models.map((model) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                isSelected={model.id === selectedModelId}
-                isThisDownloading={
-                  isDownloading && downloadingModelId === model.id
-                }
-                downloadProgress={downloadProgress}
-                isRecording={isRecording}
-                isDownloading={isDownloading}
-                onDownloadModel={onDownloadModel}
-                onSelectModel={onSelectModel}
-                onDelete={handleDeleteModel}
-              />
-            ))}
-            {models.length === 0 && (
-              <div
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  color: "var(--text-muted)",
-                  fontSize: "13px",
-                }}
-              >
-                No models yet. Search HuggingFace below to add models.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Section 3: Download Models */}
-      <div style={sectionTitleStyle}>Download Models</div>
-
-      {/* HuggingFace Mirror URL */}
-      <div style={cardStyle}>
-        <div
-          style={{
-            fontSize: "11px",
-            color: "var(--text-muted)",
-            marginBottom: "8px",
-          }}
-        >
-          HuggingFace Mirror (model download source)
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input
-            type="text"
-            value={editingHfUrl}
-            onChange={(e) => setEditingHfUrl(e.target.value)}
-            placeholder={defaultHfUrl}
-            style={{
-              ...inputStyle,
-              flex: 1,
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: "11px",
-            }}
-          />
-          {hfUrlChanged && (
-            <button
-              onClick={handleSaveHfUrl}
-              style={{ ...primaryBtnStyle, fontSize: "11px" }}
-            >
-              Save
-            </button>
-          )}
-          {!hfUrlChanged && hfUrlSaved && (
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#4ADE80",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Saved
-            </span>
-          )}
-          <button
-            onClick={handleResetHfUrl}
-            disabled={editingHfUrl === defaultHfUrl}
-            style={{
-              ...secondaryBtnStyle,
-              fontSize: "11px",
-              padding: "0 8px",
-              color: "var(--text-muted)",
-              cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
-              opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
-            }}
-            title="Reset to default"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
-      {/* Download error */}
-      {downloadError && (
-        <div
-          style={{
-            padding: "8px 12px",
-            marginBottom: "12px",
-            backgroundColor: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            borderRadius: "6px",
-            fontSize: "12px",
-            color: "#EF4444",
-            lineHeight: "18px",
-          }}
-        >
-          {downloadError}
-        </div>
-      )}
-
-      {/* Search HuggingFace */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Search ASR models, e.g. whisper, wav2vec2..."
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={isSearching || !searchQuery.trim()}
-            style={{
-              ...primaryBtnStyle,
-              cursor:
-                isSearching || !searchQuery.trim() ? "not-allowed" : "pointer",
-              opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
-            }}
-          >
-            {isSearching ? "Searching..." : "Search"}
-          </button>
-        </div>
-
-        {/* Search results */}
-        {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-            }}
-          >
-            {searchResults.map((model) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                isSelected={model.id === selectedModelId}
-                isThisDownloading={
-                  isDownloading && downloadingModelId === model.id
-                }
-                downloadProgress={downloadProgress}
-                isRecording={isRecording}
-                isDownloading={isDownloading}
-                onDownloadModel={onDownloadModel}
-                onSelectModel={onSelectModel}
-                onDelete={null}
-              />
-            ))}
-            {hasSearched && !isSearching && searchResults.length === 0 && (
-              <div
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                }}
-              >
-                No models found. Try different keywords.
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Delete confirmation dialog */}
