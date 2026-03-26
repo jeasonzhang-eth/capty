@@ -525,7 +525,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const modelBuf = Buffer.from(modelField, "utf-8");
       const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
 
-      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      // Strip trailing /v1 or / to avoid double /v1/v1 paths
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
       const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
@@ -583,7 +584,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const modelBuf = Buffer.from(modelField, "utf-8");
       const body = Buffer.concat([headerBuf, wavBuffer, modelBuf]);
 
-      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
       const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
