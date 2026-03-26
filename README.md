@@ -229,7 +229,12 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 # 安装前端依赖
 npm install
 
-# 启动开发模式（Electron + Sidecar 一起启动）
+# 启动 Sidecar（独立进程，需先启动）
+npm run sidecar
+# 或自定义 models 目录：
+CAPTY_MODELS_DIR=/path/to/models npm run sidecar
+
+# 启动开发模式（另开终端）
 npm run dev
 
 # 仅构建
