@@ -31,7 +31,7 @@ export function TranscriptArea({
   playbackTime,
   onSeekToTime,
 }: TranscriptAreaProps): React.ReactElement {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isPlayback = playbackTime !== null;
 
@@ -92,8 +92,9 @@ export function TranscriptArea({
 
   // Auto-scroll to bottom during recording
   useEffect(() => {
-    if (isRecording) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isRecording && scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      el.scrollTop = el.scrollHeight;
     }
   }, [segments, partialText, isRecording]);
 
@@ -118,6 +119,7 @@ export function TranscriptArea({
         />
       ) : (
         <div
+          ref={scrollContainerRef}
           style={{
             flex: 1,
             overflowY: "auto",
@@ -217,8 +219,6 @@ export function TranscriptArea({
               to begin transcription
             </div>
           )}
-
-          <div ref={bottomRef} />
         </div>
       )}
     </div>

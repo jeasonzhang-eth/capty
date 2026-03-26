@@ -294,6 +294,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (24)
+
+- **修复录音时字幕不自动滚动到底** — `scrollIntoView({ behavior: "smooth" })` 在快速新增 segment 时动画被打断导致滚动跟不上，改为直接设置 `scrollTop = scrollHeight` 在滚动容器上，确保每次新 segment 到达时立即滚动到底部
+
 ### 2026-03-26 (23)
 
 - **Cherry Studio 风格 Provider 管理** — 重构 Settings > Speech 为展开/收起卡片模式
