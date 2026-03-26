@@ -176,7 +176,7 @@ export function ControlBar({
               .filter((m) => m.downloaded)
               .map((m) => (
                 <option key={m.id} value={m.id}>
-                  [{m.type === "whisper" ? "Whisper" : "Qwen"}] {m.name}
+                  {m.name}
                 </option>
               ))}
           </select>

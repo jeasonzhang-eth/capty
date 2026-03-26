@@ -152,19 +152,37 @@ const TABS: readonly {
 
 /* ─── Small reusable components ─── */
 
+const TYPE_STYLES: Record<
+  string,
+  { bg: string; color: string; label: string }
+> = {
+  whisper: {
+    bg: "rgba(74, 222, 128, 0.12)",
+    color: "#4ADE80",
+    label: "Whisper",
+  },
+  "qwen-asr": {
+    bg: "rgba(245, 166, 35, 0.12)",
+    color: "#F5A623",
+    label: "Qwen",
+  },
+  parakeet: {
+    bg: "rgba(96, 165, 250, 0.12)",
+    color: "#60A5FA",
+    label: "Parakeet",
+  },
+};
+const DEFAULT_TYPE_STYLE = {
+  bg: "rgba(148, 163, 184, 0.12)",
+  color: "#94A3B8",
+  label: "ASR",
+};
+
 function TypeTag({ type }: { readonly type: string }): React.ReactElement {
-  const isWhisper = type === "whisper";
+  const s = TYPE_STYLES[type] ?? DEFAULT_TYPE_STYLE;
   return (
-    <span
-      style={{
-        ...tagStyle,
-        backgroundColor: isWhisper
-          ? "rgba(74, 222, 128, 0.12)"
-          : "rgba(245, 166, 35, 0.12)",
-        color: isWhisper ? "#4ADE80" : "#F5A623",
-      }}
-    >
-      {isWhisper ? "Whisper" : "Qwen"}
+    <span style={{ ...tagStyle, backgroundColor: s.bg, color: s.color }}>
+      {s.label}
     </span>
   );
 }

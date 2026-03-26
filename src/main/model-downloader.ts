@@ -275,14 +275,10 @@ export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
   if (!existsSync(modelPath)) return false;
   try {
     const entries = readdirSync(modelPath);
-    // Must have at least a config file + a model weight file
+    // Must have at least a model weight file (mlx-audio uses safetensors)
     return entries.some(
       (e) =>
-        e.endsWith(".safetensors") ||
-        e.endsWith(".bin") ||
-        e.endsWith(".pt") ||
-        e.endsWith(".gguf") ||
-        e.endsWith(".npz"),
+        e.endsWith(".safetensors") || e.endsWith(".bin") || e.endsWith(".gguf"),
     );
   } catch {
     return false;

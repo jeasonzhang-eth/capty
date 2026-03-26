@@ -176,7 +176,7 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 |------|------|
 | `id` | 模型唯一标识，同时也是 `models/` 下的目录名 |
 | `name` | 显示名称 |
-| `type` | 模型类型：`qwen-asr` 或 `whisper` |
+| `type` | 模型类型标签（`whisper` / `qwen-asr` / `parakeet` / `auto`），仅用于 UI 显示，mlx-audio 自动检测 |
 | `repo` | HuggingFace 仓库路径，如 `Qwen/Qwen3-ASR-0.6B` |
 | `size_gb` | 模型大小（GB），首次启动时从磁盘计算回填 |
 | `languages` | 支持的语言列表 |
@@ -297,14 +297,15 @@ pytest
 
 ### 2026-03-27 (28)
 
-- **统一 ASR 后端为 mlx-audio** — 将 sidecar 从 `mlx-qwen3-asr` + `mlx-whisper` 双库迁移到 `mlx-audio` 统一库
-  - 单一 `mlx_audio.stt.load()` + `model.generate()` API 支持 Whisper、Qwen3-ASR 等 12+ 种模型
-  - 删除 model_runner.py 中两条独立的推理路径（`_load_qwen_asr` / `_load_whisper`、`_run_qwen_inference` / `_run_whisper_inference`），代码量减半
-  - 模型注册表 repo 统一改为 `mlx-community/` 前缀（如 `mlx-community/Qwen3-ASR-0.6B-8bit`），移除 `mlx_repo` 字段
-  - server.py 简化：移除 `model_type` / `mlx_repo` 参数传递
-  - ipc-handlers.ts 简化：移除 `mlx_repo` 字段和 effectiveRepo 下载逻辑
-  - 已下载的旧模型（含 `config.json`）可被 mlx-audio 自动识别并加载
-  - 应用更新时自动同步新 repo ID 到 `user-models.json`
+- **统一 ASR 后端为 mlx-audio（Breaking Change）** — 将 sidecar 从 `mlx-qwen3-asr` + `mlx-whisper` 双库迁移到 `mlx-audio` 统一库，完全抛弃旧模型兼容
+  - 单一 `mlx_audio.stt.load()` + `model.generate()` API 支持 Whisper、Qwen3-ASR、Parakeet 等 12+ 种模型
+  - 删除 model_runner.py 中两条独立的推理路径，代码量减半
+  - 模型注册表 repo 统一改为 `mlx-community/` 前缀，移除 `mlx_repo` 字段
+  - `ensureUserModels` 重写：每次启动从 builtin models 重建，仅保留 HF 下载的额外模型
+  - ControlBar 模型下拉简化为只显示模型名称（移除 `[Whisper]` / `[Qwen]` 前缀）
+  - TypeTag 组件支持更多模型类型（Whisper / Qwen / Parakeet / auto），采用数据驱动配色
+  - `isModelDownloaded` 移除 `.npz` / `.pt` 检测，仅保留 `.safetensors` / `.bin` / `.gguf`
+  - **旧模型不兼容，需重新下载**
 
 ### 2026-03-26 (27)
 

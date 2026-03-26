@@ -112,42 +112,15 @@ function removeUserModel(configDir: string, modelId: string): void {
 
 /**
  * Initialize user-models.json from builtin models.json on first run.
- * Also picks up orphaned model directories and any new builtin models
- * added in app updates.
+ * On subsequent runs, always rebuild: start from builtin list, then
+ * pick up any HF-downloaded models from disk.
  */
 function ensureUserModels(configDir: string): void {
-  const filePath = join(configDir, USER_MODELS_FILE);
-  const exists = fs.existsSync(filePath);
-
-  if (!exists) {
-    // First run: seed from builtin registry
-    const builtin = readBuiltinModels();
-    writeUserModels(configDir, builtin);
-    return;
-  }
-
-  // Existing file: merge in any NEW builtin models from app updates
-  const current = readUserModels(configDir);
-  const currentIds = new Set(current.map((m) => m.id));
   const builtin = readBuiltinModels();
-  let changed = false;
+  const models: ModelEntry[] = [...builtin];
+  const knownIds = new Set(models.map((m) => m.id));
 
-  for (const bm of builtin) {
-    if (!currentIds.has(bm.id)) {
-      current.push(bm);
-      currentIds.add(bm.id);
-      changed = true;
-    } else {
-      // Update repo for existing entries from builtin updates (e.g. mlx-audio migration)
-      const existing = current.find((m) => m.id === bm.id);
-      if (existing && existing.repo !== bm.repo) {
-        (existing as { repo: string }).repo = bm.repo;
-        changed = true;
-      }
-    }
-  }
-
-  // Also scan models directory for orphaned downloads
+  // Scan models directory for HF-downloaded models not in builtin list
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models");
@@ -155,47 +128,36 @@ function ensureUserModels(configDir: string): void {
   if (fs.existsSync(modelsDir)) {
     try {
       for (const dir of fs.readdirSync(modelsDir)) {
-        if (currentIds.has(dir)) continue;
+        if (knownIds.has(dir)) continue;
         if (!isModelDownloaded(modelsDir, dir)) continue;
-        // Infer metadata from directory name
         const repo = dir.replace(/--/g, "/");
         const name = dir.split("--").pop() ?? dir;
-        const lower = dir.toLowerCase();
-        const type = lower.includes("whisper")
-          ? "whisper"
-          : lower.includes("qwen")
-            ? "qwen-asr"
-            : "whisper";
-        current.push({
+        models.push({
           id: dir,
           name,
-          type,
+          type: "auto",
           repo,
           size_gb: calcDirSizeGb(join(modelsDir, dir)),
           languages: ["multilingual"],
           description: repo,
         });
-        changed = true;
       }
     } catch {
       // Cannot read models dir
     }
   }
 
-  // Backfill size for existing entries that have size_gb == 0
-  for (const m of current) {
+  // Backfill size for builtin entries that have been downloaded
+  for (const m of models) {
     if (m.size_gb === 0 && isModelDownloaded(modelsDir, m.id)) {
       const size = calcDirSizeGb(join(modelsDir, m.id));
       if (size > 0) {
-        m.size_gb = size;
-        changed = true;
+        (m as { size_gb: number }).size_gb = size;
       }
     }
   }
 
-  if (changed) {
-    writeUserModels(configDir, current);
-  }
+  writeUserModels(configDir, models);
 }
 
 function loadAllModels(configDir: string): ModelEntry[] {
@@ -238,15 +200,15 @@ interface HFTreeFile {
 /** Files to exclude when computing download size (matching model-downloader). */
 const SIZE_SKIP_FILES = new Set([".gitattributes", "README.md"]);
 
-/** Infer our internal model type from HuggingFace tags / model ID. */
+/** Infer model type label from HuggingFace tags / model ID (for UI display only). */
 function inferModelType(hfModel: HFSearchResult): string {
   const id = hfModel.id.toLowerCase();
   const tags = hfModel.tags.map((t) => t.toLowerCase());
 
   if (tags.includes("whisper") || id.includes("whisper")) return "whisper";
   if (tags.includes("qwen") || id.includes("qwen")) return "qwen-asr";
-  // Default to whisper for generic ASR models (most common on HF)
-  return "whisper";
+  if (tags.includes("parakeet") || id.includes("parakeet")) return "parakeet";
+  return "auto";
 }
 
 /** Fetch the total download size (in GB) for a repo via the tree API. */
