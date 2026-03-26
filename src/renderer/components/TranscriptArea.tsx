@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Lrc, type LrcLine } from "react-lrc";
 import { segmentsToLrc } from "../utils/lrcConverter";
 
@@ -15,6 +21,145 @@ interface TranscriptAreaProps {
   readonly isRecording: boolean;
   readonly playbackTime: number | null;
   readonly onSeekToTime: ((time: number) => void) | null;
+  readonly sessionId: number | null;
+  readonly canExport: boolean;
+}
+
+interface ExportMenuProps {
+  readonly sessionId: number;
+  readonly onClose: () => void;
+}
+
+function ExportMenu({
+  sessionId,
+  onClose,
+}: ExportMenuProps): React.ReactElement {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [onClose]);
+
+  const getDefaultPath = useCallback(
+    async (ext: string): Promise<string> => {
+      const audioDir = await window.capty.getAudioDir(sessionId);
+      if (audioDir) {
+        const dirName = audioDir.split("/").pop() ?? "transcript";
+        return `${audioDir}/${dirName}.${ext}`;
+      }
+      return `transcript.${ext}`;
+    },
+    [sessionId],
+  );
+
+  const handleExportTxt = useCallback(async () => {
+    const content = await window.capty.exportTxt(sessionId, {
+      timestamps: true,
+    });
+    const defaultPath = await getDefaultPath("txt");
+    await window.capty.saveFile(defaultPath, content as string);
+    onClose();
+  }, [sessionId, onClose, getDefaultPath]);
+
+  const handleExportSrt = useCallback(async () => {
+    const content = await window.capty.exportSrt(sessionId);
+    const defaultPath = await getDefaultPath("srt");
+    await window.capty.saveFile(defaultPath, content as string);
+    onClose();
+  }, [sessionId, onClose, getDefaultPath]);
+
+  const handleExportMarkdown = useCallback(async () => {
+    const content = await window.capty.exportMarkdown(sessionId);
+    const defaultPath = await getDefaultPath("md");
+    await window.capty.saveFile(defaultPath, content as string);
+    onClose();
+  }, [sessionId, onClose, getDefaultPath]);
+
+  const menuItemStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    padding: "10px 16px",
+    fontSize: "13px",
+    color: "var(--text-primary)",
+    backgroundColor: "transparent",
+    border: "none",
+    textAlign: "left",
+    cursor: "pointer",
+    transition: "background-color 0.15s, color 0.15s",
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: "absolute",
+        top: "100%",
+        right: 0,
+        marginTop: "4px",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        background: "rgba(28, 28, 31, 0.88)",
+        border: "1px solid var(--border)",
+        borderRadius: "10px",
+        boxShadow:
+          "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04)",
+        overflow: "hidden",
+        minWidth: "180px",
+        zIndex: 100,
+      }}
+    >
+      <button
+        onClick={handleExportTxt}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }}
+      >
+        Export as TXT
+      </button>
+      <button
+        onClick={handleExportSrt}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }}
+      >
+        Export as SRT
+      </button>
+      <button
+        onClick={handleExportMarkdown}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }}
+      >
+        Export as Markdown
+      </button>
+    </div>
+  );
 }
 
 function formatTime(seconds: number): string {
@@ -30,10 +175,13 @@ export function TranscriptArea({
   isRecording,
   playbackTime,
   onSeekToTime,
+  sessionId,
+  canExport,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const prevSegmentCountRef = useRef(0);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const isPlayback = playbackTime !== null;
 
@@ -133,6 +281,74 @@ export function TranscriptArea({
         background: "transparent",
       }}
     >
+      {/* Header bar with Export button */}
+      {canExport && sessionId !== null && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            padding: "8px 28px",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ position: "relative" }}>
+            {showExportMenu && (
+              <ExportMenu
+                sessionId={sessionId}
+                onClose={() => setShowExportMenu(false)}
+              />
+            )}
+            <button
+              onClick={() => setShowExportMenu((prev) => !prev)}
+              style={{
+                backgroundColor: "transparent",
+                color: "var(--text-muted)",
+                border: "none",
+                padding: "8px 4px",
+                fontSize: "13px",
+                fontWeight: 500,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "color 0.15s, opacity 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+            >
+              Export
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                style={{ marginTop: "-1px" }}
+              >
+                <path
+                  d="M3.5 2.5L8.5 2.5L8.5 7.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8.5 2.5L3 8"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {isPlayback && segments.length > 0 ? (
         <Lrc
           lrc={lrcString}

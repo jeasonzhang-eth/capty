@@ -1,14 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React from "react";
 
 interface RecordingControlsProps {
   readonly isRecording: boolean;
   readonly elapsedSeconds: number;
   readonly audioLevel: number;
-  readonly sessionId: number | null;
   readonly onStart: () => void;
   readonly onStop: () => void;
-  readonly onExport: () => void;
-  readonly canExport: boolean;
 }
 
 function formatTimer(seconds: number): string {
@@ -43,168 +40,13 @@ function VUMeter({ level }: { level: number }): React.ReactElement {
   );
 }
 
-interface ExportMenuProps {
-  readonly sessionId: number;
-  readonly onClose: () => void;
-}
-
-function ExportMenu({
-  sessionId,
-  onClose,
-}: ExportMenuProps): React.ReactElement {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent): void => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [onClose]);
-
-  const getDefaultPath = useCallback(
-    async (ext: string): Promise<string> => {
-      const audioDir = await window.capty.getAudioDir(sessionId);
-      if (audioDir) {
-        // Extract timestamp from the audio directory path (last segment)
-        const dirName = audioDir.split("/").pop() ?? "transcript";
-        return `${audioDir}/${dirName}.${ext}`;
-      }
-      return `transcript.${ext}`;
-    },
-    [sessionId],
-  );
-
-  const handleExportTxt = useCallback(async () => {
-    const content = await window.capty.exportTxt(sessionId, {
-      timestamps: true,
-    });
-    const defaultPath = await getDefaultPath("txt");
-    await window.capty.saveFile(defaultPath, content as string);
-    onClose();
-  }, [sessionId, onClose, getDefaultPath]);
-
-  const handleExportSrt = useCallback(async () => {
-    const content = await window.capty.exportSrt(sessionId);
-    const defaultPath = await getDefaultPath("srt");
-    await window.capty.saveFile(defaultPath, content as string);
-    onClose();
-  }, [sessionId, onClose, getDefaultPath]);
-
-  const handleExportMarkdown = useCallback(async () => {
-    const content = await window.capty.exportMarkdown(sessionId);
-    const defaultPath = await getDefaultPath("md");
-    await window.capty.saveFile(defaultPath, content as string);
-    onClose();
-  }, [sessionId, onClose, getDefaultPath]);
-
-  const menuItemStyle: React.CSSProperties = {
-    display: "block",
-    width: "100%",
-    padding: "10px 16px",
-    fontSize: "13px",
-    color: "var(--text-primary)",
-    backgroundColor: "transparent",
-    border: "none",
-    textAlign: "left",
-    cursor: "pointer",
-    transition: "background-color 0.15s, color 0.15s",
-  };
-
-  return (
-    <div
-      ref={menuRef}
-      style={{
-        position: "absolute",
-        bottom: "100%",
-        right: 0,
-        marginBottom: "8px",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        background: "rgba(28, 28, 31, 0.88)",
-        border: "1px solid var(--border)",
-        borderRadius: "10px",
-        boxShadow:
-          "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04)",
-        overflow: "hidden",
-        minWidth: "180px",
-        zIndex: 100,
-      }}
-    >
-      <button
-        onClick={handleExportTxt}
-        style={menuItemStyle}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
-          e.currentTarget.style.color = "var(--accent)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "transparent";
-          e.currentTarget.style.color = "var(--text-primary)";
-        }}
-      >
-        Export as TXT
-      </button>
-      <button
-        onClick={handleExportSrt}
-        style={menuItemStyle}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
-          e.currentTarget.style.color = "var(--accent)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "transparent";
-          e.currentTarget.style.color = "var(--text-primary)";
-        }}
-      >
-        Export as SRT
-      </button>
-      <button
-        onClick={handleExportMarkdown}
-        style={menuItemStyle}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
-          e.currentTarget.style.color = "var(--accent)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = "transparent";
-          e.currentTarget.style.color = "var(--text-primary)";
-        }}
-      >
-        Export as Markdown
-      </button>
-    </div>
-  );
-}
-
 export function RecordingControls({
   isRecording,
   elapsedSeconds,
   audioLevel,
-  sessionId,
   onStart,
   onStop,
-  onExport,
-  canExport,
 }: RecordingControlsProps): React.ReactElement {
-  const [showExportMenu, setShowExportMenu] = useState(false);
-
-  const handleExportClick = useCallback(() => {
-    if (sessionId !== null) {
-      setShowExportMenu((prev) => !prev);
-    } else {
-      onExport();
-    }
-  }, [sessionId, onExport]);
-
-  const handleCloseMenu = useCallback(() => {
-    setShowExportMenu(false);
-  }, []);
-
   return (
     <div
       style={{
@@ -396,74 +238,13 @@ export function RecordingControls({
         )}
       </div>
 
-      {/* ── Right section: Export button ── */}
+      {/* ── Right section: empty (balanced layout) ── */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
           flex: "1 1 0",
           minWidth: 0,
         }}
-      >
-        <div style={{ position: "relative" }}>
-          {showExportMenu && sessionId !== null && (
-            <ExportMenu sessionId={sessionId} onClose={handleCloseMenu} />
-          )}
-          <button
-            onClick={handleExportClick}
-            disabled={!canExport}
-            style={{
-              backgroundColor: "transparent",
-              color: canExport ? "var(--text-muted)" : "var(--text-muted)",
-              border: "none",
-              padding: "8px 4px",
-              fontSize: "13px",
-              fontWeight: 500,
-              cursor: canExport ? "pointer" : "default",
-              opacity: canExport ? 1 : 0.4,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              transition: "color 0.15s, opacity 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              if (canExport) {
-                e.currentTarget.style.color = "var(--text-primary)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (canExport) {
-                e.currentTarget.style.color = "var(--text-muted)";
-              }
-            }}
-          >
-            Export
-            {/* Small arrow icon */}
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              style={{ marginTop: "-1px" }}
-            >
-              <path
-                d="M3.5 2.5L8.5 2.5L8.5 7.5"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M8.5 2.5L3 8"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
+      />
     </div>
   );
 }

@@ -89,6 +89,14 @@ declare global {
       selectDirectory: () => Promise<string | null>;
       openConfigDir: () => Promise<void>;
       openAudioFolder: (sessionId: number) => Promise<void>;
+      importAudio: () => Promise<{
+        sessionId: number;
+        timestamp: string;
+      } | null>;
+      saveFile: (
+        defaultName: string,
+        content: string,
+      ) => Promise<string | null>;
       testLlmProvider: (provider: {
         baseUrl: string;
         apiKey: string;

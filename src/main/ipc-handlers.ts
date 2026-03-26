@@ -1,4 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
+import { spawn } from "child_process";
 import fs from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
@@ -325,6 +326,36 @@ async function searchHuggingFaceModels(
   );
 
   return results.map((r, i) => hfModelToEntry(r, sizes[i]));
+}
+
+function convertToWav(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-i",
+      inputPath,
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-sample_fmt",
+      "s16",
+      "-f",
+      "wav",
+      "-y",
+      outputPath,
+    ]);
+    ffmpeg.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited with code ${code}`));
+    });
+    ffmpeg.on("error", (err) => {
+      reject(
+        new Error(
+          `Failed to run ffmpeg. Make sure ffmpeg is installed (brew install ffmpeg). ${err.message}`,
+        ),
+      );
+    });
+  });
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -1031,6 +1062,69 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle("prompt-types:save", (_event, types: PromptType[]) => {
     const config = readConfig(configDir);
     writeConfig(configDir, { ...config, promptTypes: types });
+  });
+
+  // Audio import (upload existing audio file)
+  ipcMain.handle("audio:import", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+
+    // 1. Open file dialog
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Audio Files",
+          extensions: [
+            "wav",
+            "mp3",
+            "m4a",
+            "flac",
+            "ogg",
+            "aac",
+            "wma",
+            "opus",
+          ],
+        },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+
+    const filePath = result.filePaths[0];
+
+    // 2. Get file birthtime for session name
+    const stat = fs.statSync(filePath);
+    const birthtime = stat.birthtime;
+
+    // 3. Format timestamp (same as useSession.ts)
+    const formatTs = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}-${String(d.getSeconds()).padStart(2, "0")}`;
+    const timestamp = formatTs(birthtime);
+
+    // 4. Create session
+    const sessionId = createSession(db, { modelName: "imported" });
+    updateSession(db, sessionId, { audioPath: timestamp, title: timestamp });
+
+    // 5. Create audio directory
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const sessionDir = join(dataDir, "audio", timestamp);
+    fs.mkdirSync(sessionDir, { recursive: true });
+
+    // 6. Convert to 16kHz mono WAV via ffmpeg
+    const outputPath = join(sessionDir, `${timestamp}.wav`);
+    await convertToWav(filePath, outputPath);
+
+    // 7. Calculate duration and update session
+    const wavBuffer = fs.readFileSync(outputPath);
+    const pcmBytes = wavBuffer.length - 44;
+    const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
+    updateSession(db, sessionId, {
+      status: "completed",
+      durationSeconds,
+    });
+
+    return { sessionId, timestamp };
   });
 
   // Export save file

@@ -35,6 +35,7 @@ interface HistoryPanelProps {
   readonly onRegenerateSubtitles: (id: number) => void;
   readonly onCancelRegeneration: () => void;
   readonly onOpenFolder: (id: number) => void;
+  readonly onUploadAudio: () => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -141,6 +142,7 @@ export function HistoryPanel({
   onRegenerateSubtitles,
   onCancelRegeneration,
   onOpenFolder,
+  onUploadAudio,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -377,6 +379,65 @@ export function HistoryPanel({
           zIndex: 10,
         }}
       />
+
+      {/* Upload Audio button */}
+      <div
+        style={{
+          padding: "8px 16px",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={onUploadAudio}
+          style={{
+            width: "100%",
+            padding: "6px 12px",
+            fontSize: "12px",
+            fontWeight: 500,
+            color: "var(--text-muted)",
+            backgroundColor: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+            transition:
+              "color 0.15s, border-color 0.15s, background-color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--text-primary)";
+            e.currentTarget.style.borderColor = "var(--accent)";
+            e.currentTarget.style.backgroundColor = "rgba(245, 166, 35, 0.06)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-muted)";
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+        >
+          {/* Upload icon */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M7 10V3M7 3L4 6M7 3L10 6"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2 11H12"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+          </svg>
+          Upload Audio
+        </button>
+      </div>
+
       <div style={{ flex: 1, overflowY: "auto" }}>
         {groups.map((group) => {
           const isCollapsed = collapsedGroups.has(group.label);

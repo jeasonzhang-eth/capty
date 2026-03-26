@@ -395,9 +395,26 @@ function App(): React.JSX.Element {
     await store.loadSessions();
   }, [session, store, transcription, audioCapture]);
 
-  const handleExport = useCallback(() => {
-    // Export is now handled by the ExportMenu inside RecordingControls
-  }, []);
+  const handleUploadAudio = useCallback(async () => {
+    if (store.isRecording || regeneratingSessionId !== null) return;
+
+    const result = await window.capty.importAudio();
+    if (!result) return; // user cancelled
+
+    // Refresh session list
+    await store.loadSessions();
+
+    // Select the new session and load its segments (empty initially)
+    await handleSelectSession(result.sessionId);
+
+    // Auto-trigger transcription (reuse regeneration flow)
+    handleRegenerateSubtitles(result.sessionId);
+  }, [
+    store,
+    regeneratingSessionId,
+    handleSelectSession,
+    handleRegenerateSubtitles,
+  ]);
 
   const handleWizardComplete = useCallback(
     (dataDir: string) => {
@@ -988,6 +1005,7 @@ function App(): React.JSX.Element {
           onRegenerateSubtitles={handleRegenerateSubtitles}
           onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
+          onUploadAudio={handleUploadAudio}
         />
         <TranscriptArea
           segments={store.segments}
@@ -1001,6 +1019,8 @@ function App(): React.JSX.Element {
           onSeekToTime={
             audioPlayer.playingSessionId !== null ? audioPlayer.seek : null
           }
+          sessionId={store.currentSessionId}
+          canExport={!store.isRecording && store.segments.length > 0}
         />
         <SummaryPanel
           summaries={summaries}
@@ -1046,11 +1066,8 @@ function App(): React.JSX.Element {
         isRecording={store.isRecording}
         elapsedSeconds={store.elapsedSeconds}
         audioLevel={audioLevel}
-        sessionId={store.currentSessionId}
         onStart={handleStart}
         onStop={handleStop}
-        onExport={handleExport}
-        canExport={!store.isRecording && store.segments.length > 0}
       />
       {showSettings && (
         <SettingsModal

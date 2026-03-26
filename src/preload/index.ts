@@ -130,6 +130,13 @@ const api = {
   openAudioFolder: (sessionId: number) =>
     ipcRenderer.invoke("audio:open-folder", sessionId),
 
+  // Audio import
+  importAudio: () =>
+    ipcRenderer.invoke("audio:import") as Promise<{
+      sessionId: number;
+      timestamp: string;
+    } | null>,
+
   // Export save file
   saveFile: (defaultName: string, content: string) =>
     ipcRenderer.invoke("export:save-file", defaultName, content),

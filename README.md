@@ -18,7 +18,8 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片内嵌模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — 内置 Qwen3-ASR + 5 个 Whisper 变体，支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
-- **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式
+- **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
+- **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），自动转换为 16kHz WAV 并触发转录（需系统安装 ffmpeg）
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
@@ -293,6 +294,17 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (26)
+
+- **Export 按钮迁移** — 将 Export 按钮从底部录音控制栏移至 TranscriptArea 右上角，更符合操作逻辑（导出属于转录内容的操作）
+  - TranscriptArea 新增 header bar，右对齐 Export 按钮（仅在有 session 且有 segments 时显示）
+  - RecordingControls 精简为仅保留 VU meter 和录音按钮
+- **上传音频文件** — HistoryPanel 顶部新增 Upload Audio 按钮，支持导入已有音频文件并自动转录
+  - 支持 WAV / MP3 / M4A / FLAC / OGG / AAC / WMA / OPUS 格式
+  - 通过 ffmpeg 自动转换为 16kHz mono WAV（需系统安装 ffmpeg：`brew install ffmpeg`）
+  - 导入后自动创建 session（标题为文件创建时间），自动触发转录
+  - 新增 IPC handler `audio:import`，preload 新增 `importAudio` API
 
 ### 2026-03-26 (25)
 
