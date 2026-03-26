@@ -439,6 +439,13 @@ function App(): React.JSX.Element {
   const handleSelectSession = useCallback(
     async (sessionId: number) => {
       try {
+        // Stop playback if switching away from the playing session
+        if (
+          audioPlayer.playingSessionId !== null &&
+          audioPlayer.playingSessionId !== sessionId
+        ) {
+          audioPlayer.stop();
+        }
         store.setCurrentSessionId(sessionId);
         const segments = await window.capty.listSegments(sessionId);
         store.setSegments(
@@ -460,7 +467,7 @@ function App(): React.JSX.Element {
         console.error("Failed to load session:", err);
       }
     },
-    [store, activePromptType],
+    [store, activePromptType, audioPlayer],
   );
 
   const handlePlaySession = useCallback(
