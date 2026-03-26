@@ -28,6 +28,7 @@ export interface Summary {
 interface SummaryPanelProps {
   readonly summaries: readonly Summary[];
   readonly isGenerating: boolean;
+  readonly streamingContent: string;
   readonly generateError: string | null;
   readonly currentSessionId: number | null;
   readonly hasSegments: boolean;
@@ -65,6 +66,7 @@ function formatTime(dateStr: string): string {
 export function SummaryPanel({
   summaries,
   isGenerating,
+  streamingContent,
   generateError,
   currentSessionId,
   hasSegments,
@@ -484,6 +486,9 @@ export function SummaryPanel({
             </div>
           )}
 
+        {/* Streaming card (shown while generating) */}
+        {isGenerating && <StreamingCard content={streamingContent} />}
+
         {/* Summaries list (newest first) */}
         {reversedSummaries.map((summary) => (
           <SummaryCard
@@ -768,6 +773,19 @@ export function SummaryPanel({
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        .streaming-cursor {
+          display: inline-block;
+          width: 6px;
+          height: 14px;
+          background-color: var(--accent);
+          margin-left: 2px;
+          vertical-align: text-bottom;
+          animation: blink 1s step-end infinite;
+        }
         .summary-md h1, .summary-md h2, .summary-md h3, .summary-md h4 {
           margin: 8px 0 4px;
           font-weight: 600;
@@ -812,6 +830,77 @@ export function SummaryPanel({
         }
         .summary-md th { background: var(--bg-tertiary); font-weight: 600; }
       `}</style>
+    </div>
+  );
+}
+
+function StreamingCard({
+  content,
+}: {
+  readonly content: string;
+}): React.ReactElement {
+  const html = useMemo(
+    () => (content ? renderMarkdown(content) : ""),
+    [content],
+  );
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom as content grows
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [content]);
+
+  return (
+    <div
+      style={{
+        marginBottom: "16px",
+        padding: "12px",
+        backgroundColor: "var(--bg-secondary)",
+        borderRadius: "8px",
+        border: "1px solid var(--accent)",
+        position: "relative",
+      }}
+    >
+      {content ? (
+        <div ref={scrollRef} style={{ maxHeight: "400px", overflowY: "auto" }}>
+          <div
+            className="summary-md"
+            style={{
+              fontSize: "13px",
+              color: "var(--text-primary)",
+              lineHeight: "20px",
+              wordBreak: "break-word",
+            }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+          <span className="streaming-cursor" />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            color: "var(--text-muted)",
+            fontSize: "12px",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: "12px",
+              height: "12px",
+              border: "2px solid rgba(100,100,100,0.3)",
+              borderTopColor: "var(--accent)",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          Waiting for response...
+        </div>
+      )}
     </div>
   );
 }

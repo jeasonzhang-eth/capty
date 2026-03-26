@@ -646,7 +646,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
   });
 
-  // LLM Summarization
+  // LLM Summarization (streaming SSE)
   ipcMain.handle(
     "llm:summarize",
     async (
@@ -655,6 +655,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       providerId: string,
       promptType: string,
     ) => {
+      const win = getMainWindow();
       const config = readConfig(configDir);
       if (!providerId) {
         throw new Error("No LLM provider selected");
@@ -684,9 +685,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       const transcriptText = segments.map((s: any) => s.text).join("\n");
 
-      // Call OpenAI-compatible API
+      // Call OpenAI-compatible API with streaming
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      const timeout = setTimeout(() => controller.abort(), 120000);
 
       try {
         const baseUrl = provider.baseUrl.replace(/\/+$/, "");
@@ -708,6 +709,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
                 content: transcriptText,
               },
             ],
+            stream: true,
           }),
           signal: controller.signal,
         });
@@ -719,25 +721,65 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           throw new Error(`LLM API error (${resp.status}): ${body}`);
         }
 
-        const data = (await resp.json()) as {
-          model?: string;
-          choices: { message: { content: string } }[];
-        };
-        const content = data.choices?.[0]?.message?.content ?? "";
+        // Parse SSE stream
+        const reader = resp.body!.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        let actualModel = provider.model;
+        let buffer = "";
 
-        if (!content) {
-          throw new Error("LLM returned empty response");
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE lines
+          const lines = buffer.split("\n");
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data) as {
+                model?: string;
+                choices?: { delta?: { content?: string } }[];
+              };
+              if (parsed.model) {
+                actualModel = parsed.model;
+              }
+              const delta = parsed.choices?.[0]?.delta?.content ?? "";
+              if (delta) {
+                fullContent += delta;
+                win?.webContents.send("llm:summary-chunk", {
+                  content: delta,
+                  done: false,
+                });
+              }
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
         }
 
-        // Use actual model from API response (important for routing
-        // providers like OpenRouter where the response model differs
-        // from the requested model)
-        const actualModel = data.model ?? provider.model;
+        // Signal streaming complete
+        win?.webContents.send("llm:summary-chunk", {
+          content: "",
+          done: true,
+        });
+
+        if (!fullContent) {
+          throw new Error("LLM returned empty response");
+        }
 
         // Save to database
         const summaryId = addSummary(db, {
           sessionId,
-          content,
+          content: fullContent,
           modelName: actualModel,
           providerId: provider.id,
           promptType: promptType || "summarize",
@@ -747,14 +789,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         return {
           id: summaryId,
           session_id: sessionId,
-          content,
+          content: fullContent,
           model_name: actualModel,
           provider_id: provider.id,
           prompt_type: promptType || "summarize",
           created_at: new Date().toISOString(),
         };
       } catch (err) {
-        clearTimeout(timeout);
+        // Signal error to renderer so streaming card can clean up
+        win?.webContents.send("llm:summary-chunk", {
+          content: "",
+          done: true,
+        });
         throw err;
       }
     },

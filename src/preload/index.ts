@@ -119,6 +119,14 @@ const api = {
     }>,
   summarize: (sessionId: number, providerId: string, promptType: string) =>
     ipcRenderer.invoke("llm:summarize", sessionId, providerId, promptType),
+  onSummaryChunk: (
+    callback: (data: { content: string; done: boolean }) => void,
+  ) => {
+    ipcRenderer.on("llm:summary-chunk", (_event, data) => callback(data));
+    return () => {
+      ipcRenderer.removeAllListeners("llm:summary-chunk");
+    };
+  },
   listSummaries: (sessionId: number, promptType?: string) =>
     ipcRenderer.invoke("summary:list", sessionId, promptType),
   deleteSummary: (summaryId: number) =>

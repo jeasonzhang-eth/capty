@@ -105,6 +105,7 @@ function App(): React.JSX.Element {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState("");
 
   // Prompt type state
   const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
@@ -773,6 +774,7 @@ function App(): React.JSX.Element {
   const handleSummarize = useCallback(
     async (providerId: string, promptType: string) => {
       if (!store.currentSessionId || isGeneratingSummary) return;
+      setStreamingContent("");
       setIsGeneratingSummary(true);
       setGenerateError(null);
       try {
@@ -782,6 +784,7 @@ function App(): React.JSX.Element {
           promptType,
         );
         setSummaries((prev) => [...prev, result as Summary]);
+        setStreamingContent("");
         // Remember last used provider
         setSelectedLlmProviderId(providerId);
         const config = await window.capty.getConfig();
@@ -793,6 +796,7 @@ function App(): React.JSX.Element {
         const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
         setGenerateError(msg);
+        setStreamingContent("");
       } finally {
         setIsGeneratingSummary(false);
       }
@@ -875,6 +879,15 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Listen for LLM streaming chunks
+  useEffect(() => {
+    const unsub = window.capty.onSummaryChunk(({ content, done }) => {
+      if (done) return;
+      setStreamingContent((prev) => prev + content);
+    });
+    return unsub;
+  }, []);
+
   // When a selected device is unplugged, clear the persisted config
   useEffect(() => {
     audioCapture.setOnDeviceRemoved(() => {
@@ -950,6 +963,7 @@ function App(): React.JSX.Element {
         <SummaryPanel
           summaries={summaries}
           isGenerating={isGeneratingSummary}
+          streamingContent={streamingContent}
           generateError={generateError}
           currentSessionId={store.currentSessionId}
           hasSegments={store.segments.length > 0}

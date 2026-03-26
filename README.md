@@ -283,6 +283,17 @@ pytest
 
 ## 更新日志
 
+### 2026-03-26 (3)
+
+- **LLM 流式输出** — SummaryPanel 的 LLM 生成从阻塞式改为流式输出
+  - 后端 `llm:summarize` handler 使用 `stream: true` 调用 OpenAI 兼容 API
+  - 实时解析 SSE（Server-Sent Events），逐块通过 `webContents.send` 推送到渲染进程
+  - 前端通过 `onSummaryChunk` 监听器累积内容，实时渲染 Markdown
+  - 生成过程中显示流式卡片（带闪烁光标），内容到达前显示 spinner
+  - 生成完成后流式卡片消失，替换为正常 SummaryCard（已入库）
+  - 超时时间从 60 秒延长到 120 秒以适应流式传输
+  - 网络错误时正确清理流式状态
+
 ### 2026-03-26
 
 - **MLX GPU 加速推理** — 将 PyTorch CPU 推理替换为 MLX GPU 推理，利用 Apple Silicon GPU 大幅加速
