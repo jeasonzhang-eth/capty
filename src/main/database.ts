@@ -84,7 +84,23 @@ export function createDatabase(dbPath: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   initTables(db);
+  fixOrphanedRecordings(db);
   return db;
+}
+
+/**
+ * Fix sessions stuck in 'recording' status due to abnormal exit
+ * (e.g. crash, dev server restart, force quit).
+ */
+function fixOrphanedRecordings(db: Database.Database): void {
+  const result = db
+    .prepare(
+      "UPDATE sessions SET status = 'completed', ended_at = COALESCE(ended_at, datetime('now')) WHERE status = 'recording'",
+    )
+    .run();
+  if (result.changes > 0) {
+    console.log(`[db] Fixed ${result.changes} orphaned recording session(s)`);
+  }
 }
 
 export function createSession(
