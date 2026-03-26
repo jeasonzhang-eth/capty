@@ -317,7 +317,7 @@ pytest
 
 - **External ASR 模型列表自动获取** — Model 字段从纯文本输入升级为下拉选择 + 手动输入混合模式
   - 新增 "Fetch Models" 按钮，点击后自动从 ASR 服务器获取可用模型列表
-  - 兼容两种 API 格式：Capty sidecar（`GET /models`，数组）和 OpenAI 兼容（`GET /v1/models`，`{data: [...]}`）
+  - 兼容两种 API 格式：Capty sidecar（`GET /models`，数组，自动过滤 `downloaded: false`）和 OpenAI 兼容（`GET /v1/models`，`{data: [...]}`）
   - 获取成功后 Model 字段变为下拉选择框，已有值自动选中
   - 下拉列表末尾提供 "Custom..." 选项，选择后切回手动输入模式（可点击 "Back to model list" 返回）
   - 获取失败时静默降级，保持原有文本输入框

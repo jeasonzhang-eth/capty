@@ -551,9 +551,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           if (!resp.ok) continue;
           const data = await resp.json();
 
-          // Sidecar format: array [{id, name, ...}, ...]
+          // Sidecar format: array [{id, name, downloaded?, ...}, ...]
           if (Array.isArray(data)) {
-            return data.map((m: { id: string; name?: string }) => ({
+            const available = data.filter(
+              (m: { downloaded?: boolean }) => m.downloaded !== false,
+            );
+            return available.map((m: { id: string; name?: string }) => ({
               id: m.id,
               name: m.name || m.id,
             }));
