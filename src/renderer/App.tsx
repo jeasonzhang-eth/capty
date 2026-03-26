@@ -497,6 +497,11 @@ function App(): React.JSX.Element {
     async (sessionId: number) => {
       if (regeneratingSessionId !== null || store.isRecording) return;
 
+      // Switch to the session being regenerated
+      if (store.currentSessionId !== sessionId) {
+        await handleSelectSession(sessionId);
+      }
+
       setRegeneratingSessionId(sessionId);
       setRegenerationProgress(0);
       cancelRegenerationRef.current = false;
@@ -609,7 +614,7 @@ function App(): React.JSX.Element {
         setRegenerationProgress(0);
       }
     },
-    [regeneratingSessionId, store],
+    [regeneratingSessionId, store, handleSelectSession],
   );
 
   const handleCancelRegeneration = useCallback(() => {
