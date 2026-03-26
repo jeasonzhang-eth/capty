@@ -1,148 +1,144 @@
-import { useState, useCallback, useRef } from "react";
-
-interface TranscriptionState {
-  readonly isConnected: boolean;
-  readonly isReady: boolean;
-  readonly partialText: string;
-}
+import { useCallback, useRef, useState } from "react";
 
 interface TranscriptionCallbacks {
   readonly onFinal?: (text: string, segmentId: number) => void;
   readonly onError?: (message: string) => void;
 }
 
+interface AsrProvider {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+}
+
+/**
+ * Unified HTTP-based transcription hook.
+ *
+ * Buffers incoming PCM audio. When `sendSegmentEnd` is called (by VAD),
+ * merges the buffer and POSTs it to the configured ASR provider via IPC.
+ * Works with both the local sidecar and any external OpenAI-compatible API.
+ */
 export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
-  const [state, setState] = useState<TranscriptionState>({
+  const [state, setState] = useState({
     isConnected: false,
     isReady: false,
-    partialText: "",
   });
 
-  const wsRef = useRef<WebSocket | null>(null);
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
 
-  const connect = useCallback(
-    async (sidecarUrl: string, model: string, language: string = "auto") => {
-      const wsUrl = sidecarUrl.replace(/^http/, "ws") + "/ws/transcribe";
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+  const providerRef = useRef<AsrProvider | null>(null);
+  const bufferRef = useRef<Int16Array[]>([]);
+  const segmentIdRef = useRef(0);
+  const pendingRef = useRef(0);
+  const readyRef = useRef(false);
 
-      return new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error("Connection timeout")),
-          10000,
-        );
+  const setProvider = useCallback((provider: AsrProvider) => {
+    providerRef.current = provider;
+  }, []);
 
-        ws.onopen = () => {
-          setState((prev) => ({ ...prev, isConnected: true }));
-          ws.send(JSON.stringify({ type: "start", model, language }));
-        };
-
-        ws.onmessage = (event) => {
-          const msg = JSON.parse(event.data as string) as {
-            type: string;
-            text?: string;
-            segment_id?: number;
-            message?: string;
-          };
-
-          if (msg.type === "ready") {
-            clearTimeout(timeout);
-            setState((prev) => ({ ...prev, isReady: true }));
-            resolve();
-          } else if (msg.type === "partial") {
-            setState((prev) => ({
-              ...prev,
-              partialText: prev.partialText + (msg.text ?? ""),
-            }));
-          } else if (msg.type === "final") {
-            setState((prev) => ({ ...prev, partialText: "" }));
-            callbacksRef.current.onFinal?.(msg.text ?? "", msg.segment_id ?? 0);
-          } else if (msg.type === "error") {
-            callbacksRef.current.onError?.(msg.message ?? "Unknown error");
-          }
-        };
-
-        ws.onclose = () => {
-          setState({ isConnected: false, isReady: false, partialText: "" });
-        };
-
-        ws.onerror = () => {
-          clearTimeout(timeout);
-          reject(new Error("WebSocket connection failed"));
-        };
-      });
-    },
-    [],
-  );
+  const connect = useCallback(async () => {
+    readyRef.current = true;
+    setState({ isConnected: true, isReady: true });
+    bufferRef.current = [];
+    segmentIdRef.current = 0;
+    pendingRef.current = 0;
+  }, []);
 
   const sendAudio = useCallback((pcmBuffer: ArrayBuffer) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(pcmBuffer);
-    }
+    if (!readyRef.current) return;
+    bufferRef.current.push(new Int16Array(pcmBuffer));
   }, []);
 
   const sendSegmentEnd = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "segment_end" }));
+    const provider = providerRef.current;
+    if (!provider) return;
+
+    const chunks = bufferRef.current;
+    bufferRef.current = [];
+
+    if (chunks.length === 0) return;
+
+    // Merge buffered chunks into a single PCM buffer
+    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+    const merged = new Int16Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
     }
+
+    const segId = ++segmentIdRef.current;
+    pendingRef.current++;
+
+    // Fire-and-forget HTTP POST via IPC
+    window.capty
+      .asrTranscribe(merged.buffer as ArrayBuffer, {
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+      })
+      .then((result) => {
+        pendingRef.current--;
+        callbacksRef.current.onFinal?.(result.text, segId);
+      })
+      .catch((err: unknown) => {
+        pendingRef.current--;
+        const msg =
+          err instanceof Error ? err.message : "Transcription failed";
+        callbacksRef.current.onError?.(msg);
+      });
   }, []);
 
   const disconnect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "stop" }));
-      wsRef.current.close();
-    }
-    wsRef.current = null;
-    setState({ isConnected: false, isReady: false, partialText: "" });
+    readyRef.current = false;
+    bufferRef.current = [];
+    setState({ isConnected: false, isReady: false });
   }, []);
 
-  /**
-   * Gracefully disconnect: send segment_end to flush remaining audio,
-   * wait for the final response, then close the WebSocket.
-   * Returns a promise that resolves when the last final is received
-   * or times out after a few seconds.
-   */
+  /** Flush remaining audio buffer, wait for result, then disconnect. */
   const gracefulDisconnect = useCallback((): Promise<void> => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      wsRef.current = null;
-      setState({ isConnected: false, isReady: false, partialText: "" });
+    const provider = providerRef.current;
+    const chunks = bufferRef.current;
+    bufferRef.current = [];
+
+    if (!provider || chunks.length === 0) {
+      readyRef.current = false;
+      setState({ isConnected: false, isReady: false });
       return Promise.resolve();
     }
 
-    return new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        // Timeout — force close
-        ws.send(JSON.stringify({ type: "stop" }));
-        ws.close();
-        wsRef.current = null;
-        setState({ isConnected: false, isReady: false, partialText: "" });
-        resolve();
-      }, 10000);
+    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+    const merged = new Int16Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
 
-      // Replace onmessage to intercept the final response
-      const originalOnMessage = ws.onmessage;
-      ws.onmessage = (event) => {
-        // Delegate to original handler first (updates state, calls callbacks)
-        if (originalOnMessage) {
-          originalOnMessage.call(ws, event);
-        }
-        const msg = JSON.parse(event.data as string) as { type: string };
-        if (msg.type === "final" || msg.type === "error") {
-          clearTimeout(timeout);
-          ws.send(JSON.stringify({ type: "stop" }));
-          ws.close();
-          wsRef.current = null;
-          setState({ isConnected: false, isReady: false, partialText: "" });
-          resolve();
-        }
-      };
+    const segId = ++segmentIdRef.current;
+    pendingRef.current++;
 
-      // Send segment_end to flush remaining audio
-      ws.send(JSON.stringify({ type: "segment_end" }));
-    });
+    return window.capty
+      .asrTranscribe(merged.buffer as ArrayBuffer, {
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+      })
+      .then((result) => {
+        pendingRef.current--;
+        callbacksRef.current.onFinal?.(result.text, segId);
+      })
+      .catch((err: unknown) => {
+        pendingRef.current--;
+        const msg =
+          err instanceof Error ? err.message : "Transcription failed";
+        callbacksRef.current.onError?.(msg);
+      })
+      .finally(() => {
+        readyRef.current = false;
+        setState({ isConnected: false, isReady: false });
+      });
   }, []);
 
   return {
@@ -152,5 +148,6 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
     gracefulDisconnect,
     sendAudio,
     sendSegmentEnd,
+    setProvider,
   };
 }

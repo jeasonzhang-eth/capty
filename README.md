@@ -22,7 +22,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
-- **双 ASR 后端** — 支持 Built-in Sidecar（WebSocket，本地 MLX 推理）和 External ASR Server（OpenAI 兼容 HTTP API）两种转录后端，可在 Settings > Speech Backend 切换
+- **双 ASR 后端** — 支持 Built-in Sidecar（本地 MLX 推理）和 External ASR Server 两种转录后端，均通过 OpenAI 兼容 HTTP API（`POST /v1/audio/transcriptions`）通信，可在 Settings > Speech Backend 切换
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -32,7 +32,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) 或 外部 ASR 服务器 (OpenAI 兼容 API) |
+| ML 推理 | Python sidecar (FastAPI + mlx-qwen3-asr + mlx-whisper, Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 架构
@@ -41,25 +41,24 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 ┌──────────────────────────────────────────────────────────────┐
 │  Electron Renderer (React)                                   │
 │                                                              │
-│  useAudioCapture ──→ useVAD ──┬→ useTranscription (WS)      │
-│  (麦克风 PCM 采集)   (语音端点)  └→ useExternalTranscription   │
+│  useAudioCapture ──→ useVAD ──→ useTranscription (HTTP)     │
+│  (麦克风 PCM 采集)   (语音端点)    (统一 HTTP 转录 hook)       │
 │       │                              │    ▲                  │
-│       │     16kHz PCM 二进制帧         │    │ 转写结果          │
+│       │     PCM buffer → WAV POST     │    │ 转写结果          │
 │       └──────────────────────────────▼    │                  │
 ├──────────── IPC (contextBridge) ──────────────────────────────┤
 │  Electron Main Process                                       │
 │                                                              │
 │  ipc-handlers.ts ──→ 模型管理、配置、数据库、文件 I/O          │
 │  ├── sidecar:health-check ──→ 检测 sidecar 是否在线           │
-│  ├── asr:transcribe ──→ HTTP POST 外部 ASR API               │
-│  └── asr:test ──→ 外部 ASR 连通性测试                         │
+│  ├── asr:transcribe ──→ HTTP POST ASR API（sidecar 或外部）   │
+│  └── asr:test ──→ ASR 连通性测试                              │
 ├──────────────────────────────────────────────────────────────┤
 │  路径 A: Built-in Sidecar（独立进程，用户手动启动）             │
 │                                                              │
 │  Python Sidecar (FastAPI + uvicorn)                          │
 │  HTTP: /health, /models, /models/switch                      │
 │  REST: POST /v1/audio/transcriptions (OpenAI 兼容)           │
-│  WS:   /ws/transcribe                                        │
 │  ModelRunner → qwen-asr / whisper (MLX GPU 加速)             │
 ├──────────────────────────────────────────────────────────────┤
 │  路径 B: External ASR Server（OpenAI 兼容 HTTP API）          │
@@ -71,29 +70,22 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 
 ### 通信流程
 
-**录音转写 — Built-in 模式**（WebSocket，实时）：
+**录音转写**（统一 HTTP，两种后端共用同一流程）：
 
 1. `useAudioCapture` 通过 Web Audio API 采集麦克风音频，输出 16kHz 16bit PCM
 2. PCM 数据同时送入 `useVAD`（语音活动检测）和 `useTranscription`
-3. `useTranscription` 维护一个 WebSocket 连接到 Sidecar（`ws://localhost:{port}/ws/transcribe`）
-4. 录音开始时发送 `{"type": "start", "model": "xxx"}` 通知 Sidecar 加载模型
-5. 音频 PCM 数据以二进制帧持续发送到 Sidecar
-6. VAD 检测到语音停顿时，发送 `{"type": "segment_end"}`，Sidecar 对累积的音频执行转写
-7. Sidecar 返回 `{"type": "final", "text": "...", "segment_id": N}`，前端追加到字幕列表
+3. `useTranscription` 在内存中缓冲 PCM 数据
+4. VAD 检测到语音停顿时，调用 `sendSegmentEnd()` → 合并 buffer → 通过 IPC 发送到主进程
+5. 主进程 `pcmToWav()` 转换为 WAV → multipart POST 到 `{baseUrl}/v1/audio/transcriptions`
+6. API 返回 `{text}` → IPC 回传 → 前端追加到字幕列表
 
-**录音转写 — External 模式**（HTTP，VAD 触发）：
-
-1. `useAudioCapture` 采集音频 → `useVAD` 检测停顿 → `useExternalTranscription`
-2. `sendAudio()` 将 PCM 数据推入内存 buffer
-3. VAD 触发 `sendSegmentEnd()` → 合并 buffer → IPC 发送到主进程
-4. 主进程 `pcmToWav()` 转换为 WAV → multipart POST 到 `{baseUrl}/v1/audio/transcriptions`
-5. API 返回 `{text}` → IPC 回传 → 前端追加到字幕列表
+Built-in 模式的 `baseUrl` 指向本地 Sidecar（如 `http://localhost:8765`），External 模式指向外部 ASR 服务器。两者使用完全相同的 OpenAI 兼容 HTTP 协议。
 
 **模型管理**（Electron IPC）：
 
 1. 前端通过 `window.capty.listModels()` → IPC → 主进程读取 `user-models.json`
 2. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，通过 IPC 事件推送进度
-3. 切换模型：前端调用 `window.capty` IPC 更新 `config.json`，下次录音时 `useTranscription` 会在 WebSocket `start` 消息中携带新的 model ID，Sidecar 自动加载对应模型
+3. 切换模型：前端调用 `window.capty` IPC 更新 `config.json`，下次录音时 HTTP 请求的 `model` 字段携带新的 model ID，Sidecar 自动加载对应模型
 
 ## 项目结构
 
@@ -123,8 +115,7 @@ src/
 │   ├── hooks/           # 自定义 Hooks
 │   │   ├── useAudioCapture.ts
 │   │   ├── useVAD.ts
-│   │   ├── useTranscription.ts         # WebSocket (sidecar)
-│   │   ├── useExternalTranscription.ts  # HTTP (外部 ASR)
+│   │   │   ├── useTranscription.ts      # 统一 HTTP 转录 (sidecar + 外部 ASR)
 │   │   ├── useSession.ts
 │   │   └── useAudioPlayer.ts
 │   ├── utils/
@@ -132,7 +123,7 @@ src/
 │   └── stores/
 │       └── appStore.ts  # Zustand 状态管理
 └── sidecar/             # Python ML 后端
-    ├── server.py        # FastAPI + WebSocket + REST API
+    ├── server.py        # FastAPI REST API (OpenAI 兼容)
     ├── model_registry.py
     └── model_runner.py
 ```
@@ -296,13 +287,6 @@ curl -X POST http://localhost:8765/v1/audio/transcriptions \
 # 返回 {"text": "..."}
 ```
 
-WebSocket 转写端点为 `ws://localhost:8765/ws/transcribe`，协议流程：
-
-1. 发送 `{"type": "start", "model": "qwen3-asr-0.6b"}` 开始会话
-2. 发送二进制帧（16kHz 16bit PCM 音频数据）
-3. 发送 `{"type": "segment_end"}` 触发转写，服务端返回 `{"type": "final", "text": "..."}`
-4. 发送 `{"type": "stop"}` 结束会话
-
 #### 运行测试
 
 ```bash
@@ -312,6 +296,15 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-26 (21)
+
+- **移除 WebSocket，统一为 HTTP 转录** — 将 Built-in 和 External 两种转录后端合并为单一 HTTP 代码路径
+  - 删除 `useExternalTranscription.ts`，重写 `useTranscription.ts` 为纯 HTTP 模式：内存缓冲 PCM → VAD 触发时合并 → IPC POST 到 ASR API
+  - 移除 sidecar 的 WebSocket 端点（`/ws/transcribe`，~250 行），仅保留 REST API
+  - 移除 `websockets` Python 依赖
+  - App.tsx 从双 hook（`useTranscription` + `useExternalTranscription`）简化为单一 `useTranscription`，通过 `setProvider()` 切换后端
+  - 解决 WebSocket 长连接导致的 MLX GPU 内存累积问题（~8GB），HTTP 每请求独立，推理完即释放
 
 ### 2026-03-26 (20)
 

@@ -15,7 +15,6 @@ import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
 import { useTranscription } from "./hooks/useTranscription";
-import { useExternalTranscription } from "./hooks/useExternalTranscription";
 import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
@@ -67,20 +66,10 @@ function App(): React.JSX.Element {
     console.error("Transcription error:", msg);
   }, []);
 
-  const transcriptionBuiltin = useTranscription({
+  const transcription = useTranscription({
     onFinal: onFinalCallback,
     onError: onErrorCallback,
   });
-
-  const transcriptionExternal = useExternalTranscription({
-    onFinal: onFinalCallback,
-    onError: onErrorCallback,
-  });
-
-  const transcription =
-    store.asrBackend === "external"
-      ? transcriptionExternal
-      : transcriptionBuiltin;
 
   const vad = useVAD({
     onSpeechStart: useCallback(() => {
@@ -355,31 +344,24 @@ function App(): React.JSX.Element {
       // Refresh history to show the new session
       store.loadSessions();
 
-      // Connect to transcription backend in background (don't block recording)
+      // Configure transcription provider and connect
       if (store.asrBackend === "external" && store.asrProvider) {
-        transcriptionExternal.setProvider({
+        transcription.setProvider({
           baseUrl: store.asrProvider.baseUrl,
           apiKey: store.asrProvider.apiKey,
           model: store.asrProvider.model,
         });
-        transcriptionExternal
-          .connect()
-          .catch((err: unknown) =>
-            console.warn("External ASR connect failed:", err),
-          );
       } else {
-        window.capty
-          .getSidecarUrl()
-          .then((sidecarUrl) =>
-            transcriptionBuiltin.connect(sidecarUrl, store.selectedModelId),
-          )
-          .catch((err: unknown) =>
-            console.warn(
-              "Sidecar not available, recording without transcription:",
-              err,
-            ),
-          );
+        const sidecarUrl = await window.capty.getSidecarUrl();
+        transcription.setProvider({
+          baseUrl: sidecarUrl,
+          apiKey: "",
+          model: store.selectedModelId,
+        });
       }
+      transcription
+        .connect()
+        .catch((err: unknown) => console.warn("ASR connect failed:", err));
     } catch (err) {
       console.error("Failed to start recording:", err);
       store.setRecording(false);
@@ -388,16 +370,7 @@ function App(): React.JSX.Element {
         timerRef.current = null;
       }
     }
-  }, [
-    session,
-    store,
-    transcription,
-    transcriptionBuiltin,
-    transcriptionExternal,
-    audioCapture,
-    vad,
-    regeneratingSessionId,
-  ]);
+  }, [session, store, transcription, audioCapture, vad, regeneratingSessionId]);
 
   const handleStop = useCallback(async () => {
     // Stop timer
@@ -960,10 +933,7 @@ function App(): React.JSX.Element {
     return () => audioCapture.setOnDeviceRemoved(null);
   }, [audioCapture]);
 
-  // Sync transcription partial text to store
-  useEffect(() => {
-    store.setPartialText(transcriptionBuiltin.partialText);
-  }, [transcriptionBuiltin.partialText]); // eslint-disable-line react-hooks/exhaustive-deps
+  // No streaming partial text with HTTP-based transcription
 
   // Show nothing while checking setup status
   if (needsSetup === null) {

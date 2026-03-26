@@ -5,8 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
-    "websockets>=14.0",
-    "mlx-qwen3-asr>=0.1.0",
+"mlx-qwen3-asr>=0.1.0",
     "mlx-whisper>=0.4.0",
     "numpy>=1.24",
 ]
