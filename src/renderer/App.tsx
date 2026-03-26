@@ -515,13 +515,9 @@ function App(): React.JSX.Element {
           return;
         }
 
-        // 2. Delete old segments
+        // 2. Delete old segments and clear in-memory display
         await window.capty.deleteSegments(sessionId);
-
-        // 3. Clear in-memory segments if this session is currently viewed
-        if (store.currentSessionId === sessionId) {
-          store.clearSegments();
-        }
+        store.clearSegments();
 
         // PCM data (skip 44-byte WAV header)
         const pcmData = new Uint8Array(audioBuffer, 44);

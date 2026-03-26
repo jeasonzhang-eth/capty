@@ -297,6 +297,7 @@ pytest
 ### 2026-03-26 (25)
 
 - **重新生成字幕自动切换会话** — 右键触发 Regenerate Subtitles 时自动切换到对应会话，实时看到新字幕逐条生成
+- **修复重新生成时旧字幕残留** — `handleSelectSession` 加载旧字幕后，`clearSegments` 因闭包捕获了切换前的 `currentSessionId` 而跳过清除；改为无条件清除
 
 ### 2026-03-26 (24)
 
