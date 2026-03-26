@@ -587,7 +587,8 @@ function App(): React.JSX.Element {
                 audioPath: "",
                 isFinal: true,
               });
-              if (store.currentSessionId === sessionId) {
+              // Use getState() to avoid stale closure after session switch
+              if (useAppStore.getState().currentSessionId === sessionId) {
                 store.addSegment({
                   id: Date.now(),
                   start_time: startTime,
