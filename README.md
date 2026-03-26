@@ -132,7 +132,7 @@ src/
 │   └── stores/
 │       └── appStore.ts  # Zustand 状态管理
 └── sidecar/             # Python ML 后端
-    ├── server.py        # FastAPI + WebSocket
+    ├── server.py        # FastAPI + WebSocket + REST API
     ├── model_registry.py
     └── model_runner.py
 ```
@@ -327,6 +327,9 @@ pytest
   - config.json 新增 3 个字段：`asrBackend`、`sidecarUrl`、`asrProvider`
   - 所有外部 HTTPS 请求（ASR API、LLM API）改用 Electron `net.fetch`，走 Chromium 网络栈，修复 Node.js undici 的 TLS 兼容性问题
   - **Sidecar 新增 OpenAI 兼容 REST API** — `POST /v1/audio/transcriptions`，接受 multipart WAV + model 参数，返回 `{"text": "..."}`，sidecar 同时支持 WebSocket 和 HTTP 两种转录协议
+  - ASR 请求使用标准 `FormData` + `Blob` API 构建 multipart body，修复手工拼接 boundary 导致的 400 解析错误
+  - 外部 ASR Base URL 自动剥离末尾 `/v1`，防止拼接出 `/v1/v1/audio/transcriptions` 404 错误
+  - 新增 `npm run sidecar` 便捷命令，一键启动 sidecar 进程（支持 `CAPTY_MODELS_DIR` 环境变量覆盖模型目录）
 
 ### 2026-03-26 (8)
 
