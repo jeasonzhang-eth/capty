@@ -26,7 +26,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - **智能重试**：每个文件最多 3 次重试，指数退避（2s/4s/6s），30 秒无数据超时保护
   - **统一 UI**：ModelCard 实时显示下载进度 + 暂停/取消按钮，失败时显示错误信息 + 重试按钮
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
-- **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），直接复制原始文件并通过 sidecar 转录（无需 ffmpeg）
+- **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
@@ -44,7 +44,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
 | ML 推理 | Python sidecar (FastAPI + mlx-audio[stt,tts], Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
-| 音频处理 | Web Audio API + VAD (voice activity detection) |
+| 音频处理 | Web Audio API + VAD (voice activity detection) + ffmpeg (音频格式转换) |
 
 ## 架构
 
@@ -307,10 +307,17 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (44)
+
+- **恢复 ffmpeg 音频转换** — 上传音频时通过 ffmpeg 统一转为 16kHz mono WAV（`-ar 16000 -ac 1 -sample_fmt s16`），修复 commit `8ad2240` 删除 ffmpeg 后导致的一系列问题：
+  - **修复重新生成字幕返回空文本** — 原始格式文件（mp3/m4a 等）被按 16kHz WAV 假设切片，导致 120+ 个无效分段（6:56 录音本应 ~28 段），ASR 返回空结果
+  - **修复上传音频无时长** — 统一 WAV 格式后直接从文件大小计算时长，无需依赖 sidecar decode
+  - **简化重新生成流程** — 直接读取 WAV 文件（`readAudioFile`），移除对 sidecar decode 端点的依赖
+  - **简化音频文件查找** — 所有音频统一为 `.wav` 格式，移除多格式扩展名遍历
+
 ### 2026-03-28 (43)
 
-- **音频导入与转录解耦** — 上传音频不再自动触发转录，仅完成文件重命名、数据库入库和时长检测（WAV 直接读 header，其他格式通过 sidecar decode 获取）；转录作为独立操作（右键"重新生成字幕"）
-- **修复非 WAV 格式重新生成字幕** — `handleRegenerateSubtitles` 现在检测文件是否为 WAV（RIFF header），非 WAV 格式（mp3/m4a/flac 等）先通过 sidecar decode 转为 WAV 再分段转录
+- **音频导入与转录解耦** — 上传音频不再自动触发转录，仅完成文件重命名、数据库入库和时长检测；转录作为独立操作（右键"重新生成字幕"）
 
 ### 2026-03-28 (42)
 

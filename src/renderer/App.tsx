@@ -714,9 +714,9 @@ function App(): React.JSX.Element {
       cancelRegenerationRef.current = false;
 
       try {
-        // 1. Read audio file
-        const audioBuffer = await window.capty.readAudioFile(sessionId);
-        if (!audioBuffer) {
+        // 1. Get audio file path
+        const audioFilePath = await window.capty.getAudioFilePath(sessionId);
+        if (!audioFilePath) {
           console.error("No audio file found for session", sessionId);
           setRegeneratingSessionId(null);
           return;
@@ -726,38 +726,13 @@ function App(): React.JSX.Element {
         await window.capty.deleteSegments(sessionId);
         store.clearSegments();
 
-        // Check if file is WAV (starts with "RIFF") or needs decoding
-        const header = new Uint8Array(audioBuffer, 0, 4);
-        const isWav =
-          header[0] === 0x52 && // R
-          header[1] === 0x49 && // I
-          header[2] === 0x46 && // F
-          header[3] === 0x46; // F
-
-        let wavBuffer: ArrayBuffer;
-        if (isWav) {
-          wavBuffer = audioBuffer;
-        } else {
-          // Non-WAV file (mp3/m4a/flac etc.) — decode via sidecar
-          const activeProvider = store.asrProviders.find(
-            (p) => p.id === store.selectedAsrProviderId,
-          );
-          if (!activeProvider?.isSidecar) {
-            console.error("Non-WAV audio requires sidecar for decoding");
-            setRegeneratingSessionId(null);
-            return;
-          }
-          // Get the audio file path from session directory
-          const audioFilePath = await window.capty.getAudioFilePath(sessionId);
-          if (!audioFilePath) {
-            console.error("Cannot find audio file path for decoding");
-            setRegeneratingSessionId(null);
-            return;
-          }
-          wavBuffer = await window.capty.decodeAudioFile(
-            audioFilePath,
-            activeProvider.baseUrl,
-          );
+        // 3. Read WAV file (all audio is 16kHz mono WAV)
+        setRegenerationProgress(2);
+        const wavBuffer = await window.capty.readAudioFile(sessionId);
+        if (!wavBuffer) {
+          console.error("Could not read audio file for session", sessionId);
+          setRegeneratingSessionId(null);
+          return;
         }
 
         // PCM data (skip 44-byte WAV header)
@@ -871,20 +846,7 @@ function App(): React.JSX.Element {
     const result = await window.capty.importAudio();
     if (!result) return; // user cancelled
 
-    // Detect audio duration via IPC (main process reads file)
-    try {
-      const durationSeconds = await window.capty.getAudioDuration(
-        result.audioPath,
-      );
-      if (durationSeconds > 0 && isFinite(durationSeconds)) {
-        await window.capty.updateSession(result.sessionId, {
-          durationSeconds,
-        });
-      }
-    } catch (err) {
-      console.warn("Could not detect audio duration:", err);
-    }
-
+    // Duration is already calculated by audio:import (ffmpeg converts to WAV)
     await store.loadSessions();
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);

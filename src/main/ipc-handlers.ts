@@ -1,4 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "node:path";
 import { join } from "path";
@@ -17,6 +18,38 @@ function assertPathWithin(basePath: string, targetPath: string): void {
     throw new Error(`Path traversal detected: ${targetPath}`);
   }
 }
+
+/** Convert any audio file to 16kHz mono 16-bit WAV via ffmpeg. */
+function convertToWav(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-i",
+      inputPath,
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      "-sample_fmt",
+      "s16",
+      "-f",
+      "wav",
+      "-y",
+      outputPath,
+    ]);
+    ffmpeg.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited with code ${code}`));
+    });
+    ffmpeg.on("error", (err) => {
+      reject(
+        new Error(
+          `Failed to run ffmpeg. Make sure ffmpeg is installed (brew install ffmpeg). ${err.message}`,
+        ),
+      );
+    });
+  });
+}
+
 import Database from "better-sqlite3";
 import {
   createSession,
@@ -1164,18 +1197,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const audioDir = join(dataDir, "audio", session.audio_path);
-    // Try common audio extensions, then fall back to full.wav
-    const audioExts = [
-      ".wav",
-      ".mp3",
-      ".m4a",
-      ".flac",
-      ".ogg",
-      ".aac",
-      ".opus",
-    ];
+    // All audio is 16kHz mono WAV: {timestamp}.wav or full.wav (old recordings)
     const candidates = [
-      ...audioExts.map((ext) => join(audioDir, `${session.audio_path}${ext}`)),
+      join(audioDir, `${session.audio_path}.wav`),
       join(audioDir, "full.wav"),
     ];
     for (const filePath of candidates) {
@@ -1192,24 +1216,15 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return null;
   });
 
-  // Get audio file path for a session (finds first matching audio file)
+  // Get audio file path for a session
   ipcMain.handle("audio:get-file-path", (_event, sessionId: number) => {
     const session = getSession(db, sessionId);
     if (!session?.audio_path) return null;
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const audioDir = join(dataDir, "audio", session.audio_path);
-    const audioExts = [
-      ".wav",
-      ".mp3",
-      ".m4a",
-      ".flac",
-      ".ogg",
-      ".aac",
-      ".opus",
-    ];
     const candidates = [
-      ...audioExts.map((ext) => join(audioDir, `${session.audio_path}${ext}`)),
+      join(audioDir, `${session.audio_path}.wav`),
       join(audioDir, "full.wav"),
     ];
     for (const filePath of candidates) {
@@ -1488,7 +1503,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || !result.filePaths.length) return null;
 
     const filePath = result.filePaths[0];
-    const ext = filePath.substring(filePath.lastIndexOf("."));
 
     // 2. Get file birthtime for session name
     const stat = fs.statSync(filePath);
@@ -1507,78 +1521,41 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       startedAt: readableTimestamp,
     });
 
-    // 5. Copy original file to session directory (no conversion needed)
+    // 5. Create audio directory and convert to 16kHz mono WAV via ffmpeg
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const sessionDir = join(dataDir, "audio", dirTimestamp);
     fs.mkdirSync(sessionDir, { recursive: true });
-    const destPath = join(sessionDir, `${dirTimestamp}${ext}`);
-    fs.copyFileSync(filePath, destPath);
+    const destPath = join(sessionDir, `${dirTimestamp}.wav`);
+    await convertToWav(filePath, destPath);
 
-    // 6. Mark session completed (duration determined after transcription)
-    updateSession(db, sessionId, { status: "completed" });
+    // 6. Calculate duration from WAV and update session
+    const wavStat = fs.statSync(destPath);
+    const pcmBytes = wavStat.size - 44; // 44-byte WAV header
+    const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
+    updateSession(db, sessionId, {
+      status: "completed",
+      durationSeconds,
+    });
 
     return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
   });
 
-  // Get audio duration by reading file header (WAV) or file metadata
-  ipcMain.handle("audio:get-duration", async (_event, filePath: string) => {
-    const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
-    if (ext === ".wav") {
-      // Parse WAV header to get duration
-      const fd = fs.openSync(filePath, "r");
-      try {
-        const header = Buffer.alloc(44);
-        fs.readSync(fd, header, 0, 44, 0);
-        // Bytes 24-27: sample rate (little-endian uint32)
-        const sampleRate = header.readUInt32LE(24);
-        // Bytes 28-31: byte rate (little-endian uint32)
-        const byteRate = header.readUInt32LE(28);
-        // Bytes 40-43: data chunk size (little-endian uint32)
-        const dataSize = header.readUInt32LE(40);
-        if (byteRate > 0) {
-          return Math.round(dataSize / byteRate);
-        }
-        return 0;
-      } finally {
-        fs.closeSync(fd);
+  // Get audio duration from WAV header (all audio is converted to WAV on import)
+  ipcMain.handle("audio:get-duration", (_event, filePath: string) => {
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const header = Buffer.alloc(44);
+      fs.readSync(fd, header, 0, 44, 0);
+      const byteRate = header.readUInt32LE(28);
+      const dataSize = header.readUInt32LE(40);
+      if (byteRate > 0) {
+        return Math.round(dataSize / byteRate);
       }
+      return 0;
+    } finally {
+      fs.closeSync(fd);
     }
-    // For non-WAV files, estimate from file size is unreliable.
-    // Use ffprobe-style approach via sidecar decode endpoint if available,
-    // or fall back to 0 (unknown).
-    // Try reading via Electron's desktopCapturer is not applicable here.
-    // For mp3/m4a/flac etc., use the sidecar /v1/audio/decode to get WAV and measure.
-    const config = readConfig(configDir);
-    const sidecarProvider = (config.asrProviders ?? []).find(
-      (p: any) => p.isSidecar,
-    );
-    if (sidecarProvider) {
-      try {
-        const baseUrl = (sidecarProvider.baseUrl ?? "http://localhost:8765")
-          .replace(/\/+$/, "")
-          .replace(/\/v1$/, "");
-        const resp = await net.fetch(`${baseUrl}/v1/audio/decode`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file_path: filePath }),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (resp.ok) {
-          const wavBuf = await resp.arrayBuffer();
-          // WAV header byte rate at offset 28
-          const view = new DataView(wavBuf);
-          const byteRate = view.getUint32(28, true);
-          const dataSize = view.getUint32(40, true);
-          if (byteRate > 0) {
-            return Math.round(dataSize / byteRate);
-          }
-        }
-      } catch {
-        // sidecar not available, return 0
-      }
-    }
-    return 0;
   });
 
   // Transcribe audio file via sidecar (file-path based, no ffmpeg)
