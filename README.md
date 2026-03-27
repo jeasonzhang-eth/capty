@@ -329,6 +329,13 @@ pytest
 - **修复 TTS 异常被吞没** — `tts_runner.py` 的 `_generate_all()` 中 `except Exception` 仅记录日志但不重新抛出，导致后续报错为误导性的 "TTS produced no audio"；改为 `raise RuntimeError` 携带原始异常
 - **替换废弃 asyncio API** — `server.py`、`model_runner.py`、`tts_runner.py` 中所有 `asyncio.get_event_loop()` 替换为 `asyncio.get_running_loop()`
 - **增强模型卸载内存清理** — `ModelRunner.unload()` 和 `TTSRunner.unload()` 现在调用 `mx.clear_cache()` + `gc.collect()` 主动释放 GPU 缓存和 Python 对象
+- **杂项修复与代码质量改进** — 6 项修复
+  - 移除 `ipc-handlers.ts` 中下载进度通道的无效条件分支（copy-paste 错误，两个分支返回相同值）
+  - 将 `App.tsx` 中所有 `id: Date.now()` 段落 ID 替换为单调递增计数器（`segmentIdCounter`），避免快速连续段落产生重复 ID
+  - 新增 `ErrorBoundary` 组件包裹 `<App />`，渲染崩溃时显示错误信息和重载按钮，而非白屏
+  - `deleteSession` 操作包裹在 SQLite 事务中，确保删除 summaries/segments/session 的原子性
+  - 为 `getSession`、`listSessions`、`getSegments`、`getSummaries` 添加强类型返回接口（`SessionRow`/`SegmentRow`/`SummaryRow`），替代 `any`
+  - `transcription.connect()` 从 fire-and-forget `.catch()` 改为 `try/catch await`，正确处理连接失败
 
 ### 2026-03-28 (41)
 
