@@ -1504,6 +1504,28 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // Decode audio file to 16kHz mono WAV via sidecar (any format → WAV)
+  ipcMain.handle(
+    "audio:decode-file",
+    async (_event, filePath: string, sidecarBaseUrl: string) => {
+      const baseUrl = sidecarBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+      const resp = await net.fetch(`${baseUrl}/v1/audio/decode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_path: filePath }),
+        signal: AbortSignal.timeout(120000), // 2min for large files
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`Decode audio error (${resp.status}): ${errBody}`);
+      }
+
+      const arrayBuf = await resp.arrayBuffer();
+      return arrayBuf;
+    },
+  );
+
   // TTS provider reachability check
   ipcMain.handle("tts:check-provider", async () => {
     const config = readConfig(configDir);

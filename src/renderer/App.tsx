@@ -840,8 +840,8 @@ function App(): React.JSX.Element {
       return;
     }
 
-    // Use file-based transcription via sidecar (supports any audio format)
-    // Sidecar returns segments with timestamps (like regeneration flow)
+    // Decode audio via sidecar → get WAV PCM → chunk & transcribe like regeneration
+    // This gives real-time segment display (one segment at a time)
     setRegeneratingSessionId(result.sessionId);
     setRegenerationProgress(0);
     cancelRegenerationRef.current = false;
@@ -853,45 +853,91 @@ function App(): React.JSX.Element {
       };
 
       if (activeProvider.isSidecar && result.audioPath) {
-        setRegenerationProgress(5);
-        const transcribeResult = await window.capty.transcribeFile(
+        // Step 1: Decode any audio format to 16kHz mono WAV via sidecar
+        setRegenerationProgress(2);
+        const wavBuffer = await window.capty.decodeAudioFile(
           result.audioPath,
-          provider,
+          activeProvider.baseUrl,
         );
 
-        const segments = transcribeResult.segments ?? [];
-        const duration = transcribeResult.duration ?? 0;
+        if (cancelRegenerationRef.current) return;
 
-        // Add each segment with proper timestamps (like regeneration)
-        for (let i = 0; i < segments.length; i++) {
+        // Step 2: Split WAV PCM into 15-second chunks (same as regeneration)
+        const pcmData = new Uint8Array(wavBuffer, 44); // skip WAV header
+        const totalBytes = pcmData.length;
+        const bytesPerSecond = 32000; // 16kHz * 16bit * mono
+        const segmentSeconds = 15;
+        const segmentBytes = bytesPerSecond * segmentSeconds;
+        const totalDuration = Math.round(totalBytes / bytesPerSecond);
+
+        const audioSegments: Array<{
+          data: Uint8Array;
+          startByte: number;
+        }> = [];
+        for (let off = 0; off < totalBytes; off += segmentBytes) {
+          audioSegments.push({
+            data: pcmData.slice(off, Math.min(off + segmentBytes, totalBytes)),
+            startByte: off,
+          });
+        }
+        const totalSegments = audioSegments.length;
+
+        // Step 3: Transcribe each chunk sequentially (real-time display)
+        for (let i = 0; i < totalSegments; i++) {
           if (cancelRegenerationRef.current) break;
 
-          const seg = segments[i];
-          await window.capty.addSegment({
-            sessionId: result.sessionId,
-            startTime: seg.start,
-            endTime: seg.end,
-            text: seg.text,
-            audioPath: "",
-            isFinal: true,
-          });
-          if (useAppStore.getState().currentSessionId === result.sessionId) {
-            store.addSegment({
-              id: Date.now() + i,
-              start_time: seg.start,
-              end_time: seg.end,
-              text: seg.text,
-            });
+          const seg = audioSegments[i];
+          const startTime = Math.round(seg.startByte / bytesPerSecond);
+          const endTime = Math.round(
+            Math.min(seg.startByte + segmentBytes, totalBytes) / bytesPerSecond,
+          );
+
+          try {
+            const transcribeResult = await window.capty.asrTranscribe(
+              seg.data.buffer.slice(
+                seg.data.byteOffset,
+                seg.data.byteOffset + seg.data.byteLength,
+              ),
+              provider,
+            );
+
+            if (cancelRegenerationRef.current) break;
+
+            const text = transcribeResult.text;
+            if (text.trim()) {
+              await window.capty.addSegment({
+                sessionId: result.sessionId,
+                startTime,
+                endTime,
+                text,
+                audioPath: "",
+                isFinal: true,
+              });
+              if (
+                useAppStore.getState().currentSessionId === result.sessionId
+              ) {
+                store.addSegment({
+                  id: Date.now(),
+                  start_time: startTime,
+                  end_time: endTime,
+                  text,
+                });
+              }
+            }
+          } catch (err) {
+            if (cancelRegenerationRef.current) break;
+            console.error("Upload transcription segment error:", err);
           }
+
           setRegenerationProgress(
-            Math.round(((i + 1) / segments.length) * 90) + 5,
+            Math.round(((i + 1) / totalSegments) * 95) + 5,
           );
         }
 
         // Update session duration
-        if (duration > 0) {
+        if (totalDuration > 0) {
           await window.capty.updateSession(result.sessionId, {
-            durationSeconds: duration,
+            durationSeconds: totalDuration,
           });
           await store.loadSessions();
         }
@@ -904,7 +950,6 @@ function App(): React.JSX.Element {
     } catch (err) {
       console.error("Failed to transcribe imported audio:", err);
       const errMsg = err instanceof Error ? err.message : String(err);
-      // Show error as a segment so user sees feedback in the UI
       await window.capty.addSegment({
         sessionId: result.sessionId,
         startTime: 0,

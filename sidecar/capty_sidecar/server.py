@@ -40,6 +40,10 @@ class TranscribeFileRequest(BaseModel):
     model: str = ""
 
 
+class DecodeAudioRequest(BaseModel):
+    file_path: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -280,6 +284,50 @@ def create_app(models_dir: str) -> FastAPI:
             "text": " ".join(s["text"] for s in segments),
             "duration": total_duration,
         }
+
+    # ------------------------------------------------------------------
+    # Audio decode (any format → 16kHz mono 16-bit PCM WAV)
+    # ------------------------------------------------------------------
+
+    @app.post("/v1/audio/decode")
+    async def decode_audio(body: DecodeAudioRequest):
+        """Decode any audio file to 16kHz mono 16-bit PCM WAV bytes.
+
+        Returns the raw WAV file (with header) so the frontend can split
+        it into chunks using the same flow as live-recording regeneration.
+        """
+        file_path = body.file_path.strip()
+        if not file_path or not Path(file_path).is_file():
+            raise HTTPException(status_code=400, detail="File not found")
+
+        try:
+            from mlx_audio.stt.utils import load_audio
+
+            loop = asyncio.get_event_loop()
+            audio = await loop.run_in_executor(
+                _mlx_executor,
+                lambda: load_audio(file_path, sr=SAMPLE_RATE),
+            )
+            audio_np = np.array(audio, dtype=np.float32)
+        except Exception as exc:
+            logger.exception("Failed to decode audio file: %s", file_path)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to decode audio: {exc}",
+            ) from exc
+
+        # Convert float32 → 16-bit signed PCM
+        pcm_int16 = (audio_np * 32767).clip(-32768, 32767).astype(np.int16)
+
+        # Build WAV in memory
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)  # 16-bit
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(pcm_int16.tobytes())
+
+        return Response(content=buf.getvalue(), media_type="audio/wav")
 
     # ------------------------------------------------------------------
     # OpenAI-compatible TTS API

@@ -309,10 +309,12 @@ pytest
 
 ### 2026-03-27 (39)
 
-- **修复音频导入转录** — 上传音频后按 15 秒分段转录（与重新生成字幕行为一致），每段带正确的 start/end 时间戳
-  - sidecar `transcribe-file` 端点从返回单个 `text` 改为返回 `{segments: [{start, end, text}], duration}` 结构
-  - 前端逐段添加 segment 并显示进度条，完成后更新 session 的 `durationSeconds`
-  - 修复导入音频后历史列表不显示时长（`--:--`）的问题
+- **修复音频导入转录** — 上传音频后实时逐段转录显示（与重新生成字幕行为完全一致）
+  - 新增 sidecar `POST /v1/audio/decode` 端点：将任意格式音频（FLAC/MP3/OGG/M4A 等）解码为 16kHz mono 16-bit PCM WAV
+  - 新增 IPC `audio:decode-file` + preload `decodeAudioFile` API
+  - 上传流程重写：先通过 sidecar 解码为 WAV → 按 15 秒切片 → 逐段调用 `asrTranscribe`（与重新生成字幕相同流程）
+  - 每段转录完成后立即在 TranscriptArea 中显示（实时可见），而非等全部处理完才一次性添加
+  - 完成后更新 session 的 `durationSeconds`，历史面板正确显示时长
 
 ### 2026-03-27 (38)
 

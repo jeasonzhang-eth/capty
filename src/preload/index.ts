@@ -183,6 +183,12 @@ const api = {
       segments: Array<{ start: number; end: number; text: string }>;
       duration: number;
     }>,
+  decodeAudioFile: (filePath: string, sidecarBaseUrl: string) =>
+    ipcRenderer.invoke(
+      "audio:decode-file",
+      filePath,
+      sidecarBaseUrl,
+    ) as Promise<ArrayBuffer>,
 
   // Export save file
   saveFile: (defaultName: string, content: string) =>
