@@ -21,6 +21,8 @@ interface ControlBarProps {
   readonly isDownloading: boolean;
   readonly downloadProgress: number;
   readonly onDownloadModel: () => void;
+  readonly ttsProviderReady: boolean;
+  readonly ttsProviderName: string | null;
 }
 
 export function ControlBar({
@@ -38,6 +40,8 @@ export function ControlBar({
   isDownloading,
   downloadProgress,
   onDownloadModel,
+  ttsProviderReady,
+  ttsProviderName,
 }: ControlBarProps): React.ReactElement {
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const needsDownload = selectedModel && !selectedModel.downloaded;
@@ -116,6 +120,42 @@ export function ControlBar({
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
           {statusLabel}
         </span>
+        {ttsProviderName && (
+          <>
+            <span
+              style={{
+                width: "1px",
+                height: "14px",
+                backgroundColor: "var(--border)",
+                margin: "0 2px",
+              }}
+            />
+            <span
+              style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                backgroundColor: ttsProviderReady
+                  ? "#4ADE80"
+                  : "var(--text-muted)",
+                display: "inline-block",
+                boxShadow: ttsProviderReady
+                  ? "0 0 4px rgba(74, 222, 128, 0.5)"
+                  : "none",
+              }}
+              title={`TTS: ${ttsProviderName} - ${ttsProviderReady ? "Ready" : "Offline"}`}
+            />
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+              }}
+              title={`TTS: ${ttsProviderName} - ${ttsProviderReady ? "Ready" : "Offline"}`}
+            >
+              TTS
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ flex: 1 }} />

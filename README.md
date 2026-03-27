@@ -295,6 +295,11 @@ pytest
 
 ### 2026-03-27 (36)
 
+- **ControlBar TTS 状态指示灯** — 在 ASR 主指示灯旁新增 TTS 辅助指示灯
+  - 6px 圆点 + "TTS" 标签，绿色 `#4ADE80` 发光表示就绪，灰色表示离线
+  - 仅在有 TTS Provider 配置时显示，无 Provider 时隐藏
+  - hover tooltip 显示 "TTS: {providerName} - Ready/Offline"
+  - ASR 和 TTS 指示灯之间用竖线分隔
 - **Provider 测试改进 + 样式修复** — 提升 ASR/TTS provider 测试的有效性，修复视觉不一致
   - ASR 测试从 0.1s 静音升级为 1s 440Hz 正弦波（~32KB WAV），验证完整转录 pipeline（不仅是连通性）
   - ASR 测试超时从 10s 增加到 30s（模型可能需要加载时间），返回转录结果文本

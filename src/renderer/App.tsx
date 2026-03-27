@@ -1370,6 +1370,10 @@ function App(): React.JSX.Element {
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
         onDownloadModel={handleDownloadModel}
+        ttsProviderReady={store.ttsProviderReady}
+        ttsProviderName={
+          ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ?? null
+        }
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel
