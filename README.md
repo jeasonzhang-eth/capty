@@ -298,6 +298,7 @@ pytest
   - 启动时自动选中第一个已下载模型（当保存的 modelId 不存在时）
   - 推荐模型更新：移除旧 `.npz` 格式 Whisper 模型，替换为 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式
   - `isModelDownloaded` 增加 `.npz` 检测，兼容旧格式已下载模型
+  - HuggingFace 搜索结果过滤：仅显示 MLX 兼容模型（含 `mlx` 或 `safetensors` tag），避免下载 PyTorch 等不兼容格式
 
 ### 2026-03-27 (28)
 

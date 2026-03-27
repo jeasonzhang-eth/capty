@@ -328,12 +328,18 @@ async function searchHuggingFaceModels(
     return [];
   }
 
+  // Filter: only MLX-compatible models (must have mlx/safetensors tag)
+  const mlxResults = results.filter((r) => {
+    const tags = r.tags.map((t) => t.toLowerCase());
+    return tags.includes("mlx") || tags.includes("safetensors");
+  });
+
   // Fetch file sizes for each result in parallel via the tree API
   const sizes = await Promise.all(
-    results.map((r) => fetchRepoSizeGb(r.id, baseUrl)),
+    mlxResults.map((r) => fetchRepoSizeGb(r.id, baseUrl)),
   );
 
-  return results.map((r, i) => hfModelToEntry(r, sizes[i]));
+  return mlxResults.map((r, i) => hfModelToEntry(r, sizes[i]));
 }
 
 function convertToWav(inputPath: string, outputPath: string): Promise<void> {
