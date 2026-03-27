@@ -95,6 +95,8 @@ def _strip_markdown(text: str) -> str:
 
 def _audio_to_wav_bytes(audio_np: np.ndarray, sample_rate: int) -> bytes:
     """Convert float32 numpy audio array to WAV bytes."""
+    # Replace NaN/Inf from model output before conversion
+    audio_np = np.nan_to_num(audio_np, nan=0.0, posinf=1.0, neginf=-1.0)
     audio_np = np.clip(audio_np, -1.0, 1.0)
     pcm = (audio_np * 32767).astype(np.int16)
 

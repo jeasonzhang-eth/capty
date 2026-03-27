@@ -306,6 +306,7 @@ pytest
   - 保留 Voice 选择器基础设施（list_voices 扫描 voices/ 目录），无 voices 目录时自动隐藏
   - SummaryPanel 摘要卡片支持选择 TTS 模型，无已下载模型时播放按钮置灰
   - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
+  - 修复音频 NaN/Inf 导致 WAV 损坏：转换前用 `nan_to_num` 清理异常值
 
 ### 2026-03-27 (33)
 
