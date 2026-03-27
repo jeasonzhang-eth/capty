@@ -729,16 +729,26 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
-  // External ASR connectivity test (send short silent audio)
+  // External ASR connectivity test (send 1s 440Hz sine wave)
   ipcMain.handle(
     "asr:test",
     async (
       _event,
       provider: { baseUrl: string; apiKey: string; model: string },
     ) => {
-      // 0.1 second of silence at 16kHz 16bit mono = 3200 bytes
-      const silentPcm = Buffer.alloc(3200);
-      const wavBuffer = pcmToWav(silentPcm, 16000, 1, 16);
+      // Generate 1 second of 440Hz sine wave at 16kHz 16bit mono
+      const sampleRate = 16000;
+      const duration = 1; // seconds
+      const frequency = 440; // Hz
+      const numSamples = sampleRate * duration;
+      const pcmBuffer = Buffer.alloc(numSamples * 2); // 16bit = 2 bytes per sample
+      for (let i = 0; i < numSamples; i++) {
+        const sample = Math.round(
+          Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 16000,
+        );
+        pcmBuffer.writeInt16LE(sample, i * 2);
+      }
+      const wavBuffer = pcmToWav(pcmBuffer, sampleRate, 1, 16);
 
       const formData = new FormData();
       formData.append(
@@ -757,7 +767,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
             : {}),
         },
         body: formData,
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(30000),
       });
 
       if (!resp.ok) {
@@ -765,7 +775,46 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         throw new Error(`HTTP ${resp.status}: ${errBody}`);
       }
 
-      return { success: true };
+      const result = (await resp.json()) as { text?: string };
+      return { success: true, text: result.text ?? "" };
+    },
+  );
+
+  // TTS connectivity test (send short text, verify audio response)
+  ipcMain.handle(
+    "tts:test",
+    async (
+      _event,
+      provider: { baseUrl: string; apiKey: string; model: string },
+    ) => {
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const formData = new FormData();
+      formData.append("input", "Hello");
+      if (provider.model) formData.append("model", provider.model);
+
+      const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
+        method: "POST",
+        headers: {
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
+        },
+        body: formData,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${errBody}`);
+      }
+
+      const buffer = await resp.arrayBuffer();
+      if (buffer.byteLength < 100) {
+        throw new Error(
+          `TTS returned too little data (${buffer.byteLength} bytes)`,
+        );
+      }
+      return { success: true, bytes: buffer.byteLength };
     },
   );
 

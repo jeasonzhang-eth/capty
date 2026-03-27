@@ -295,6 +295,13 @@ pytest
 
 ### 2026-03-27 (36)
 
+- **Provider 测试改进 + 样式修复** — 提升 ASR/TTS provider 测试的有效性，修复视觉不一致
+  - ASR 测试从 0.1s 静音升级为 1s 440Hz 正弦波（~32KB WAV），验证完整转录 pipeline（不仅是连通性）
+  - ASR 测试超时从 10s 增加到 30s（模型可能需要加载时间），返回转录结果文本
+  - 新增 `tts:test` IPC handler：发送 "Hello" 文本到 TTS endpoint，验证返回音频数据 >100 bytes
+  - TTS 外部 Provider 测试补全：SettingsModal TTS 测试从仅支持 Sidecar 扩展为同时支持外部 Provider
+  - 修复 TTS Provider 卡片 URL 样式与 ASR 不一致：添加 JetBrains Mono 字体 + `text-secondary` 颜色
+  - 修复 TTS Test 按钮与 ASR 不一致：高度从 26px→28px，disabled opacity 从 0.5→0.6，添加 `text-secondary` 颜色
 - **TTS Provider 交互保护** — TTS 调用前增加 provider 可用性检测，避免请求挂起超时
   - 新增 `tts:check-provider` IPC handler：Sidecar 检查 `/health`，外部 Provider 检查 `/v1/audio/speech` 可达性
   - `tts:speak` 和 `tts:list-voices` 开头增加 provider 可达性 guard，不可用时抛出明确错误信息

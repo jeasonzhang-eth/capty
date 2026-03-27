@@ -2096,6 +2096,39 @@ function TtsTab({
             });
           }, 5000);
         }
+      } else {
+        // Test external TTS provider
+        if (!provider.baseUrl) return;
+        setTestingId(provider.id);
+        try {
+          const result = await window.capty.ttsTest({
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+            model: provider.model,
+          });
+          setTestResults((prev) => ({
+            ...prev,
+            [provider.id]: {
+              ok: true,
+              message: `TTS working (${Math.round(result.bytes / 1024)}KB)`,
+            },
+          }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Connection failed";
+          setTestResults((prev) => ({
+            ...prev,
+            [provider.id]: { ok: false, message: msg },
+          }));
+        } finally {
+          setTestingId(null);
+          setTimeout(() => {
+            setTestResults((prev) => {
+              const next = { ...prev };
+              delete next[provider.id];
+              return next;
+            });
+          }, 5000);
+        }
       }
     },
     [],
@@ -2251,7 +2284,14 @@ function TtsTab({
                       paddingLeft: "18px",
                     }}
                   >
-                    {provider.baseUrl || "No URL set"}
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      {provider.baseUrl || "No URL set"}
+                    </span>
                     {!provider.isSidecar && provider.model
                       ? ` \u00b7 ${provider.model}`
                       : ""}
@@ -2282,16 +2322,20 @@ function TtsTab({
                     </span>
                   )}
                   <button
-                    onClick={() => handleTestProvider(provider)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTestProvider(provider);
+                    }}
                     disabled={testingId === provider.id}
                     style={{
                       ...secondaryBtnStyle,
-                      height: "26px",
+                      height: "28px",
                       padding: "0 10px",
                       fontSize: "11px",
+                      color: "var(--text-secondary)",
                       cursor:
                         testingId === provider.id ? "not-allowed" : "pointer",
-                      opacity: testingId === provider.id ? 0.5 : 1,
+                      opacity: testingId === provider.id ? 0.6 : 1,
                     }}
                   >
                     {testingId === provider.id ? "Testing..." : "Test"}

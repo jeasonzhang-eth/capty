@@ -155,6 +155,11 @@ const api = {
       ready: boolean;
       reason: string;
     }>,
+  ttsTest: (provider: { baseUrl: string; apiKey: string; model: string }) =>
+    ipcRenderer.invoke("tts:test", provider) as Promise<{
+      success: boolean;
+      bytes: number;
+    }>,
   ttsListVoices: (modelDir: string) =>
     ipcRenderer.invoke("tts:list-voices", modelDir) as Promise<{
       model: string;
