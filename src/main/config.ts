@@ -26,6 +26,16 @@ export interface AsrProvider {
   readonly isSidecar: boolean;
 }
 
+export interface TtsProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly voice: string;
+  readonly isSidecar: boolean;
+}
+
 export interface PromptType {
   readonly id: string;
   readonly label: string;
@@ -72,6 +82,9 @@ export interface AppConfig {
   readonly summaryPanelWidth: number | null;
   readonly asrProviders: AsrProvider[];
   readonly selectedAsrProviderId: string | null;
+  readonly ttsProviders: TtsProvider[];
+  readonly selectedTtsProviderId: string | null;
+  readonly selectedTtsModelId: string | null;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -118,6 +131,19 @@ const DEFAULT_CONFIG: AppConfig = {
     },
   ],
   selectedAsrProviderId: "sidecar",
+  ttsProviders: [
+    {
+      id: "sidecar",
+      name: "Local Sidecar",
+      baseUrl: "http://localhost:8765",
+      apiKey: "",
+      model: "",
+      voice: "auto",
+      isSidecar: true,
+    },
+  ],
+  selectedTtsProviderId: "sidecar",
+  selectedTtsModelId: null,
 };
 
 export function readConfig(configDir: string): AppConfig {

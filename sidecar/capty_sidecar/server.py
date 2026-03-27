@@ -181,9 +181,35 @@ def create_app(models_dir: str) -> FastAPI:
     # OpenAI-compatible TTS API
     # ------------------------------------------------------------------
 
+    @app.post("/tts/switch")
+    async def switch_tts_model(body: SwitchModelRequest):
+        """Switch the active TTS model."""
+        tts_runner.unload()
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                _mlx_executor,
+                lambda: tts_runner.load(body.model),
+            )
+        except Exception as exc:
+            logger.exception("Failed to load TTS model %s", body.model)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to load TTS model: {exc}",
+            ) from exc
+        return {"status": "ok", "model": body.model}
+
+    @app.get("/tts/status")
+    async def tts_status():
+        return {
+            "loaded": tts_runner.is_loaded(),
+            "model": tts_runner._model_id,
+        }
+
     @app.post("/v1/audio/speech")
     async def text_to_speech(
         input: str = Form(...),
+        model: str = Form(""),
         voice: str = Form("auto"),
         speed: float = Form(1.0),
         lang_code: str = Form("auto"),
@@ -191,13 +217,31 @@ def create_app(models_dir: str) -> FastAPI:
         """OpenAI-compatible TTS endpoint.
 
         Accepts multipart/form-data and returns WAV audio bytes.
-        The TTS model is lazily loaded on first request.
+        If ``model`` is provided and differs from the current model,
+        the TTS model is switched automatically.
         """
         if not input.strip():
             raise HTTPException(status_code=400, detail="Empty input text")
 
-        # Lazy-load TTS model on first request
-        if not tts_runner.is_loaded():
+        # Load or switch TTS model
+        target_model = model.strip() if model else None
+        if target_model:
+            if not tts_runner.is_loaded() or tts_runner._model_id != target_model:
+                tts_runner.unload()
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        _mlx_executor,
+                        lambda: tts_runner.load(target_model),
+                    )
+                except Exception as exc:
+                    logger.exception("Failed to load TTS model %s", target_model)
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to load TTS model: {exc}",
+                    ) from exc
+        elif not tts_runner.is_loaded():
+            # Lazy-load default TTS model on first request
             try:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(_mlx_executor, tts_runner.load)

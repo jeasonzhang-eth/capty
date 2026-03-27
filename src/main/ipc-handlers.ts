@@ -30,6 +30,7 @@ import {
   writeConfig,
   getDataDir,
   LlmProvider,
+  TtsProvider,
   PromptType,
   getEffectivePromptTypes,
   DEFAULT_PROMPT_TYPES,
@@ -67,20 +68,60 @@ interface RecommendedModel {
   readonly description: string;
 }
 
-/** Read recommended-models.json shipped with the app. */
-function readRecommendedModels(): RecommendedModel[] {
+/** Read a recommended models JSON file shipped with the app. */
+function readRecommendedFile(filename: string): RecommendedModel[] {
   try {
     const registryPath = join(
       app.isPackaged
         ? join(process.resourcesPath, "resources")
         : join(__dirname, "../../resources"),
-      "recommended-models.json",
+      filename,
     );
     return JSON.parse(
       fs.readFileSync(registryPath, "utf-8"),
     ) as RecommendedModel[];
   } catch {
     return [];
+  }
+}
+
+/** Read recommended-models.json (ASR) shipped with the app. */
+function readRecommendedModels(): RecommendedModel[] {
+  return readRecommendedFile("recommended-models.json");
+}
+
+/** Read recommended-tts-models.json shipped with the app. */
+function readRecommendedTtsModels(): RecommendedModel[] {
+  return readRecommendedFile("recommended-tts-models.json");
+}
+
+/**
+ * Migrate flat models/ directory to models/asr/ + models/tts/ structure.
+ * Moves existing model directories (non-asr/tts) into models/asr/.
+ */
+export function migrateModelsDir(dataDir: string): void {
+  const modelsDir = join(dataDir, "models");
+  const asrDir = join(modelsDir, "asr");
+  const ttsDir = join(modelsDir, "tts");
+
+  // If asr/ already exists, migration is done
+  if (fs.existsSync(asrDir)) return;
+
+  fs.mkdirSync(asrDir, { recursive: true });
+  fs.mkdirSync(ttsDir, { recursive: true });
+
+  if (fs.existsSync(modelsDir)) {
+    for (const entry of fs.readdirSync(modelsDir)) {
+      if (entry === "asr" || entry === "tts") continue;
+      const src = join(modelsDir, entry);
+      try {
+        if (fs.statSync(src).isDirectory()) {
+          fs.renameSync(src, join(asrDir, entry));
+        }
+      } catch {
+        // Skip entries that can't be moved
+      }
+    }
   }
 }
 
@@ -175,11 +216,11 @@ function writeModelMeta(
   );
 }
 
-/** Load all models: disk-scanned downloaded + recommended (not yet downloaded). */
-function loadAllModels(configDir: string): ModelEntry[] {
+/** Load ASR models: disk-scanned downloaded + recommended (not yet downloaded). */
+function loadAsrModels(configDir: string): ModelEntry[] {
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
-  const modelsDir = join(dataDir, "models");
+  const modelsDir = join(dataDir, "models", "asr");
 
   // 1. Scan disk for downloaded models
   const downloaded: ModelEntry[] = [];
@@ -221,6 +262,59 @@ function loadAllModels(configDir: string): ModelEntry[] {
   const all = [...downloaded, ...notDownloaded];
 
   // Sort: group by type (alphabetically), then by size within each group
+  all.sort((a, b) => {
+    const typeCmp = a.type.localeCompare(b.type);
+    if (typeCmp !== 0) return typeCmp;
+    return a.size_gb - b.size_gb;
+  });
+
+  return all;
+}
+
+/** Load TTS models: disk-scanned downloaded + recommended (not yet downloaded). */
+function loadTtsModels(configDir: string): ModelEntry[] {
+  const config = readConfig(configDir);
+  const dataDir = config.dataDir ?? join(configDir, "data");
+  const modelsDir = join(dataDir, "models", "tts");
+
+  // 1. Scan disk for downloaded TTS models
+  const downloaded: ModelEntry[] = [];
+  const downloadedIds = new Set<string>();
+
+  if (fs.existsSync(modelsDir)) {
+    try {
+      for (const dir of fs.readdirSync(modelsDir)) {
+        const dirPath = join(modelsDir, dir);
+        if (!fs.statSync(dirPath).isDirectory()) continue;
+        if (!isModelDownloaded(modelsDir, dir)) continue;
+        const entry = readModelMeta(dirPath, dir);
+        downloaded.push(entry);
+        downloadedIds.add(entry.id);
+      }
+    } catch {
+      // Cannot read models dir
+    }
+  }
+
+  // 2. Read recommended TTS models, filter out already downloaded
+  const recommended = readRecommendedTtsModels();
+  const notDownloaded: ModelEntry[] = recommended
+    .filter((r) => {
+      const id = r.repo.replace(/\//g, "--");
+      return !downloadedIds.has(id);
+    })
+    .map((r) => ({
+      id: r.repo.replace(/\//g, "--"),
+      name: r.name,
+      type: r.type,
+      repo: r.repo,
+      size_gb: r.size_gb,
+      languages: r.languages,
+      description: r.description,
+      downloaded: false,
+    }));
+
+  const all = [...downloaded, ...notDownloaded];
   all.sort((a, b) => {
     const typeCmp = a.type.localeCompare(b.type);
     if (typeCmp !== 0) return typeCmp;
@@ -669,16 +763,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // Models — builtin registry + user-downloaded models
   ipcMain.handle("models:list", () => {
-    return loadAllModels(configDir);
+    return loadAsrModels(configDir);
   });
 
-  // Write model-meta.json into a model directory (called after download)
+  // Write model-meta.json into an ASR model directory (called after download)
   ipcMain.handle(
     "models:save-meta",
     (_event, modelId: string, meta: Record<string, unknown>) => {
       const config = readConfig(configDir);
       const dataDir = config.dataDir ?? join(configDir, "data");
-      const modelsDir = join(dataDir, "models");
+      const modelsDir = join(dataDir, "models", "asr");
       const dirPath = join(modelsDir, modelId);
       if (fs.existsSync(dirPath)) {
         writeModelMeta(
@@ -703,24 +797,155 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const results = await searchHuggingFaceModels(query, mirrorUrl);
     // Mark downloaded status
     const dataDir = config.dataDir ?? join(configDir, "data");
-    const modelsDir = join(dataDir, "models");
+    const modelsDir = join(dataDir, "models", "asr");
     return results.map((m) => ({
       ...m,
       downloaded: isModelDownloaded(modelsDir, m.id),
     }));
   });
 
-  // Delete a downloaded model — just remove the directory
+  // Delete a downloaded ASR model — just remove the directory
   ipcMain.handle("models:delete", async (_event, modelId: string) => {
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    const modelsDir = join(dataDir, "models");
+    const modelsDir = join(dataDir, "models", "asr");
     const modelPath = join(modelsDir, modelId);
 
     if (fs.existsSync(modelPath)) {
       fs.rmSync(modelPath, { recursive: true, force: true });
     }
   });
+
+  // TTS Models — builtin registry + user-downloaded TTS models
+  ipcMain.handle("tts-models:list", () => {
+    return loadTtsModels(configDir);
+  });
+
+  // Write model-meta.json into a TTS model directory (called after download)
+  ipcMain.handle(
+    "tts-models:save-meta",
+    (_event, modelId: string, meta: Record<string, unknown>) => {
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+      const modelsDir = join(dataDir, "models", "tts");
+      const dirPath = join(modelsDir, modelId);
+      if (fs.existsSync(dirPath)) {
+        writeModelMeta(
+          dirPath,
+          meta as unknown as {
+            repo: string;
+            name: string;
+            type: string;
+            size_gb: number;
+            languages: readonly string[];
+            description: string;
+          },
+        );
+      }
+    },
+  );
+
+  // Search HuggingFace for TTS models
+  ipcMain.handle("tts-models:search", async (_event, query: string) => {
+    const config = readConfig(configDir);
+    const mirrorUrl = config.hfMirrorUrl ?? undefined;
+    const baseUrl = mirrorUrl ?? "https://huggingface.co";
+
+    const params = new URLSearchParams({
+      search: query,
+      author: "mlx-community",
+      pipeline_tag: "text-to-speech",
+      sort: "downloads",
+      direction: "-1",
+      limit: "20",
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let results: HFSearchResult[];
+    try {
+      const resp = await fetch(`${baseUrl}/api/models?${params}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!resp.ok) return [];
+      results = (await resp.json()) as HFSearchResult[];
+    } catch {
+      clearTimeout(timeout);
+      return [];
+    }
+
+    const mlxResults = results.filter((r) => {
+      const tags = r.tags.map((t) => t.toLowerCase());
+      return tags.includes("mlx") || tags.includes("safetensors");
+    });
+
+    const sizes = await Promise.all(
+      mlxResults.map((r) => fetchRepoSizeGb(r.id, baseUrl)),
+    );
+
+    // Mark downloaded status
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const ttsModelsDir = join(dataDir, "models", "tts");
+
+    return mlxResults.map((r, i) => {
+      const entry = hfModelToEntry(r, sizes[i]);
+      return {
+        ...entry,
+        type: "tts",
+        downloaded: isModelDownloaded(ttsModelsDir, entry.id),
+      };
+    });
+  });
+
+  // Delete a downloaded TTS model
+  ipcMain.handle("tts-models:delete", async (_event, modelId: string) => {
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const modelPath = join(dataDir, "models", "tts", modelId);
+    if (fs.existsSync(modelPath)) {
+      fs.rmSync(modelPath, { recursive: true, force: true });
+    }
+  });
+
+  // TTS model download
+  ipcMain.handle(
+    "tts-models:download",
+    async (_event, repo: string, destDir: string) => {
+      const win = getMainWindow();
+      const config = readConfig(configDir);
+      const mirrorUrl = config.hfMirrorUrl ?? undefined;
+
+      await downloadModel(
+        repo,
+        destDir,
+        (progress) => {
+          win?.webContents.send("tts-models:download-progress", progress);
+        },
+        mirrorUrl,
+      );
+    },
+  );
+
+  // Save TTS settings (providers + selection)
+  ipcMain.handle(
+    "config:save-tts-settings",
+    (
+      _event,
+      settings: {
+        ttsProviders: TtsProvider[];
+        selectedTtsProviderId: string | null;
+        selectedTtsModelId: string | null;
+      },
+    ) => {
+      const config = readConfig(configDir);
+      writeConfig(configDir, {
+        ...config,
+        ttsProviders: settings.ttsProviders,
+        selectedTtsProviderId: settings.selectedTtsProviderId,
+        selectedTtsModelId: settings.selectedTtsModelId,
+      });
+    },
+  );
 
   // Layout persistence
   ipcMain.handle(
@@ -1139,7 +1364,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { sessionId, timestamp: dirTimestamp };
   });
 
-  // TTS (text-to-speech via sidecar)
+  // TTS (text-to-speech via provider)
   ipcMain.handle(
     "tts:speak",
     async (
@@ -1148,14 +1373,15 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       opts?: { voice?: string; speed?: number; langCode?: string },
     ) => {
       const config = readConfig(configDir);
-      const sidecarProvider = (config.asrProviders ?? []).find(
-        (p) => p.isSidecar,
+      const selectedId = config.selectedTtsProviderId ?? "sidecar";
+      const provider = (config.ttsProviders ?? []).find(
+        (p) => p.id === selectedId,
       );
-      const url = sidecarProvider?.baseUrl ?? "http://localhost:8765";
+      const url = provider?.baseUrl ?? "http://localhost:8765";
 
       const formData = new FormData();
       formData.append("input", text);
-      formData.append("voice", opts?.voice ?? "auto");
+      formData.append("voice", opts?.voice ?? provider?.voice ?? "auto");
       formData.append("speed", String(opts?.speed ?? 1.0));
       formData.append("lang_code", opts?.langCode ?? "auto");
 

@@ -108,7 +108,11 @@ class TTSRunner:
         self._model_id: Optional[str] = None
 
     def load(self, model_id: str = DEFAULT_TTS_MODEL) -> None:
-        """Load TTS model. Called on the MLX executor thread."""
+        """Load TTS model. Called on the MLX executor thread.
+
+        model_id can be a HuggingFace repo ID (e.g. "mlx-community/Kokoro-82M-bf16")
+        or a local directory path (e.g. "/path/to/models/tts/mlx-community--Kokoro-82M-bf16").
+        """
         from mlx_audio.tts.utils import load_model
 
         logger.info("Loading TTS model %s", model_id)

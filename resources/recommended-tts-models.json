@@ -1,0 +1,10 @@
+[
+  {
+    "repo": "mlx-community/Kokoro-82M-bf16",
+    "name": "Kokoro 82M (bf16)",
+    "type": "kokoro",
+    "size_gb": 0.34,
+    "languages": ["zh", "en", "ja", "ko"],
+    "description": "Fast TTS, bilingual Chinese-English, 54 voices"
+  }
+]

@@ -5,7 +5,11 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import { SettingsModal, LlmProvider } from "./components/SettingsModal";
+import {
+  SettingsModal,
+  LlmProvider,
+  TtsProviderConfig,
+} from "./components/SettingsModal";
 import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
@@ -85,13 +89,38 @@ function App(): React.JSX.Element {
   const [regenerationProgress, setRegenerationProgress] = useState(0);
   const cancelRegenerationRef = useRef(false);
 
-  // Model download state
+  // ASR Model download state
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
     null,
   );
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  // TTS state
+  const [ttsProviders, setTtsProviders] = useState<TtsProviderConfig[]>([]);
+  const [selectedTtsProviderId, setSelectedTtsProviderId] = useState<
+    string | null
+  >(null);
+  const [ttsModels, setTtsModels] = useState<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      repo: string;
+      downloaded: boolean;
+      size_gb: number;
+      languages: readonly string[];
+      description: string;
+    }>
+  >([]);
+  const [selectedTtsModelId, setSelectedTtsModelId] = useState("");
+  const [isTtsDownloading, setIsTtsDownloading] = useState(false);
+  const [ttsDownloadingModelId, setTtsDownloadingModelId] = useState<
+    string | null
+  >(null);
+  const [ttsDownloadProgress, setTtsDownloadProgress] = useState(0);
+  const [ttsDownloadError, setTtsDownloadError] = useState<string | null>(null);
 
   // Config directory path
   const [configDir, setConfigDir] = useState<string | null>(null);
@@ -146,7 +175,7 @@ function App(): React.JSX.Element {
     });
 
     try {
-      const destDir = `${dataDir}/models/${model.id}`;
+      const destDir = `${dataDir}/models/asr/${model.id}`;
       await window.capty.downloadModel(model.repo, destDir);
 
       // Refresh models list
@@ -256,6 +285,25 @@ function App(): React.JSX.Element {
           store.setSelectedAsrProviderId(savedAsrProviderId);
         }
 
+        // Restore TTS providers
+        const savedTtsProviders = config.ttsProviders as
+          | TtsProviderConfig[]
+          | undefined;
+        if (savedTtsProviders?.length) {
+          setTtsProviders(savedTtsProviders);
+        }
+        const savedTtsProviderId = config.selectedTtsProviderId as
+          | string
+          | null
+          | undefined;
+        if (savedTtsProviderId !== undefined) {
+          setSelectedTtsProviderId(savedTtsProviderId);
+        }
+        const savedTtsModelId = config.selectedTtsModelId as string | null;
+        if (savedTtsModelId) {
+          setSelectedTtsModelId(savedTtsModelId);
+        }
+
         // Check sidecar health
         try {
           const health = await window.capty.checkSidecarHealth();
@@ -264,7 +312,7 @@ function App(): React.JSX.Element {
           store.setSidecarReady(false);
         }
 
-        // Load models and restore selected model
+        // Load ASR models and restore selected model
         try {
           const models = await window.capty.listModels();
           store.setModels(models as Parameters<typeof store.setModels>[0]);
@@ -292,6 +340,32 @@ function App(): React.JSX.Element {
           }
         } catch {
           // Models not available yet
+        }
+
+        // Load TTS models
+        try {
+          const ttsList = await window.capty.listTtsModels();
+          setTtsModels(
+            ttsList as Array<{
+              id: string;
+              name: string;
+              type: string;
+              repo: string;
+              downloaded: boolean;
+              size_gb: number;
+              languages: readonly string[];
+              description: string;
+            }>,
+          );
+          // Auto-select first downloaded TTS model if none selected
+          if (!savedTtsModelId) {
+            const firstDownloaded = (
+              ttsList as Array<{ id: string; downloaded: boolean }>
+            ).find((m) => m.downloaded);
+            if (firstDownloaded) setSelectedTtsModelId(firstDownloaded.id);
+          }
+        } catch {
+          // TTS models not available yet
         }
       } catch (err) {
         console.error("Init error:", err);
@@ -707,7 +781,7 @@ function App(): React.JSX.Element {
       });
 
       try {
-        const destDir = `${dataDir}/models/${model.id}`;
+        const destDir = `${dataDir}/models/asr/${model.id}`;
         await window.capty.downloadModel(model.repo, destDir);
 
         // Save model metadata so it's discoverable by models:list
@@ -806,6 +880,146 @@ function App(): React.JSX.Element {
     },
     [store],
   );
+
+  const handleSaveTtsSettings = useCallback(
+    async (settings: {
+      ttsProviders: TtsProviderConfig[];
+      selectedTtsProviderId: string | null;
+    }) => {
+      setTtsProviders(settings.ttsProviders);
+      setSelectedTtsProviderId(settings.selectedTtsProviderId);
+      await window.capty.saveTtsSettings({
+        ...settings,
+        selectedTtsModelId,
+      });
+    },
+    [selectedTtsModelId],
+  );
+
+  const handleSelectTtsModel = useCallback(
+    async (modelId: string) => {
+      setSelectedTtsModelId(modelId);
+      await window.capty.saveTtsSettings({
+        ttsProviders,
+        selectedTtsProviderId,
+        selectedTtsModelId: modelId,
+      });
+    },
+    [ttsProviders, selectedTtsProviderId],
+  );
+
+  const handleDownloadTtsModel = useCallback(
+    async (model: {
+      readonly id: string;
+      readonly name: string;
+      readonly type: string;
+      readonly repo: string;
+      readonly size_gb: number;
+      readonly languages: readonly string[];
+      readonly description: string;
+    }) => {
+      if (isTtsDownloading) return;
+      const dataDir = store.dataDir;
+      if (!dataDir) return;
+
+      setIsTtsDownloading(true);
+      setTtsDownloadingModelId(model.id);
+      setTtsDownloadProgress(0);
+      setTtsDownloadError(null);
+
+      const unsubscribe = window.capty.onTtsDownloadProgress((progress) => {
+        setTtsDownloadProgress(progress.percent);
+      });
+
+      try {
+        const destDir = `${dataDir}/models/tts/${model.id}`;
+        await window.capty.downloadTtsModel(model.repo, destDir);
+
+        // Save model metadata
+        await window.capty.saveTtsModelMeta(model.id, {
+          id: model.id,
+          name: model.name,
+          type: model.type,
+          repo: model.repo,
+          size_gb: model.size_gb,
+          languages: [...model.languages],
+          description: model.description,
+        });
+
+        // Refresh TTS models list
+        const ttsList = await window.capty.listTtsModels();
+        setTtsModels(
+          ttsList as Array<{
+            id: string;
+            name: string;
+            type: string;
+            repo: string;
+            downloaded: boolean;
+            size_gb: number;
+            languages: readonly string[];
+            description: string;
+          }>,
+        );
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Download failed. Check network.";
+        console.error("Failed to download TTS model:", err);
+        setTtsDownloadError(msg);
+      } finally {
+        unsubscribe();
+        setIsTtsDownloading(false);
+        setTtsDownloadingModelId(null);
+        setTtsDownloadProgress(0);
+      }
+    },
+    [store, isTtsDownloading],
+  );
+
+  const handleDeleteTtsModel = useCallback(
+    async (modelId: string) => {
+      try {
+        await window.capty.deleteTtsModel(modelId);
+        const ttsList = await window.capty.listTtsModels();
+        setTtsModels(
+          ttsList as Array<{
+            id: string;
+            name: string;
+            type: string;
+            repo: string;
+            downloaded: boolean;
+            size_gb: number;
+            languages: readonly string[];
+            description: string;
+          }>,
+        );
+        if (selectedTtsModelId === modelId) {
+          const firstDownloaded = (
+            ttsList as Array<{ id: string; downloaded: boolean }>
+          ).find((m) => m.downloaded);
+          if (firstDownloaded) setSelectedTtsModelId(firstDownloaded.id);
+        }
+      } catch (err) {
+        console.error("Failed to delete TTS model:", err);
+      }
+    },
+    [selectedTtsModelId],
+  );
+
+  const handleSearchTtsModels = useCallback(async (query: string) => {
+    const results = await window.capty.searchTtsModels(query);
+    return results as Array<{
+      id: string;
+      name: string;
+      type: string;
+      repo: string;
+      downloaded: boolean;
+      size_gb: number;
+      languages: readonly string[];
+      description: string;
+    }>;
+  }, []);
 
   const handleSaveLlmProviders = useCallback(
     async (providers: LlmProvider[]) => {
@@ -1108,6 +1322,19 @@ function App(): React.JSX.Element {
           onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
           onSaveLlmProviders={handleSaveLlmProviders}
           onSaveAsrSettings={handleSaveAsrSettings}
+          ttsProviders={ttsProviders}
+          selectedTtsProviderId={selectedTtsProviderId}
+          ttsModels={ttsModels}
+          selectedTtsModelId={selectedTtsModelId}
+          isTtsDownloading={isTtsDownloading}
+          ttsDownloadingModelId={ttsDownloadingModelId}
+          ttsDownloadProgress={ttsDownloadProgress}
+          ttsDownloadError={ttsDownloadError}
+          onSaveTtsSettings={handleSaveTtsSettings}
+          onSelectTtsModel={handleSelectTtsModel}
+          onDownloadTtsModel={handleDownloadTtsModel}
+          onDeleteTtsModel={handleDeleteTtsModel}
+          onSearchTtsModels={handleSearchTtsModels}
           onClose={() => setShowSettings(false)}
         />
       )}

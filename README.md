@@ -25,6 +25,8 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
 - **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止
+- **TTS Provider 管理** — Settings 中新增 TTS Providers section（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
+- **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -83,7 +85,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 
 **模型管理**（磁盘驱动，无静态注册表）：
 
-1. 前端通过 `window.capty.listModels()` → IPC → 主进程扫描 `models/` 目录获取已下载模型 + 读取 `recommended-models.json` 获取推荐模型
+1. 前端通过 `window.capty.listModels()` → IPC → 主进程扫描 `models/asr/` 目录获取已下载模型 + 读取 `recommended-models.json` 获取推荐模型（TTS 模型同理，扫描 `models/tts/`）
 2. 每个模型目录内含 `model-meta.json` 自描述元数据，fallback 从目录名 + `config.json` 推断
 3. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，完成后写入 `model-meta.json`
 4. 删除模型：直接删除模型目录，无需操作任何 JSON 注册表
@@ -170,6 +172,9 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `summaryPanelWidth` | `number \| null` | SummaryPanel 宽度（px），`null` 时使用默认值 320，范围 220-600 |
 | `asrProviders` | `AsrProvider[]` | ASR Provider 列表，每个含 id / name / baseUrl / apiKey / model / isSidecar；默认含一个 Local Sidecar |
 | `selectedAsrProviderId` | `string \| null` | 当前激活的 ASR Provider ID |
+| `ttsProviders` | `TtsProvider[]` | TTS Provider 列表，每个含 id / name / baseUrl / apiKey / model / voice / isSidecar；默认含一个 Local Sidecar |
+| `selectedTtsProviderId` | `string \| null` | 当前激活的 TTS Provider ID |
+| `selectedTtsModelId` | `string \| null` | 当前选中的 TTS 模型 ID |
 
 ### 数据目录
 
@@ -185,22 +190,24 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 │   │   ├── seg_001.wav
 │   │   └── ...
 │   └── ...
-└── models/              # 已下载的 ASR 模型（磁盘即注册表）
-    ├── mlx-community--Qwen3-ASR-0.6B-8bit/  # 目录名 = repo.replace("/", "--")
-    │   ├── model-meta.json      # 自描述元数据（下载时写入）
-    │   ├── config.json
-    │   ├── model.safetensors
-    │   ├── tokenizer.json
-    │   └── ...
-    ├── mlx-community--whisper-tiny/
-    └── mlx-community--whisper-large-v3-turbo/
+└── models/              # 已下载模型（磁盘即注册表）
+    ├── asr/             # ASR 模型
+    │   ├── mlx-community--Qwen3-ASR-0.6B-8bit/  # 目录名 = repo.replace("/", "--")
+    │   │   ├── model-meta.json      # 自描述元数据（下载时写入）
+    │   │   ├── config.json
+    │   │   ├── model.safetensors
+    │   │   └── ...
+    │   └── mlx-community--whisper-large-v3-turbo/
+    └── tts/             # TTS 模型
+        └── mlx-community--Kokoro-82M-bf16/
 ```
 
 | 路径 | 说明 |
 |------|------|
 | `capty.db` | SQLite 数据库，存储会话元数据（时间、时长、模型名）和转写字幕段落（时间戳 + 文本） |
 | `audio/<session>/` | 每次录音的音频目录，`full.wav` 是完整录音，`seg_NNN.wav` 是 VAD 分段 |
-| `models/<model-id>/` | 已下载的模型文件，目录名 = `repo.replace("/", "--")`，内含 `model-meta.json` 自描述元数据 |
+| `models/asr/<model-id>/` | 已下载的 ASR 模型文件 |
+| `models/tts/<model-id>/` | 已下载的 TTS 模型文件 |
 
 ## 开发
 
@@ -246,7 +253,7 @@ python -m capty_sidecar.main --models-dir /path/to/your/models --port 8765
 capty-sidecar --models-dir /path/to/your/models --port 8765 --log-level debug
 ```
 
-`--models-dir` 指向数据目录下的 `models/` 文件夹，例如 `~/Desktop/capty/models`。
+`--models-dir` 指向数据目录下的 `models/asr/` 文件夹，例如 `~/Desktop/capty/models/asr`。TTS 模型由 Electron 下载到 `models/tts/`，sidecar 通过 API 接收模型路径。
 
 #### 调试
 
@@ -284,6 +291,20 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (33)
+
+- **模型目录拆分 + TTS Provider 管理** — 完善模型管理和 TTS 设置
+  - 模型目录从 `models/` 拆分为 `models/asr/` + `models/tts/`，启动时自动迁移旧结构
+  - Settings 中 "Speech" tab 改名为 "ASR Providers"
+  - 新增 TTS Providers section（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务
+  - Sidecar TTS Provider 含独立 TTS Model Market（下载/删除/搜索 HuggingFace TTS 模型）
+  - 推荐 TTS 模型：Kokoro 82M (bf16)，支持中英日韩语音合成
+  - 新增 Sidecar `/tts/switch` 和 `/tts/status` endpoints，支持动态切换 TTS 模型
+  - `/v1/audio/speech` endpoint 新增 `model` 字段，支持指定/自动切换 TTS 模型
+  - `tts:speak` handler 改为从 `ttsProviders` 配置读取 URL（不再依赖 asrProviders）
+  - config.json 新增 `ttsProviders` / `selectedTtsProviderId` / `selectedTtsModelId` 字段
+  - TTS 模型支持本地目录路径加载（由 Electron 下载到 `models/tts/`，sidecar 通过 API 接收路径）
 
 ### 2026-03-27 (32)
 

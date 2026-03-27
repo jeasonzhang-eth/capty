@@ -29,6 +29,16 @@ export interface AsrProviderConfig {
   readonly isSidecar: boolean;
 }
 
+export interface TtsProviderConfig {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly voice: string;
+  readonly isSidecar: boolean;
+}
+
 interface SettingsModalProps {
   readonly dataDir: string | null;
   readonly configDir: string | null;
@@ -45,6 +55,14 @@ interface SettingsModalProps {
   readonly asrProviders: readonly AsrProviderConfig[];
   readonly selectedAsrProviderId: string | null;
   readonly sidecarReady: boolean;
+  readonly ttsProviders: readonly TtsProviderConfig[];
+  readonly selectedTtsProviderId: string | null;
+  readonly ttsModels: readonly ModelInfo[];
+  readonly selectedTtsModelId: string;
+  readonly isTtsDownloading: boolean;
+  readonly ttsDownloadingModelId: string | null;
+  readonly ttsDownloadProgress: number;
+  readonly ttsDownloadError: string | null;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
@@ -56,6 +74,14 @@ interface SettingsModalProps {
     asrProviders: AsrProviderConfig[];
     selectedAsrProviderId: string | null;
   }) => void;
+  readonly onSaveTtsSettings: (settings: {
+    ttsProviders: TtsProviderConfig[];
+    selectedTtsProviderId: string | null;
+  }) => void;
+  readonly onSelectTtsModel: (modelId: string) => void;
+  readonly onDownloadTtsModel: (model: ModelInfo) => void;
+  readonly onDeleteTtsModel: (modelId: string) => void;
+  readonly onSearchTtsModels: (query: string) => Promise<ModelInfo[]>;
   readonly onClose: () => void;
 }
 
@@ -146,7 +172,7 @@ const TABS: readonly {
   readonly label: string;
 }[] = [
   { id: "general", icon: "\u2699\ufe0f", label: "General" },
-  { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "Speech" },
+  { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "ASR Providers" },
   { id: "language-models", icon: "\ud83e\udde0", label: "Language Models" },
 ];
 
@@ -176,6 +202,22 @@ const DEFAULT_TYPE_STYLE = {
   bg: "rgba(148, 163, 184, 0.12)",
   color: "#94A3B8",
   label: "ASR",
+};
+
+const TTS_TYPE_STYLES: Record<
+  string,
+  { bg: string; color: string; label: string }
+> = {
+  kokoro: {
+    bg: "rgba(168, 85, 247, 0.12)",
+    color: "#A855F7",
+    label: "Kokoro",
+  },
+};
+const DEFAULT_TTS_TYPE_STYLE = {
+  bg: "rgba(148, 163, 184, 0.12)",
+  color: "#94A3B8",
+  label: "TTS",
 };
 
 function TypeTag({ type }: { readonly type: string }): React.ReactElement {
@@ -1062,6 +1104,19 @@ function SpeechTab({
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
+  ttsProviders,
+  selectedTtsProviderId,
+  ttsModels,
+  selectedTtsModelId,
+  isTtsDownloading,
+  ttsDownloadingModelId,
+  ttsDownloadProgress,
+  ttsDownloadError,
+  onSaveTtsSettings,
+  onSelectTtsModel,
+  onDownloadTtsModel,
+  onDeleteTtsModel,
+  onSearchTtsModels,
 }: {
   readonly asrProviders: readonly AsrProviderConfig[];
   readonly selectedAsrProviderId: string | null;
@@ -1085,6 +1140,22 @@ function SpeechTab({
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly ttsProviders: readonly TtsProviderConfig[];
+  readonly selectedTtsProviderId: string | null;
+  readonly ttsModels: readonly ModelInfo[];
+  readonly selectedTtsModelId: string;
+  readonly isTtsDownloading: boolean;
+  readonly ttsDownloadingModelId: string | null;
+  readonly ttsDownloadProgress: number;
+  readonly ttsDownloadError: string | null;
+  readonly onSaveTtsSettings: (settings: {
+    ttsProviders: TtsProviderConfig[];
+    selectedTtsProviderId: string | null;
+  }) => void;
+  readonly onSelectTtsModel: (modelId: string) => void;
+  readonly onDownloadTtsModel: (model: ModelInfo) => void;
+  readonly onDeleteTtsModel: (modelId: string) => void;
+  readonly onSearchTtsModels: (query: string) => Promise<ModelInfo[]>;
 }): React.ReactElement {
   // Provider list state
   const [providers, setProviders] = useState<AsrProviderConfig[]>([
@@ -1114,6 +1185,27 @@ function SpeechTab({
 
   // Model Market modal state
   const [showModelMarket, setShowModelMarket] = useState(false);
+
+  // TTS Provider state
+  const [ttsProvidersList, setTtsProvidersList] = useState<TtsProviderConfig[]>(
+    [...ttsProviders],
+  );
+  const [selectedTtsId, setSelectedTtsId] = useState<string | null>(
+    selectedTtsProviderId,
+  );
+  const [ttsExpandedId, setTtsExpandedId] = useState<string | null>(null);
+  const [ttsEditForm, setTtsEditForm] = useState({
+    name: "",
+    baseUrl: "",
+    apiKey: "",
+    model: "",
+    voice: "auto",
+  });
+  const [showTtsModelMarket, setShowTtsModelMarket] = useState(false);
+  const [ttsTestResults, setTtsTestResults] = useState<
+    Record<string, { ok: boolean; message: string }>
+  >({});
+  const [ttsTestingId, setTtsTestingId] = useState<string | null>(null);
 
   const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
 
@@ -1281,6 +1373,137 @@ function SpeechTab({
       }
     },
     [providers],
+  );
+
+  // ─── TTS handler functions ───
+
+  const saveTtsProviders = useCallback(
+    (next: TtsProviderConfig[], nextSelectedId: string | null) => {
+      setTtsProvidersList(next);
+      setSelectedTtsId(nextSelectedId);
+      onSaveTtsSettings({
+        ttsProviders: next,
+        selectedTtsProviderId: nextSelectedId,
+      });
+    },
+    [onSaveTtsSettings],
+  );
+
+  const handleAddTtsProvider = useCallback(() => {
+    const id = `tts-ext-${Date.now()}`;
+    const newProvider: TtsProviderConfig = {
+      id,
+      name: "New TTS Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+      voice: "auto",
+      isSidecar: false,
+    };
+    const next = [...ttsProvidersList, newProvider];
+    saveTtsProviders(next, selectedTtsId);
+    setTtsExpandedId(id);
+    setTtsEditForm({
+      name: "New TTS Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+      voice: "auto",
+    });
+  }, [ttsProvidersList, selectedTtsId, saveTtsProviders]);
+
+  const handleUseTtsProvider = useCallback(
+    (providerId: string) => {
+      saveTtsProviders([...ttsProvidersList], providerId);
+    },
+    [ttsProvidersList, saveTtsProviders],
+  );
+
+  const handleToggleTtsExpand = useCallback(
+    (provider: TtsProviderConfig) => {
+      if (ttsExpandedId === provider.id) {
+        setTtsExpandedId(null);
+        return;
+      }
+      setTtsExpandedId(provider.id);
+      setTtsEditForm({
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+        voice: provider.voice,
+      });
+    },
+    [ttsExpandedId],
+  );
+
+  const handleSaveTtsEdit = useCallback(() => {
+    if (!ttsExpandedId) return;
+    const next = ttsProvidersList.map((p) =>
+      p.id === ttsExpandedId
+        ? {
+            ...p,
+            name: p.isSidecar ? p.name : ttsEditForm.name || "External TTS",
+            baseUrl: ttsEditForm.baseUrl,
+            apiKey: ttsEditForm.apiKey,
+            model: p.isSidecar ? p.model : ttsEditForm.model,
+            voice: ttsEditForm.voice,
+          }
+        : p,
+    );
+    saveTtsProviders(next, selectedTtsId);
+  }, [
+    ttsExpandedId,
+    ttsEditForm,
+    ttsProvidersList,
+    selectedTtsId,
+    saveTtsProviders,
+  ]);
+
+  const handleDeleteTtsProvider = useCallback(
+    (providerId: string) => {
+      const next = ttsProvidersList.filter((p) => p.id !== providerId);
+      const nextSelectedId =
+        selectedTtsId === providerId ? (next[0]?.id ?? null) : selectedTtsId;
+      saveTtsProviders(next, nextSelectedId);
+      if (ttsExpandedId === providerId) setTtsExpandedId(null);
+    },
+    [ttsProvidersList, selectedTtsId, ttsExpandedId, saveTtsProviders],
+  );
+
+  const handleTestTtsProvider = useCallback(
+    async (provider: TtsProviderConfig) => {
+      if (provider.isSidecar) {
+        setTtsTestingId(provider.id);
+        try {
+          const result = await window.capty.checkSidecarHealth();
+          setTtsTestResults((prev) => ({
+            ...prev,
+            [provider.id]: {
+              ok: result.online,
+              message: result.online
+                ? "Sidecar is online"
+                : "Sidecar is offline",
+            },
+          }));
+        } catch {
+          setTtsTestResults((prev) => ({
+            ...prev,
+            [provider.id]: { ok: false, message: "Sidecar is offline" },
+          }));
+        } finally {
+          setTtsTestingId(null);
+          setTimeout(() => {
+            setTtsTestResults((prev) => {
+              const next = { ...prev };
+              delete next[provider.id];
+              return next;
+            });
+          }, 5000);
+        }
+      }
+    },
+    [],
   );
 
   return (
@@ -1870,6 +2093,398 @@ function SpeechTab({
           onClose={() => setShowModelMarket(false)}
         />
       )}
+
+      {/* ─── Section 2: TTS Providers ─── */}
+      <div
+        style={{
+          borderTop: "1px solid var(--border)",
+          marginTop: "8px",
+          paddingTop: "16px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "12px",
+          }}
+        >
+          <div style={sectionTitleStyle}>TTS Providers</div>
+          <button
+            onClick={handleAddTtsProvider}
+            disabled={isRecording}
+            style={{
+              ...secondaryBtnStyle,
+              height: "28px",
+              padding: "0 12px",
+              fontSize: "11px",
+              cursor: isRecording ? "not-allowed" : "pointer",
+              opacity: isRecording ? 0.5 : 1,
+            }}
+          >
+            + Add Provider
+          </button>
+        </div>
+
+        {ttsProvidersList.length === 0 && (
+          <div
+            style={{
+              padding: "24px",
+              textAlign: "center",
+              color: "var(--text-muted)",
+              fontSize: "13px",
+              marginBottom: "16px",
+            }}
+          >
+            No TTS providers configured.
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+            marginBottom: "24px",
+          }}
+        >
+          {ttsProvidersList.map((provider) => {
+            const isActive = selectedTtsId === provider.id;
+            const isExpanded = ttsExpandedId === provider.id;
+            const testResult = ttsTestResults[provider.id];
+
+            return (
+              <div
+                key={provider.id}
+                style={{
+                  ...cardStyle,
+                  marginBottom: "0",
+                  borderColor: isActive ? "var(--accent)" : "var(--border)",
+                }}
+              >
+                {/* Provider header */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                    onClick={() => handleToggleTtsExpand(provider)}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          display: "inline-block",
+                          transition: "transform 0.2s",
+                          transform: isExpanded
+                            ? "rotate(0deg)"
+                            : "rotate(-90deg)",
+                          width: "12px",
+                          textAlign: "center" as const,
+                        }}
+                      >
+                        &#9660;
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {provider.name}
+                      </span>
+                      {provider.isSidecar && (
+                        <span
+                          style={{
+                            ...tagStyle,
+                            backgroundColor: "rgba(168, 85, 247, 0.12)",
+                            color: "#A855F7",
+                          }}
+                        >
+                          Sidecar
+                        </span>
+                      )}
+                      {isActive && (
+                        <span
+                          style={{
+                            ...tagStyle,
+                            backgroundColor: "rgba(74, 222, 128, 0.12)",
+                            color: "#4ADE80",
+                          }}
+                        >
+                          Active
+                        </span>
+                      )}
+                      {provider.isSidecar && (
+                        <span
+                          style={{
+                            ...tagStyle,
+                            backgroundColor: sidecarReady
+                              ? "rgba(74, 222, 128, 0.12)"
+                              : "rgba(239, 68, 68, 0.12)",
+                            color: sidecarReady ? "#4ADE80" : "#EF4444",
+                          }}
+                        >
+                          {sidecarReady ? "Online" : "Offline"}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "var(--text-muted)",
+                        marginTop: "4px",
+                        paddingLeft: "18px",
+                      }}
+                    >
+                      {provider.baseUrl || "No URL set"}
+                      {!provider.isSidecar && provider.model
+                        ? ` \u00b7 ${provider.model}`
+                        : ""}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      alignItems: "center",
+                      flexShrink: 0,
+                      marginLeft: "12px",
+                    }}
+                  >
+                    {testResult && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: testResult.ok ? "#4ADE80" : "#EF4444",
+                          maxWidth: "120px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {testResult.message}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleTestTtsProvider(provider)}
+                      disabled={ttsTestingId === provider.id}
+                      style={{
+                        ...secondaryBtnStyle,
+                        height: "26px",
+                        padding: "0 10px",
+                        fontSize: "11px",
+                        cursor:
+                          ttsTestingId === provider.id
+                            ? "not-allowed"
+                            : "pointer",
+                        opacity: ttsTestingId === provider.id ? 0.5 : 1,
+                      }}
+                    >
+                      {ttsTestingId === provider.id ? "Testing..." : "Test"}
+                    </button>
+                    {!isActive && (
+                      <button
+                        onClick={() => handleUseTtsProvider(provider.id)}
+                        disabled={isRecording}
+                        style={{
+                          ...primaryBtnStyle,
+                          height: "26px",
+                          padding: "0 10px",
+                          fontSize: "11px",
+                          cursor: isRecording ? "not-allowed" : "pointer",
+                          opacity: isRecording ? 0.5 : 1,
+                        }}
+                      >
+                        Use
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded panel */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      borderTop: "1px solid var(--border)",
+                      paddingTop: "12px",
+                    }}
+                  >
+                    {provider.isSidecar ? (
+                      <>
+                        <div style={sectionDescStyle}>
+                          TTS models are managed by the local sidecar. Use the
+                          TTS Model Market to download models.
+                        </div>
+                        <button
+                          onClick={() => setShowTtsModelMarket(true)}
+                          style={{ ...primaryBtnStyle, marginBottom: "8px" }}
+                        >
+                          Open TTS Model Market
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px",
+                          }}
+                        >
+                          <div>
+                            <div style={labelStyle}>Name</div>
+                            <input
+                              type="text"
+                              value={ttsEditForm.name}
+                              onChange={(e) =>
+                                setTtsEditForm({
+                                  ...ttsEditForm,
+                                  name: e.target.value,
+                                })
+                              }
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Base URL</div>
+                            <input
+                              type="text"
+                              value={ttsEditForm.baseUrl}
+                              onChange={(e) =>
+                                setTtsEditForm({
+                                  ...ttsEditForm,
+                                  baseUrl: e.target.value,
+                                })
+                              }
+                              placeholder="https://api.example.com/v1"
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div>
+                            <div style={labelStyle}>API Key</div>
+                            <input
+                              type="password"
+                              value={ttsEditForm.apiKey}
+                              onChange={(e) =>
+                                setTtsEditForm({
+                                  ...ttsEditForm,
+                                  apiKey: e.target.value,
+                                })
+                              }
+                              placeholder="sk-..."
+                              style={{ ...inputStyle, fontFamily: "monospace" }}
+                            />
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Model</div>
+                            <input
+                              type="text"
+                              value={ttsEditForm.model}
+                              onChange={(e) =>
+                                setTtsEditForm({
+                                  ...ttsEditForm,
+                                  model: e.target.value,
+                                })
+                              }
+                              placeholder="e.g. tts-1"
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div>
+                            <div style={labelStyle}>Voice</div>
+                            <input
+                              type="text"
+                              value={ttsEditForm.voice}
+                              onChange={(e) =>
+                                setTtsEditForm({
+                                  ...ttsEditForm,
+                                  voice: e.target.value,
+                                })
+                              }
+                              placeholder="auto"
+                              style={inputStyle}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginTop: "4px",
+                            }}
+                          >
+                            <button
+                              onClick={() =>
+                                handleDeleteTtsProvider(provider.id)
+                              }
+                              style={{
+                                ...secondaryBtnStyle,
+                                color: "#EF4444",
+                                borderColor: "rgba(239, 68, 68, 0.3)",
+                              }}
+                            >
+                              Delete
+                            </button>
+                            <button
+                              onClick={handleSaveTtsEdit}
+                              disabled={!ttsEditForm.baseUrl}
+                              style={{
+                                ...primaryBtnStyle,
+                                cursor: !ttsEditForm.baseUrl
+                                  ? "not-allowed"
+                                  : "pointer",
+                                opacity: !ttsEditForm.baseUrl ? 0.5 : 1,
+                              }}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* TTS Model Market Modal */}
+      {showTtsModelMarket && (
+        <ModelMarketModal
+          models={ttsModels}
+          selectedModelId={selectedTtsModelId}
+          isDownloading={isTtsDownloading}
+          downloadingModelId={ttsDownloadingModelId}
+          downloadProgress={ttsDownloadProgress}
+          downloadError={ttsDownloadError}
+          isRecording={isRecording}
+          hfMirrorUrl={hfMirrorUrl}
+          defaultHfUrl={defaultHfUrl}
+          onSelectModel={onSelectTtsModel}
+          onDownloadModel={onDownloadTtsModel}
+          onDeleteModel={onDeleteTtsModel}
+          onSearchModels={onSearchTtsModels}
+          onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+          onClose={() => setShowTtsModelMarket(false)}
+        />
+      )}
     </>
   );
 }
@@ -2376,6 +2991,14 @@ export function SettingsModal({
   asrProviders,
   selectedAsrProviderId,
   sidecarReady,
+  ttsProviders,
+  selectedTtsProviderId,
+  ttsModels,
+  selectedTtsModelId,
+  isTtsDownloading,
+  ttsDownloadingModelId,
+  ttsDownloadProgress,
+  ttsDownloadError,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
@@ -2384,6 +3007,11 @@ export function SettingsModal({
   onChangeHfMirrorUrl,
   onSaveLlmProviders,
   onSaveAsrSettings,
+  onSaveTtsSettings,
+  onSelectTtsModel,
+  onDownloadTtsModel,
+  onDeleteTtsModel,
+  onSearchTtsModels,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -2567,6 +3195,19 @@ export function SettingsModal({
                 onDeleteModel={onDeleteModel}
                 onSearchModels={onSearchModels}
                 onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                ttsProviders={ttsProviders}
+                selectedTtsProviderId={selectedTtsProviderId}
+                ttsModels={ttsModels}
+                selectedTtsModelId={selectedTtsModelId}
+                isTtsDownloading={isTtsDownloading}
+                ttsDownloadingModelId={ttsDownloadingModelId}
+                ttsDownloadProgress={ttsDownloadProgress}
+                ttsDownloadError={ttsDownloadError}
+                onSaveTtsSettings={onSaveTtsSettings}
+                onSelectTtsModel={onSelectTtsModel}
+                onDownloadTtsModel={onDownloadTtsModel}
+                onDeleteTtsModel={onDeleteTtsModel}
+                onSearchTtsModels={onSearchTtsModels}
               />
             )}
             {activeTab === "language-models" && (

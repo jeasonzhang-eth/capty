@@ -147,6 +147,44 @@ const api = {
     opts?: { voice?: string; speed?: number; langCode?: string },
   ) => ipcRenderer.invoke("tts:speak", text, opts) as Promise<ArrayBuffer>,
 
+  // TTS Models
+  listTtsModels: () => ipcRenderer.invoke("tts-models:list"),
+  searchTtsModels: (query: string) =>
+    ipcRenderer.invoke("tts-models:search", query),
+  deleteTtsModel: (modelId: string) =>
+    ipcRenderer.invoke("tts-models:delete", modelId),
+  saveTtsModelMeta: (modelId: string, meta: Record<string, unknown>) =>
+    ipcRenderer.invoke("tts-models:save-meta", modelId, meta),
+  downloadTtsModel: (repo: string, destDir: string) =>
+    ipcRenderer.invoke("tts-models:download", repo, destDir),
+  onTtsDownloadProgress: (
+    callback: (progress: {
+      downloaded: number;
+      total: number;
+      percent: number;
+    }) => void,
+  ) => {
+    ipcRenderer.on("tts-models:download-progress", (_event, progress) =>
+      callback(progress),
+    );
+    return () => {
+      ipcRenderer.removeAllListeners("tts-models:download-progress");
+    };
+  },
+  saveTtsSettings: (settings: {
+    ttsProviders: Array<{
+      id: string;
+      name: string;
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      voice: string;
+      isSidecar: boolean;
+    }>;
+    selectedTtsProviderId: string | null;
+    selectedTtsModelId: string | null;
+  }) => ipcRenderer.invoke("config:save-tts-settings", settings),
+
   // LLM
   testLlmProvider: (provider: {
     baseUrl: string;

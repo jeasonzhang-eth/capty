@@ -10,7 +10,7 @@ import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
 import { createDatabase, migrateUtcToLocal } from "./database";
-import { registerIpcHandlers } from "./ipc-handlers";
+import { registerIpcHandlers, migrateModelsDir } from "./ipc-handlers";
 import { repairWavHeaders } from "./audio-files";
 import Database from "better-sqlite3";
 
@@ -116,9 +116,10 @@ app.whenReady().then(() => {
   // 3c. Repair WAV files left with placeholder headers from abnormal exits
   repairWavHeaders(audioBaseDir);
 
-  // 4. Ensure models directory exists; clean up legacy user-models.json
+  // 4. Ensure models directory exists; migrate flat structure to asr/tts split
   const modelsDir = join(dataDir, "models");
   fs.mkdirSync(modelsDir, { recursive: true });
+  migrateModelsDir(dataDir);
   const legacyUserModels = join(configDir, "user-models.json");
   if (fs.existsSync(legacyUserModels)) {
     try {
