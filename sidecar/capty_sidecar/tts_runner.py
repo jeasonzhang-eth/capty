@@ -188,21 +188,27 @@ class TTSRunner:
         if not plain:
             raise ValueError("Empty text after stripping markdown")
 
-        # Auto-detect language and voice
-        effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
-        effective_voice = _DEFAULT_VOICES.get(effective_lang, "af_heart") if voice == "auto" else voice
-        logger.info("TTS: lang=%s, voice=%s, text_len=%d", effective_lang, effective_voice, len(plain))
-
-        chunks = _split_text(plain, lang=effective_lang)
-        model = self._model
-        loop = asyncio.get_event_loop()
-
         # Check if model directory has a voices/ subdir (Kokoro-style).
-        # If not, skip voice/lang_code params as the model may not support them.
+        # Only Kokoro-style models support voice/lang_code params.
         has_voices_dir = (
             self._model_id is not None
             and Path(self._model_id).joinpath("voices").is_dir()
         )
+
+        # Auto-detect language (used for chunking and Kokoro voice selection)
+        effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
+
+        # Only resolve voice for Kokoro-style models
+        if has_voices_dir:
+            effective_voice = _DEFAULT_VOICES.get(effective_lang, "af_heart") if voice == "auto" else voice
+            logger.info("TTS (Kokoro): lang=%s, voice=%s, text_len=%d", effective_lang, effective_voice, len(plain))
+        else:
+            effective_voice = None
+            logger.info("TTS (generic): model=%s, text_len=%d", self._model_id, len(plain))
+
+        chunks = _split_text(plain, lang=effective_lang)
+        model = self._model
+        loop = asyncio.get_event_loop()
 
         def _generate_all() -> bytes:
             all_audio: list[np.ndarray] = []

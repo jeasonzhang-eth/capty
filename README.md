@@ -309,6 +309,7 @@ pytest
   - 修复中文朗读截断：CJK 文本分块上限从 300 字符降至 120 字符，避免超出 Kokoro 510 phoneme 限制
   - 修复切换模型时旧 voice 残留：切换时立即重置为 "auto"，初始化时校验 voice 有效性
   - 非 Kokoro 模型（如 Qwen3-TTS）不再传递 voice/lang_code 参数，避免参数不兼容
+  - 修复非 Kokoro 模型日志误报 voice：voice 解析移至 `has_voices_dir` 检查之后，非 Kokoro 模型不再解析 Kokoro 默认声音
 
 ### 2026-03-27 (33)
 
