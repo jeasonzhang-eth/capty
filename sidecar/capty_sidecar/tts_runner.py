@@ -11,18 +11,17 @@ import gc
 import io
 import logging
 import re
-import struct
 import wave
 from typing import Optional
 
 import mlx.core as mx
 import numpy as np
 
-from capty_sidecar.model_runner import _mlx_executor, _run_and_cleanup
+from capty_sidecar.model_runner import _mlx_executor
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TTS_MODEL = "prince-canuma/Kokoro-82M"
+DEFAULT_TTS_MODEL = "mlx-community/Kokoro-82M-bf16"
 TTS_SAMPLE_RATE = 24000
 MAX_CHUNK_CHARS = 300
 
@@ -84,10 +83,10 @@ class TTSRunner:
 
     def load(self, model_id: str = DEFAULT_TTS_MODEL) -> None:
         """Load TTS model. Called on the MLX executor thread."""
-        from mlx_audio.tts import load
+        from mlx_audio.tts.utils import load_model
 
         logger.info("Loading TTS model %s", model_id)
-        self._model = load(model_id)
+        self._model = load_model(model_id)
         self._model_id = model_id
         logger.info("TTS model %s loaded successfully", model_id)
 

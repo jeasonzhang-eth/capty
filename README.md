@@ -296,7 +296,7 @@ pytest
   - 同一时间只允许一个卡片播放，点击新卡片自动停止前一个
   - Sidecar 新增 `/v1/audio/speech` TTS endpoint（OpenAI 兼容）
   - 新增 `tts_runner.py` 独立 TTS 模块，与 ASR ModelRunner 分离
-  - pyproject.toml 依赖从 `mlx-audio[stt]` 升级为 `mlx-audio[stt,tts]`
+  - TTS 依赖（misaki/pypinyin/jieba/cn2an 等）直接声明在 pyproject.toml 中
 
 ### 2026-03-27 (31)
 
