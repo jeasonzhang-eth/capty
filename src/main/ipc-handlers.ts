@@ -1570,21 +1570,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     );
     const url = provider?.baseUrl ?? "http://localhost:8765";
 
-    // Guard: check provider reachability first
+    // Guard: check provider reachability first — return empty on failure
     try {
       await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
     } catch {
-      throw new Error(
-        "TTS provider is not available. Check that the sidecar or external TTS server is running.",
-      );
+      return { model: "", voices: [] };
     }
 
-    const resp = await net.fetch(
-      `${url}/tts/voices?model_dir=${encodeURIComponent(modelDir)}`,
-      { signal: AbortSignal.timeout(10000) },
-    );
-    if (!resp.ok) throw new Error(`Failed to fetch voices: ${resp.status}`);
-    return await resp.json();
+    try {
+      const resp = await net.fetch(
+        `${url}/tts/voices?model_dir=${encodeURIComponent(modelDir)}`,
+        { signal: AbortSignal.timeout(10000) },
+      );
+      if (!resp.ok) return { model: "", voices: [] };
+      return await resp.json();
+    } catch {
+      return { model: "", voices: [] };
+    }
   });
 
   // TTS (text-to-speech via provider)

@@ -315,6 +315,7 @@ pytest
   - 上传流程重写：先通过 sidecar 解码为 WAV → 按 15 秒切片 → 逐段调用 `asrTranscribe`（与重新生成字幕相同流程）
   - 每段转录完成后立即在 TranscriptArea 中显示（实时可见），而非等全部处理完才一次性添加
   - 完成后更新 session 的 `durationSeconds`，历史面板正确显示时长
+  - 修复 `tts:list-voices` 在 sidecar 未启动时抛异常导致启动报错，改为优雅返回空列表
 
 ### 2026-03-27 (38)
 
