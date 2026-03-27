@@ -111,6 +111,43 @@ const api = {
     };
   },
 
+  // Download control (pause / resume / cancel)
+  pauseDownload: (modelId: string) =>
+    ipcRenderer.invoke("download:pause", modelId) as Promise<boolean>,
+  resumeDownload: (modelId: string) =>
+    ipcRenderer.invoke("download:resume", modelId) as Promise<void>,
+  cancelDownload: (modelId: string) =>
+    ipcRenderer.invoke("download:cancel", modelId) as Promise<boolean>,
+  getIncompleteDownloads: () =>
+    ipcRenderer.invoke("download:list-incomplete") as Promise<
+      Array<{
+        modelId: string;
+        repo: string;
+        destDir: string;
+        category: "asr" | "tts";
+        percent: number;
+        status: string;
+      }>
+    >,
+  onDownloadEvent: (
+    callback: (progress: {
+      modelId: string;
+      category: "asr" | "tts";
+      downloaded: number;
+      total: number;
+      percent: number;
+      status: string;
+      error?: string;
+    }) => void,
+  ) => {
+    ipcRenderer.on("download:progress", (_event, progress) =>
+      callback(progress),
+    );
+    return () => {
+      ipcRenderer.removeAllListeners("download:progress");
+    };
+  },
+
   // Streaming audio write (crash-safe)
   openAudioStream: (sessionDir: string, fileName: string) =>
     ipcRenderer.invoke("audio:stream-open", sessionDir, fileName),

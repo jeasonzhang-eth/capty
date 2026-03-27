@@ -36,10 +36,10 @@ import {
 } from "./config";
 import { pcmToWav } from "./audio-files";
 import {
+  DownloadManager,
   calcDirSizeGb,
-  downloadModel,
   isModelDownloaded,
-} from "./model-downloader";
+} from "./download/download-manager";
 
 export interface IpcDeps {
   readonly db: Database.Database;
@@ -477,6 +477,43 @@ async function searchHuggingFaceModels(
 
 export function registerIpcHandlers(deps: IpcDeps): void {
   const { db, configDir, getMainWindow } = deps;
+
+  // Download manager — lazily initialized when first download starts
+  let downloadManager: DownloadManager | null = null;
+
+  function getDownloadManager(): DownloadManager {
+    if (!downloadManager) {
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+      const modelsDir = join(dataDir, "models");
+      const win = getMainWindow();
+      downloadManager = new DownloadManager({
+        modelsDir,
+        mirrorUrl: config.hfMirrorUrl ?? undefined,
+        onProgress: (progress) => {
+          const channel =
+            progress.category === "tts"
+              ? "download:progress"
+              : "download:progress";
+          win?.webContents.send(channel, progress);
+          // Also send legacy progress events for backward compatibility
+          const legacyChannel =
+            progress.category === "tts"
+              ? "tts-models:download-progress"
+              : "models:download-progress";
+          win?.webContents.send(legacyChannel, {
+            downloaded: progress.downloaded,
+            total: progress.total,
+            percent: progress.percent,
+          });
+        },
+      });
+    }
+    // Sync mirror URL from config each time
+    const config = readConfig(configDir);
+    downloadManager.setMirrorUrl(config.hfMirrorUrl ?? undefined);
+    return downloadManager;
+  }
 
   // Sessions
   ipcMain.handle("session:create", (_event, modelName: string) => {
@@ -964,22 +1001,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
   });
 
-  // TTS model download
+  // TTS model download (uses DownloadManager)
   ipcMain.handle(
     "tts-models:download",
     async (_event, repo: string, destDir: string) => {
-      const win = getMainWindow();
-      const config = readConfig(configDir);
-      const mirrorUrl = config.hfMirrorUrl ?? undefined;
-
-      await downloadModel(
-        repo,
-        destDir,
-        (progress) => {
-          win?.webContents.send("tts-models:download-progress", progress);
-        },
-        mirrorUrl,
-      );
+      const mgr = getDownloadManager();
+      // Extract model ID from destDir (last path segment)
+      const modelId = destDir.split("/").pop() ?? repo.replace(/\//g, "--");
+      await mgr.download(modelId, repo, destDir, "tts");
     },
   );
 
@@ -1048,24 +1077,36 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     shell.openPath(configDir);
   });
 
-  // Model download
+  // Model download (uses DownloadManager)
   ipcMain.handle(
     "models:download",
     async (_event, repo: string, destDir: string) => {
-      const win = getMainWindow();
-      const config = readConfig(configDir);
-      const mirrorUrl = config.hfMirrorUrl ?? undefined;
-
-      await downloadModel(
-        repo,
-        destDir,
-        (progress) => {
-          win?.webContents.send("models:download-progress", progress);
-        },
-        mirrorUrl,
-      );
+      const mgr = getDownloadManager();
+      const modelId = destDir.split("/").pop() ?? repo.replace(/\//g, "--");
+      await mgr.download(modelId, repo, destDir, "asr");
     },
   );
+
+  // Download control: pause / resume / cancel / list incomplete
+  ipcMain.handle("download:pause", (_event, modelId: string) => {
+    const mgr = getDownloadManager();
+    return mgr.pause(modelId);
+  });
+
+  ipcMain.handle("download:resume", async (_event, modelId: string) => {
+    const mgr = getDownloadManager();
+    await mgr.resumeIncomplete(modelId);
+  });
+
+  ipcMain.handle("download:cancel", (_event, modelId: string) => {
+    const mgr = getDownloadManager();
+    return mgr.cancel(modelId);
+  });
+
+  ipcMain.handle("download:list-incomplete", () => {
+    const mgr = getDownloadManager();
+    return mgr.getIncompleteDownloads();
+  });
 
   // Streaming audio write (crash-safe)
   ipcMain.handle(

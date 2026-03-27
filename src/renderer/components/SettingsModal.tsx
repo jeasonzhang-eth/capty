@@ -55,6 +55,16 @@ interface SettingsModalProps {
   readonly asrProviders: readonly AsrProviderConfig[];
   readonly selectedAsrProviderId: string | null;
   readonly sidecarReady: boolean;
+  readonly downloads: Record<
+    string,
+    {
+      readonly modelId: string;
+      readonly category: "asr" | "tts";
+      readonly percent: number;
+      readonly status: string;
+      readonly error?: string;
+    }
+  >;
   readonly ttsProviders: readonly TtsProviderConfig[];
   readonly selectedTtsProviderId: string | null;
   readonly ttsModels: readonly ModelInfo[];
@@ -74,6 +84,9 @@ interface SettingsModalProps {
     asrProviders: AsrProviderConfig[];
     selectedAsrProviderId: string | null;
   }) => void;
+  readonly onPauseDownload: (modelId: string) => void;
+  readonly onResumeDownload: (modelId: string) => void;
+  readonly onCancelDownload: (modelId: string) => void;
   readonly onSaveTtsSettings: (settings: {
     ttsProviders: TtsProviderConfig[];
     selectedTtsProviderId: string | null;
@@ -258,21 +271,31 @@ function ModelCard({
   isSelected,
   isThisDownloading,
   downloadProgress,
+  downloadStatus,
+  downloadError,
   isRecording,
   isDownloading,
   onDownloadModel,
   onSelectModel,
   onDelete,
+  onPause,
+  onResume,
+  onCancel,
 }: {
   readonly model: ModelInfo;
   readonly isSelected: boolean;
   readonly isThisDownloading: boolean;
   readonly downloadProgress: number;
+  readonly downloadStatus: string | null;
+  readonly downloadError: string | null;
   readonly isRecording: boolean;
   readonly isDownloading: boolean;
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onSelectModel: (id: string) => void;
   readonly onDelete: ((id: string) => void) | null;
+  readonly onPause: ((modelId: string) => void) | null;
+  readonly onResume: ((modelId: string) => void) | null;
+  readonly onCancel: ((modelId: string) => void) | null;
 }): React.ReactElement {
   const canSelect = model.downloaded && !isSelected && !isRecording;
 
@@ -373,24 +396,121 @@ function ModelCard({
             alignItems: "center",
           }}
         >
-          {!model.downloaded && !isThisDownloading && (
+          {/* Not downloaded & not downloading/paused → show Download or Resume */}
+          {!model.downloaded &&
+            !isThisDownloading &&
+            downloadStatus !== "paused" &&
+            downloadStatus !== "failed" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownloadModel(model);
+                }}
+                disabled={isRecording || isDownloading}
+                style={{
+                  ...primaryBtnStyle,
+                  height: "28px",
+                  padding: "0 12px",
+                  fontSize: "11px",
+                  cursor:
+                    isRecording || isDownloading ? "not-allowed" : "pointer",
+                  opacity: isRecording || isDownloading ? 0.5 : 1,
+                }}
+              >
+                Download
+              </button>
+            )}
+          {/* Paused → Resume button */}
+          {downloadStatus === "paused" && onResume && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDownloadModel(model);
+                onResume(model.id);
               }}
-              disabled={isRecording || isDownloading}
               style={{
                 ...primaryBtnStyle,
                 height: "28px",
                 padding: "0 12px",
                 fontSize: "11px",
-                cursor:
-                  isRecording || isDownloading ? "not-allowed" : "pointer",
-                opacity: isRecording || isDownloading ? 0.5 : 1,
               }}
+              title="Resume download"
             >
-              Download
+              &#9654; Resume
+            </button>
+          )}
+          {/* Failed → Retry button */}
+          {downloadStatus === "failed" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadModel(model);
+              }}
+              style={{
+                ...primaryBtnStyle,
+                height: "28px",
+                padding: "0 12px",
+                fontSize: "11px",
+              }}
+              title="Retry download"
+            >
+              &#8635; Retry
+            </button>
+          )}
+          {/* Downloading → Pause button */}
+          {isThisDownloading && downloadStatus === "downloading" && onPause && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPause(model.id);
+              }}
+              style={{
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 8px",
+                fontSize: "11px",
+                color: "var(--text-secondary)",
+              }}
+              title="Pause download"
+            >
+              &#9646;&#9646;
+            </button>
+          )}
+          {/* Downloading or Paused → Cancel button */}
+          {(isThisDownloading || downloadStatus === "paused") && onCancel && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel(model.id);
+              }}
+              style={{
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 8px",
+                fontSize: "11px",
+                color: "var(--danger, #ef4444)",
+              }}
+              title="Cancel download"
+            >
+              &times;
+            </button>
+          )}
+          {/* Failed → Cancel (dismiss) button */}
+          {downloadStatus === "failed" && onCancel && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel(model.id);
+              }}
+              style={{
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 8px",
+                fontSize: "11px",
+                color: "var(--text-muted)",
+              }}
+              title="Dismiss"
+            >
+              &times;
             </button>
           )}
           {isSelected && model.downloaded && (
@@ -431,7 +551,8 @@ function ModelCard({
         </div>
       </div>
 
-      {isThisDownloading && (
+      {/* Download progress bar */}
+      {(isThisDownloading || downloadStatus === "paused") && (
         <div style={{ marginTop: "8px" }}>
           <div
             style={{
@@ -445,7 +566,10 @@ function ModelCard({
               style={{
                 height: "100%",
                 width: `${downloadProgress}%`,
-                backgroundColor: "var(--accent)",
+                backgroundColor:
+                  downloadStatus === "paused"
+                    ? "var(--text-muted)"
+                    : "var(--accent)",
                 transition: "width 0.3s",
                 borderRadius: "2px",
               }}
@@ -453,14 +577,32 @@ function ModelCard({
           </div>
           <div
             style={{
+              display: "flex",
+              justifyContent: "space-between",
               fontSize: "10px",
               color: "var(--text-muted)",
-              textAlign: "right",
               marginTop: "4px",
             }}
           >
-            {Math.round(downloadProgress)}%
+            <span>
+              {downloadStatus === "paused" ? "Paused" : "Downloading..."}
+            </span>
+            <span>{Math.round(downloadProgress)}%</span>
           </div>
+        </div>
+      )}
+
+      {/* Download error message */}
+      {downloadStatus === "failed" && downloadError && (
+        <div
+          style={{
+            marginTop: "6px",
+            fontSize: "10px",
+            color: "var(--danger, #ef4444)",
+            lineHeight: "14px",
+          }}
+        >
+          {downloadError}
         </div>
       )}
     </div>
@@ -479,11 +621,15 @@ function ModelMarketModal({
   isRecording,
   hfMirrorUrl,
   defaultHfUrl,
+  downloads,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
+  onPauseDownload,
+  onResumeDownload,
+  onCancelDownload,
   onClose,
 }: {
   readonly models: readonly ModelInfo[];
@@ -495,11 +641,24 @@ function ModelMarketModal({
   readonly isRecording: boolean;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly downloads: Record<
+    string,
+    {
+      modelId: string;
+      category: string;
+      percent: number;
+      status: string;
+      error?: string;
+    }
+  >;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly onPauseDownload: (modelId: string) => void;
+  readonly onResumeDownload: (modelId: string) => void;
+  readonly onCancelDownload: (modelId: string) => void;
   readonly onClose: () => void;
 }): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState("");
@@ -805,12 +964,19 @@ function ModelMarketModal({
                 isThisDownloading={
                   isDownloading && downloadingModelId === model.id
                 }
-                downloadProgress={downloadProgress}
+                downloadProgress={
+                  downloads[model.id]?.percent ?? downloadProgress
+                }
+                downloadStatus={downloads[model.id]?.status ?? null}
+                downloadError={downloads[model.id]?.error ?? null}
                 isRecording={isRecording}
                 isDownloading={isDownloading}
                 onDownloadModel={onDownloadModel}
                 onSelectModel={onSelectModel}
                 onDelete={handleDeleteModel}
+                onPause={onPauseDownload}
+                onResume={onResumeDownload}
+                onCancel={onCancelDownload}
               />
             ))}
           </div>
@@ -835,12 +1001,19 @@ function ModelMarketModal({
                     isThisDownloading={
                       isDownloading && downloadingModelId === model.id
                     }
-                    downloadProgress={downloadProgress}
+                    downloadProgress={
+                      downloads[model.id]?.percent ?? downloadProgress
+                    }
+                    downloadStatus={downloads[model.id]?.status ?? null}
+                    downloadError={downloads[model.id]?.error ?? null}
                     isRecording={isRecording}
                     isDownloading={isDownloading}
                     onDownloadModel={onDownloadModel}
                     onSelectModel={onSelectModel}
                     onDelete={null}
+                    onPause={onPauseDownload}
+                    onResume={onResumeDownload}
+                    onCancel={onCancelDownload}
                   />
                 ))}
               </div>
@@ -866,12 +1039,19 @@ function ModelMarketModal({
                     isThisDownloading={
                       isDownloading && downloadingModelId === model.id
                     }
-                    downloadProgress={downloadProgress}
+                    downloadProgress={
+                      downloads[model.id]?.percent ?? downloadProgress
+                    }
+                    downloadStatus={downloads[model.id]?.status ?? null}
+                    downloadError={downloads[model.id]?.error ?? null}
                     isRecording={isRecording}
                     isDownloading={isDownloading}
                     onDownloadModel={onDownloadModel}
                     onSelectModel={onSelectModel}
                     onDelete={null}
+                    onPause={onPauseDownload}
+                    onResume={onResumeDownload}
+                    onCancel={onCancelDownload}
                   />
                 ))}
                 {hasSearched && !isSearching && searchResults.length === 0 && (
@@ -1099,12 +1279,16 @@ function SpeechTab({
   downloadError,
   hfMirrorUrl,
   defaultHfUrl,
+  downloads,
   onSaveAsrSettings,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
   onChangeHfMirrorUrl,
+  onPauseDownload,
+  onResumeDownload,
+  onCancelDownload,
 }: {
   readonly asrProviders: readonly AsrProviderConfig[];
   readonly selectedAsrProviderId: string | null;
@@ -1119,6 +1303,16 @@ function SpeechTab({
   readonly downloadError: string | null;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly downloads: Record<
+    string,
+    {
+      modelId: string;
+      category: string;
+      percent: number;
+      status: string;
+      error?: string;
+    }
+  >;
   readonly onSaveAsrSettings: (settings: {
     asrProviders: AsrProviderConfig[];
     selectedAsrProviderId: string | null;
@@ -1128,6 +1322,9 @@ function SpeechTab({
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly onPauseDownload: (modelId: string) => void;
+  readonly onResumeDownload: (modelId: string) => void;
+  readonly onCancelDownload: (modelId: string) => void;
 }): React.ReactElement {
   // Provider list state
   const [providers, setProviders] = useState<AsrProviderConfig[]>([
@@ -1902,11 +2099,15 @@ function SpeechTab({
           isRecording={isRecording}
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={defaultHfUrl}
+          downloads={downloads}
           onSelectModel={onSelectModel}
           onDownloadModel={onDownloadModel}
           onDeleteModel={onDeleteModel}
           onSearchModels={onSearchModels}
           onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+          onPauseDownload={onPauseDownload}
+          onResumeDownload={onResumeDownload}
+          onCancelDownload={onCancelDownload}
           onClose={() => setShowModelMarket(false)}
         />
       )}
@@ -1929,12 +2130,16 @@ function TtsTab({
   ttsDownloadError,
   hfMirrorUrl,
   defaultHfUrl,
+  downloads,
   onSaveTtsSettings,
   onSelectTtsModel,
   onDownloadTtsModel,
   onDeleteTtsModel,
   onSearchTtsModels,
   onChangeHfMirrorUrl,
+  onPauseDownload,
+  onResumeDownload,
+  onCancelDownload,
 }: {
   readonly ttsProviders: readonly TtsProviderConfig[];
   readonly selectedTtsProviderId: string | null;
@@ -1948,6 +2153,16 @@ function TtsTab({
   readonly ttsDownloadError: string | null;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly downloads: Record<
+    string,
+    {
+      modelId: string;
+      category: string;
+      percent: number;
+      status: string;
+      error?: string;
+    }
+  >;
   readonly onSaveTtsSettings: (settings: {
     ttsProviders: TtsProviderConfig[];
     selectedTtsProviderId: string | null;
@@ -1957,6 +2172,9 @@ function TtsTab({
   readonly onDeleteTtsModel: (modelId: string) => void;
   readonly onSearchTtsModels: (query: string) => Promise<ModelInfo[]>;
   readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly onPauseDownload: (modelId: string) => void;
+  readonly onResumeDownload: (modelId: string) => void;
+  readonly onCancelDownload: (modelId: string) => void;
 }): React.ReactElement {
   const [providers, setProviders] = useState<TtsProviderConfig[]>([
     ...initialProviders,
@@ -2517,11 +2735,15 @@ function TtsTab({
           isRecording={isRecording}
           hfMirrorUrl={hfMirrorUrl}
           defaultHfUrl={defaultHfUrl}
+          downloads={downloads}
           onSelectModel={onSelectTtsModel}
           onDownloadModel={onDownloadTtsModel}
           onDeleteModel={onDeleteTtsModel}
           onSearchModels={onSearchTtsModels}
           onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+          onPauseDownload={onPauseDownload}
+          onResumeDownload={onResumeDownload}
+          onCancelDownload={onCancelDownload}
           onClose={() => setShowModelMarket(false)}
         />
       )}
@@ -3229,12 +3451,16 @@ export function SettingsModal({
                 downloadError={downloadError}
                 hfMirrorUrl={hfMirrorUrl}
                 defaultHfUrl={defaultHfUrl}
+                downloads={downloads}
                 onSaveAsrSettings={onSaveAsrSettings}
                 onSelectModel={onSelectModel}
                 onDownloadModel={onDownloadModel}
                 onDeleteModel={onDeleteModel}
                 onSearchModels={onSearchModels}
                 onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                onPauseDownload={onPauseDownload}
+                onResumeDownload={onResumeDownload}
+                onCancelDownload={onCancelDownload}
               />
             )}
             {activeTab === "tts" && (
@@ -3251,12 +3477,16 @@ export function SettingsModal({
                 ttsDownloadError={ttsDownloadError}
                 hfMirrorUrl={hfMirrorUrl}
                 defaultHfUrl={defaultHfUrl}
+                downloads={downloads}
                 onSaveTtsSettings={onSaveTtsSettings}
                 onSelectTtsModel={onSelectTtsModel}
                 onDownloadTtsModel={onDownloadTtsModel}
                 onDeleteTtsModel={onDeleteTtsModel}
                 onSearchTtsModels={onSearchTtsModels}
                 onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                onPauseDownload={onPauseDownload}
+                onResumeDownload={onResumeDownload}
+                onCancelDownload={onCancelDownload}
               />
             )}
             {activeTab === "language-models" && (

@@ -89,13 +89,31 @@ function App(): React.JSX.Element {
   const [regenerationProgress, setRegenerationProgress] = useState(0);
   const cancelRegenerationRef = useRef(false);
 
-  // ASR Model download state
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
-    null,
+  // Unified download tracking (supports multi-model, pause/cancel)
+  interface DownloadInfo {
+    readonly modelId: string;
+    readonly category: "asr" | "tts";
+    readonly percent: number;
+    readonly status: string; // downloading | paused | failed | completed | pending
+    readonly error?: string;
+  }
+  const [downloads, setDownloads] = useState<Record<string, DownloadInfo>>({});
+
+  // Derive ASR download state for backward compatibility
+  const asrDownloadEntries = Object.values(downloads).filter(
+    (d) =>
+      d.category === "asr" &&
+      (d.status === "downloading" || d.status === "paused"),
   );
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const isDownloading = asrDownloadEntries.some(
+    (d) => d.status === "downloading",
+  );
+  const downloadingModelId = asrDownloadEntries[0]?.modelId ?? null;
+  const downloadProgress = asrDownloadEntries[0]?.percent ?? 0;
+  const downloadError =
+    Object.values(downloads).find(
+      (d) => d.category === "asr" && d.status === "failed",
+    )?.error ?? null;
 
   // TTS state
   const [ttsProviders, setTtsProviders] = useState<TtsProviderConfig[]>([]);
@@ -119,12 +137,21 @@ function App(): React.JSX.Element {
   const [ttsVoices, setTtsVoices] = useState<
     Array<{ id: string; name: string; lang: string; gender: string }>
   >([]);
-  const [isTtsDownloading, setIsTtsDownloading] = useState(false);
-  const [ttsDownloadingModelId, setTtsDownloadingModelId] = useState<
-    string | null
-  >(null);
-  const [ttsDownloadProgress, setTtsDownloadProgress] = useState(0);
-  const [ttsDownloadError, setTtsDownloadError] = useState<string | null>(null);
+  // Derive TTS download state for backward compatibility
+  const ttsDownloadEntries = Object.values(downloads).filter(
+    (d) =>
+      d.category === "tts" &&
+      (d.status === "downloading" || d.status === "paused"),
+  );
+  const isTtsDownloading = ttsDownloadEntries.some(
+    (d) => d.status === "downloading",
+  );
+  const ttsDownloadingModelId = ttsDownloadEntries[0]?.modelId ?? null;
+  const ttsDownloadProgress = ttsDownloadEntries[0]?.percent ?? 0;
+  const ttsDownloadError =
+    Object.values(downloads).find(
+      (d) => d.category === "tts" && d.status === "failed",
+    )?.error ?? null;
 
   // Config directory path
   const [configDir, setConfigDir] = useState<string | null>(null);
@@ -161,6 +188,49 @@ function App(): React.JSX.Element {
   const [zoomFactor, setZoomFactor] = useState(1.0);
   const layoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Subscribe to unified download events (manages the `downloads` state)
+  useEffect(() => {
+    const unsubscribe = window.capty.onDownloadEvent((progress) => {
+      setDownloads((prev) => {
+        if (progress.status === "completed") {
+          // Remove completed downloads from tracking
+          const next = { ...prev };
+          delete next[progress.modelId];
+          return next;
+        }
+        return {
+          ...prev,
+          [progress.modelId]: {
+            modelId: progress.modelId,
+            category: progress.category,
+            percent: progress.percent,
+            status: progress.status,
+            error: progress.error,
+          },
+        };
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  // Check for incomplete downloads on startup
+  useEffect(() => {
+    if (!store.dataDir) return;
+    window.capty.getIncompleteDownloads().then((incompletes) => {
+      if (incompletes.length === 0) return;
+      const initial: Record<string, DownloadInfo> = {};
+      for (const d of incompletes) {
+        initial[d.modelId] = {
+          modelId: d.modelId,
+          category: d.category,
+          percent: d.percent,
+          status: d.status,
+        };
+      }
+      setDownloads((prev) => ({ ...prev, ...initial }));
+    });
+  }, [store.dataDir]);
+
   const handleDownloadModel = useCallback(async () => {
     const model = store.models.find(
       (m: { id: string }) => m.id === store.selectedModelId,
@@ -170,13 +240,15 @@ function App(): React.JSX.Element {
     const dataDir = store.dataDir;
     if (!dataDir) return;
 
-    setIsDownloading(true);
-    setDownloadingModelId(model.id);
-    setDownloadProgress(0);
-
-    const unsubscribe = window.capty.onDownloadProgress((progress) => {
-      setDownloadProgress(progress.percent);
-    });
+    setDownloads((prev) => ({
+      ...prev,
+      [model.id]: {
+        modelId: model.id,
+        category: "asr" as const,
+        percent: 0,
+        status: "downloading",
+      },
+    }));
 
     try {
       const destDir = `${dataDir}/models/asr/${model.id}`;
@@ -188,10 +260,11 @@ function App(): React.JSX.Element {
     } catch (err) {
       console.error("Failed to download model:", err);
     } finally {
-      unsubscribe();
-      setIsDownloading(false);
-      setDownloadingModelId(null);
-      setDownloadProgress(0);
+      setDownloads((prev) => {
+        const next = { ...prev };
+        delete next[model.id];
+        return next;
+      });
     }
   }, [store, isDownloading]);
 
@@ -868,19 +941,20 @@ function App(): React.JSX.Element {
       readonly languages: readonly string[];
       readonly description: string;
     }) => {
-      if (isDownloading) return;
+      if (downloads[model.id]?.status === "downloading") return;
 
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
-      setIsDownloading(true);
-      setDownloadingModelId(model.id);
-      setDownloadProgress(0);
-      setDownloadError(null);
-
-      const unsubscribe = window.capty.onDownloadProgress((progress) => {
-        setDownloadProgress(progress.percent);
-      });
+      setDownloads((prev) => ({
+        ...prev,
+        [model.id]: {
+          modelId: model.id,
+          category: "asr" as const,
+          percent: 0,
+          status: "downloading",
+        },
+      }));
 
       try {
         const destDir = `${dataDir}/models/asr/${model.id}`;
@@ -906,15 +980,24 @@ function App(): React.JSX.Element {
             ? err.message
             : "Download failed. Check network.";
         console.error("Failed to download model:", err);
-        setDownloadError(msg);
-      } finally {
-        unsubscribe();
-        setIsDownloading(false);
-        setDownloadingModelId(null);
-        setDownloadProgress(0);
+        setDownloads((prev) => ({
+          ...prev,
+          [model.id]: {
+            ...prev[model.id],
+            status: "failed",
+            error: msg,
+          },
+        }));
+        return; // Don't clean up so error shows in UI
       }
+      // Clean up on success
+      setDownloads((prev) => {
+        const next = { ...prev };
+        delete next[model.id];
+        return next;
+      });
     },
-    [store, isDownloading],
+    [store, downloads],
   );
 
   const handleDeleteModel = useCallback(
@@ -1055,18 +1138,19 @@ function App(): React.JSX.Element {
       readonly languages: readonly string[];
       readonly description: string;
     }) => {
-      if (isTtsDownloading) return;
+      if (downloads[model.id]?.status === "downloading") return;
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
-      setIsTtsDownloading(true);
-      setTtsDownloadingModelId(model.id);
-      setTtsDownloadProgress(0);
-      setTtsDownloadError(null);
-
-      const unsubscribe = window.capty.onTtsDownloadProgress((progress) => {
-        setTtsDownloadProgress(progress.percent);
-      });
+      setDownloads((prev) => ({
+        ...prev,
+        [model.id]: {
+          modelId: model.id,
+          category: "tts" as const,
+          percent: 0,
+          status: "downloading",
+        },
+      }));
 
       try {
         const destDir = `${dataDir}/models/tts/${model.id}`;
@@ -1103,16 +1187,82 @@ function App(): React.JSX.Element {
             ? err.message
             : "Download failed. Check network.";
         console.error("Failed to download TTS model:", err);
-        setTtsDownloadError(msg);
+        setDownloads((prev) => ({
+          ...prev,
+          [model.id]: {
+            ...prev[model.id],
+            status: "failed",
+            error: msg,
+          },
+        }));
+        return;
+      }
+      // Clean up on success
+      setDownloads((prev) => {
+        const next = { ...prev };
+        delete next[model.id];
+        return next;
+      });
+    },
+    [store, downloads],
+  );
+
+  // Download control handlers (pause / resume / cancel)
+  const handlePauseDownload = useCallback(async (modelId: string) => {
+    await window.capty.pauseDownload(modelId);
+    setDownloads((prev) => ({
+      ...prev,
+      [modelId]: { ...prev[modelId], status: "paused" },
+    }));
+  }, []);
+
+  const handleResumeDownload = useCallback(
+    async (modelId: string) => {
+      const dl = downloads[modelId];
+      if (!dl) return;
+      setDownloads((prev) => ({
+        ...prev,
+        [modelId]: { ...prev[modelId], status: "downloading" },
+      }));
+      try {
+        await window.capty.resumeDownload(modelId);
+        // On success, refresh model lists
+        const models = await window.capty.listModels();
+        store.setModels(models as Parameters<typeof store.setModels>[0]);
+        const ttsList = await window.capty.listTtsModels();
+        setTtsModels(
+          ttsList as Array<{
+            id: string;
+            name: string;
+            type: string;
+            repo: string;
+            downloaded: boolean;
+            size_gb: number;
+            languages: readonly string[];
+            description: string;
+          }>,
+        );
+      } catch (err) {
+        console.error("Failed to resume download:", err);
       } finally {
-        unsubscribe();
-        setIsTtsDownloading(false);
-        setTtsDownloadingModelId(null);
-        setTtsDownloadProgress(0);
+        setDownloads((prev) => {
+          const next = { ...prev };
+          delete next[modelId];
+          return next;
+        });
       }
     },
-    [store, isTtsDownloading],
+    [store, downloads],
   );
+
+  const handleCancelDownload = useCallback(async (modelId: string) => {
+    await window.capty.cancelDownload(modelId);
+    setDownloads((prev) => {
+      const next = { ...prev };
+      delete next[modelId];
+      return next;
+    });
+  }, []);
 
   const handleDeleteTtsModel = useCallback(
     async (modelId: string) => {
@@ -1481,6 +1631,7 @@ function App(): React.JSX.Element {
           asrProviders={store.asrProviders}
           selectedAsrProviderId={store.selectedAsrProviderId}
           sidecarReady={store.sidecarReady}
+          downloads={downloads}
           onChangeDataDir={handleChangeDataDir}
           onSelectModel={handleSelectModel}
           onDownloadModel={handleSettingsDownloadModel}
@@ -1489,6 +1640,9 @@ function App(): React.JSX.Element {
           onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
           onSaveLlmProviders={handleSaveLlmProviders}
           onSaveAsrSettings={handleSaveAsrSettings}
+          onPauseDownload={handlePauseDownload}
+          onResumeDownload={handleResumeDownload}
+          onCancelDownload={handleCancelDownload}
           ttsProviders={ttsProviders}
           selectedTtsProviderId={selectedTtsProviderId}
           ttsModels={ttsModels}

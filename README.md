@@ -18,6 +18,13 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **设置页面** — macOS 系统设置风格左侧边栏导航，固定高度（85vh）弹窗，4 个页面：General（数据目录、配置目录）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — Obsidian 社区插件风格独立全屏模态框：Settings 中 Sidecar 卡片仅显示 "Model Market" 入口 + 已安装数量 + "Browse" 按钮；点击 Browse 弹出 720px 宽模态框，分三组显示（Installed / Recommended / Search Results）；推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
+- **下载管理器** — 模块化下载架构（DownloadManager → ModelDownloadTask → FileDownloadTask）支持：
+  - **并发下载**：每模型最多 3 个文件并行下载，最多 2 个模型同时下载
+  - **暂停/恢复/取消**：下载中可暂停（保留进度），恢复时从断点继续；取消时清理文件
+  - **崩溃恢复**：下载状态以 JSON 持久化到 `.downloads/` 目录，应用重启后自动检测未完成的下载并提示恢复
+  - **HTTP Range 续传**：每个文件支持断点续传，网络中断后重新连接从已下载位置继续
+  - **智能重试**：每个文件最多 3 次重试，指数退避（2s/4s/6s），30 秒无数据超时保护
+  - **统一 UI**：ModelCard 实时显示下载进度 + 暂停/取消按钮，失败时显示错误信息 + 重试按钮
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），直接复制原始文件并通过 sidecar 转录（无需 ffmpeg）
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
@@ -87,7 +94,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 
 1. 前端通过 `window.capty.listModels()` → IPC → 主进程扫描 `models/asr/` 目录获取已下载模型 + 读取 `recommended-models.json` 获取推荐模型（TTS 模型同理，扫描 `models/tts/`）
 2. 每个模型目录内含 `model-meta.json` 自描述元数据，fallback 从目录名 + `config.json` 推断
-3. 下载模型：主进程通过 HuggingFace API 获取文件列表，逐文件下载到 `models/` 目录，完成后写入 `model-meta.json`
+3. 下载模型：DownloadManager 通过 HuggingFace API 获取文件列表，并发下载（每模型最多 3 文件并行，最多 2 个模型同时下载）到 `models/` 目录，支持暂停/恢复/取消，崩溃后自动恢复未完成的下载
 4. 删除模型：直接删除模型目录，无需操作任何 JSON 注册表
 5. 切换模型：前端更新 `config.json`，下次录音时 HTTP 请求的 `model` 字段携带新的 model ID
 
@@ -102,7 +109,12 @@ src/
 │   ├── audio-files.ts   # 音频文件读写/删除
 │   ├── config.ts        # 应用配置管理
 │   ├── export.ts        # TXT/SRT/Markdown 导出
-│   └── model-downloader.ts
+│   └── download/        # 模型下载管理模块
+│       ├── types.ts           # 类型定义
+│       ├── download-state.ts  # 状态持久化（JSON）
+│       ├── file-download-task.ts   # 单文件下载（Range 续传 + 重试）
+│       ├── model-download-task.ts  # 单模型下载任务（多文件并发）
+│       └── download-manager.ts     # 下载管理器（并发控制 + 暂停/恢复/取消）
 ├── preload/             # contextBridge API
 │   └── index.ts
 ├── renderer/            # React 前端
@@ -192,6 +204,8 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 │   │   └── ...
 │   └── ...
 └── models/              # 已下载模型（磁盘即注册表）
+    ├── .downloads/      # 下载状态持久化（崩溃恢复用）
+    │   └── <model-id>.json  # 单个模型的下载进度快照
     ├── asr/             # ASR 模型
     │   ├── mlx-community--Qwen3-ASR-0.6B-8bit/  # 目录名 = repo.replace("/", "--")
     │   │   ├── model-meta.json      # 自描述元数据（下载时写入）
@@ -292,6 +306,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (37)
+
+- **下载管理器重构** — 从单文件顺序下载升级为模块化并发下载架构
+  - 新建 `src/main/download/` 模块：`types.ts`、`download-state.ts`、`file-download-task.ts`、`model-download-task.ts`、`download-manager.ts`
+  - **并发下载**：每模型最多 3 文件并行（内置 concurrency limiter，无外部依赖），系统级最多 2 模型同时下载
+  - **暂停/恢复/取消**：AbortController 控制的优雅暂停（保留部分文件），恢复时 HTTP Range 续传从断点继续
+  - **崩溃恢复**：下载状态以 JSON 持久化到 `<models-dir>/.downloads/<model-id>.json`，每 5% 或 10s 写入一次；启动时扫描 `.downloads/` 检测未完成下载
+  - **统一前端状态**：ASR 和 TTS 下载统一为 `downloads` Record，通过 `download:progress` IPC 事件实时更新
+  - **UI 增强**：ModelCard 进度条旁新增 ⏸ 暂停 / ✕ 取消按钮；暂停时显示 "Paused" + ▶ 恢复按钮；失败时显示错误信息 + 🔄 重试按钮
+  - 新增 4 个 IPC handler：`download:pause`、`download:resume`、`download:cancel`、`download:list-incomplete`
+  - 新增 preload API：`pauseDownload`、`resumeDownload`、`cancelDownload`、`getIncompleteDownloads`、`onDownloadEvent`
+  - 删除旧 `model-downloader.ts`（437 行），由新 download 模块替代
 
 ### 2026-03-27 (36)
 
