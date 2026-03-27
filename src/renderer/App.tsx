@@ -115,6 +115,10 @@ function App(): React.JSX.Element {
     }>
   >([]);
   const [selectedTtsModelId, setSelectedTtsModelId] = useState("");
+  const [selectedTtsVoice, setSelectedTtsVoice] = useState("auto");
+  const [ttsVoices, setTtsVoices] = useState<
+    Array<{ id: string; name: string; lang: string; gender: string }>
+  >([]);
   const [isTtsDownloading, setIsTtsDownloading] = useState(false);
   const [ttsDownloadingModelId, setTtsDownloadingModelId] = useState<
     string | null
@@ -303,6 +307,10 @@ function App(): React.JSX.Element {
         if (savedTtsModelId) {
           setSelectedTtsModelId(savedTtsModelId);
         }
+        const savedTtsVoice = config.selectedTtsVoice as string | undefined;
+        if (savedTtsVoice) {
+          setSelectedTtsVoice(savedTtsVoice);
+        }
 
         // Check sidecar health
         try {
@@ -358,11 +366,25 @@ function App(): React.JSX.Element {
             }>,
           );
           // Auto-select first downloaded TTS model if none selected
-          if (!savedTtsModelId) {
-            const firstDownloaded = (
-              ttsList as Array<{ id: string; downloaded: boolean }>
-            ).find((m) => m.downloaded);
-            if (firstDownloaded) setSelectedTtsModelId(firstDownloaded.id);
+          const effectiveTtsModelId =
+            savedTtsModelId ??
+            (ttsList as Array<{ id: string; downloaded: boolean }>).find(
+              (m) => m.downloaded,
+            )?.id;
+          if (!savedTtsModelId && effectiveTtsModelId) {
+            setSelectedTtsModelId(effectiveTtsModelId);
+          }
+
+          // Fetch voice list for the selected TTS model
+          if (effectiveTtsModelId && dataDir) {
+            try {
+              const voiceResult = await window.capty.ttsListVoices(
+                `${dataDir}/models/tts/${effectiveTtsModelId}`,
+              );
+              setTtsVoices(voiceResult.voices);
+            } catch {
+              // Voice listing not available
+            }
           }
         } catch {
           // TTS models not available yet
@@ -908,6 +930,41 @@ function App(): React.JSX.Element {
     [ttsProviders, selectedTtsProviderId],
   );
 
+  const handleChangeTtsVoice = useCallback(async (voice: string) => {
+    setSelectedTtsVoice(voice);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
+  }, []);
+
+  const handleChangeTtsModelForPlay = useCallback(
+    async (modelId: string) => {
+      setSelectedTtsModelId(modelId);
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({ ...config, selectedTtsModelId: modelId });
+      // Refresh voice list for the new model
+      const dataDir = store.dataDir;
+      if (!dataDir) return;
+      try {
+        const result = await window.capty.ttsListVoices(
+          `${dataDir}/models/tts/${modelId}`,
+        );
+        setTtsVoices(result.voices);
+        // Reset voice to auto if current voice not in new list
+        if (!result.voices.some((v) => v.id === selectedTtsVoice)) {
+          setSelectedTtsVoice("auto");
+          await window.capty.setConfig({
+            ...config,
+            selectedTtsModelId: modelId,
+            selectedTtsVoice: "auto",
+          });
+        }
+      } catch {
+        setTtsVoices([]);
+      }
+    },
+    [store.dataDir, selectedTtsVoice],
+  );
+
   const handleDownloadTtsModel = useCallback(
     async (model: {
       readonly id: string;
@@ -1262,10 +1319,16 @@ function App(): React.JSX.Element {
           promptTypes={promptTypes}
           activePromptType={activePromptType}
           initialWidth={summaryPanelWidth}
+          ttsModels={ttsModels.filter((m) => m.downloaded)}
+          selectedTtsModelId={selectedTtsModelId}
+          selectedTtsVoice={selectedTtsVoice}
+          ttsVoices={ttsVoices}
           onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}
           onSavePromptTypes={handleSavePromptTypes}
+          onChangeTtsModel={handleChangeTtsModelForPlay}
+          onChangeTtsVoice={handleChangeTtsVoice}
         />
       </div>
       {audioPlayer.playingSessionId !== null && (

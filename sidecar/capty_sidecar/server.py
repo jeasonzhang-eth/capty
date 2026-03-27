@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
 from capty_sidecar.model_runner import ModelRunner, _mlx_executor as _mlx_executor
-from capty_sidecar.tts_runner import TTSRunner
+from capty_sidecar.tts_runner import TTSRunner, list_voices
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +180,14 @@ def create_app(models_dir: str) -> FastAPI:
     # ------------------------------------------------------------------
     # OpenAI-compatible TTS API
     # ------------------------------------------------------------------
+
+    @app.get("/tts/voices")
+    async def tts_voices(model_dir: str = ""):
+        """List available voices for a TTS model by scanning local directory."""
+        if not model_dir:
+            return {"model": "", "voices": []}
+        voices = list_voices(model_dir)
+        return {"model": Path(model_dir).name, "voices": voices}
 
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):

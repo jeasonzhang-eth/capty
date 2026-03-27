@@ -142,6 +142,11 @@ const api = {
     ipcRenderer.invoke("export:save-file", defaultName, content),
 
   // TTS
+  ttsListVoices: (modelDir: string) =>
+    ipcRenderer.invoke("tts:list-voices", modelDir) as Promise<{
+      model: string;
+      voices: Array<{ id: string; name: string; lang: string; gender: string }>;
+    }>,
   ttsSpeak: (
     text: string,
     opts?: { voice?: string; speed?: number; langCode?: string },

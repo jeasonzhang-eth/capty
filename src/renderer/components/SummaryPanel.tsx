@@ -25,6 +25,20 @@ export interface Summary {
   readonly created_at: string;
 }
 
+interface TtsModelInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly type: string;
+  readonly downloaded: boolean;
+}
+
+interface TtsVoiceInfo {
+  readonly id: string;
+  readonly name: string;
+  readonly lang: string;
+  readonly gender: string;
+}
+
 interface SummaryPanelProps {
   readonly summaries: readonly Summary[];
   readonly isGenerating: boolean;
@@ -37,10 +51,16 @@ interface SummaryPanelProps {
   readonly promptTypes: readonly PromptType[];
   readonly activePromptType: string;
   readonly initialWidth: number;
+  readonly ttsModels: readonly TtsModelInfo[];
+  readonly selectedTtsModelId: string;
+  readonly selectedTtsVoice: string;
+  readonly ttsVoices: readonly TtsVoiceInfo[];
   readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (providerId: string, promptType: string) => void;
   readonly onChangePromptType: (promptType: string) => void;
   readonly onSavePromptTypes: (types: PromptType[]) => void;
+  readonly onChangeTtsModel: (modelId: string) => void;
+  readonly onChangeTtsVoice: (voice: string) => void;
 }
 
 const MIN_WIDTH = 220;
@@ -75,10 +95,16 @@ export function SummaryPanel({
   promptTypes,
   activePromptType,
   initialWidth,
+  ttsModels,
+  selectedTtsModelId,
+  selectedTtsVoice,
+  ttsVoices,
   onWidthChange,
   onSummarize,
   onChangePromptType,
   onSavePromptTypes,
+  onChangeTtsModel,
+  onChangeTtsVoice,
 }: SummaryPanelProps): React.ReactElement {
   // Only show configured providers in the dropdown
   const configuredProviders = useMemo(
@@ -503,6 +529,12 @@ export function SummaryPanel({
             providerName={
               llmProviders.find((p) => p.id === summary.provider_id)?.name
             }
+            ttsModels={ttsModels}
+            selectedTtsModelId={selectedTtsModelId}
+            selectedTtsVoice={selectedTtsVoice}
+            ttsVoices={ttsVoices}
+            onChangeTtsModel={onChangeTtsModel}
+            onChangeTtsVoice={onChangeTtsVoice}
           />
         ))}
       </div>
@@ -800,9 +832,16 @@ export function SummaryPanel({
         .provider-select:focus {
           border-color: var(--accent) !important;
         }
-        .tts-play-btn:hover {
+        .tts-play-btn:hover:not([style*="not-allowed"]) {
           opacity: 1 !important;
           color: var(--accent) !important;
+        }
+        .tts-model-select:focus, .tts-voice-select:focus {
+          border-color: var(--accent) !important;
+        }
+        .tts-model-select option, .tts-voice-select option {
+          background-color: var(--bg-secondary);
+          color: var(--text-primary);
         }
         .modal-input:focus {
           border-color: var(--accent) !important;
@@ -953,12 +992,88 @@ function stripMarkdown(md: string): string {
     .trim();
 }
 
+function VoiceSelect({
+  voices,
+  value,
+  onChange,
+}: {
+  readonly voices: readonly TtsVoiceInfo[];
+  readonly value: string;
+  readonly onChange: (voice: string) => void;
+}): React.ReactElement {
+  // Group voices by language
+  const grouped = useMemo(() => {
+    const groups: Record<string, TtsVoiceInfo[]> = {};
+    for (const v of voices) {
+      const key = v.lang || "Other";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(v);
+    }
+    return groups;
+  }, [voices]);
+
+  const formatLabel = (v: TtsVoiceInfo): string => {
+    if (v.id === "auto") return "Auto";
+    const genderChar = v.gender ? ` (${v.gender[0]})` : "";
+    return `${v.name}${genderChar}`;
+  };
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="tts-voice-select"
+      style={{
+        fontSize: "9px",
+        padding: "1px 2px",
+        backgroundColor: "transparent",
+        border: "1px solid var(--border)",
+        borderRadius: "3px",
+        color: "var(--text-muted)",
+        cursor: "pointer",
+        outline: "none",
+        maxWidth: "100px",
+      }}
+    >
+      {Object.entries(grouped).map(([lang, langVoices]) =>
+        lang === "Auto" ? (
+          langVoices.map((v) => (
+            <option key={v.id} value={v.id}>
+              {formatLabel(v)}
+            </option>
+          ))
+        ) : (
+          <optgroup key={lang} label={lang}>
+            {langVoices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {formatLabel(v)}
+              </option>
+            ))}
+          </optgroup>
+        ),
+      )}
+    </select>
+  );
+}
+
 function SummaryCard({
   summary,
   providerName,
+  ttsModels,
+  selectedTtsModelId,
+  selectedTtsVoice,
+  ttsVoices,
+  onChangeTtsModel,
+  onChangeTtsVoice,
 }: {
   readonly summary: Summary;
   readonly providerName: string | undefined;
+  readonly ttsModels: readonly TtsModelInfo[];
+  readonly selectedTtsModelId: string;
+  readonly selectedTtsVoice: string;
+  readonly ttsVoices: readonly TtsVoiceInfo[];
+  readonly onChangeTtsModel: (modelId: string) => void;
+  readonly onChangeTtsVoice: (voice: string) => void;
 }): React.ReactElement {
   const html = useMemo(
     () => renderMarkdown(summary.content),
@@ -1003,7 +1118,9 @@ function SummaryCard({
     setTtsState("loading");
     try {
       const plainText = stripMarkdown(summary.content);
-      const buffer = await window.capty.ttsSpeak(plainText);
+      const buffer = await window.capty.ttsSpeak(plainText, {
+        voice: selectedTtsVoice,
+      });
       // Check if user clicked stop while loading
       if (globalPlayingCardId !== null && globalPlayingCardId !== summary.id) {
         setTtsState("idle");
@@ -1034,7 +1151,7 @@ function SummaryCard({
       globalPlayingCardId = null;
       setTtsState("idle");
     }
-  }, [ttsState, summary.content, summary.id]);
+  }, [ttsState, summary.content, summary.id, selectedTtsVoice]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1079,15 +1196,17 @@ function SummaryCard({
           color: "var(--text-muted)",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <button
-            onClick={handleTtsClick}
+            onClick={ttsModels.length > 0 ? handleTtsClick : undefined}
             title={
-              ttsState === "idle"
-                ? "Read aloud"
-                : ttsState === "loading"
-                  ? "Loading..."
-                  : "Stop"
+              ttsModels.length === 0
+                ? "Download a TTS model in Settings"
+                : ttsState === "idle"
+                  ? "Read aloud"
+                  : ttsState === "loading"
+                    ? "Loading..."
+                    : "Stop"
             }
             className="tts-play-btn"
             style={{
@@ -1095,10 +1214,15 @@ function SummaryCard({
               fontSize: "12px",
               backgroundColor: "transparent",
               border: "none",
-              cursor: "pointer",
+              cursor: ttsModels.length > 0 ? "pointer" : "not-allowed",
               color:
                 ttsState === "playing" ? "var(--accent)" : "var(--text-muted)",
-              opacity: ttsState === "loading" ? 0.5 : 0.7,
+              opacity:
+                ttsModels.length === 0
+                  ? 0.3
+                  : ttsState === "loading"
+                    ? 0.5
+                    : 0.7,
               transition: "opacity 0.15s ease, color 0.15s ease",
               display: "flex",
               alignItems: "center",
@@ -1126,6 +1250,37 @@ function SummaryCard({
               "▶"
             )}
           </button>
+          {ttsModels.length >= 1 && (
+            <select
+              value={selectedTtsModelId}
+              onChange={(e) => onChangeTtsModel(e.target.value)}
+              className="tts-model-select"
+              style={{
+                fontSize: "9px",
+                padding: "1px 2px",
+                backgroundColor: "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: "3px",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                outline: "none",
+                maxWidth: "80px",
+              }}
+            >
+              {ttsModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {ttsVoices.length > 0 && (
+            <VoiceSelect
+              voices={ttsVoices}
+              value={selectedTtsVoice}
+              onChange={onChangeTtsVoice}
+            />
+          )}
           {providerName ? `${providerName} · ` : ""}
           {summary.model_name}
         </span>

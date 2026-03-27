@@ -1364,6 +1364,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { sessionId, timestamp: dirTimestamp };
   });
 
+  // TTS voice listing
+  ipcMain.handle("tts:list-voices", async (_event, modelDir: string) => {
+    const config = readConfig(configDir);
+    const provider = (config.ttsProviders ?? []).find(
+      (p) => p.id === (config.selectedTtsProviderId ?? "sidecar"),
+    );
+    const url = provider?.baseUrl ?? "http://localhost:8765";
+    const resp = await net.fetch(
+      `${url}/tts/voices?model_dir=${encodeURIComponent(modelDir)}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    if (!resp.ok) throw new Error(`Failed to fetch voices: ${resp.status}`);
+    return await resp.json();
+  });
+
   // TTS (text-to-speech via provider)
   ipcMain.handle(
     "tts:speak",

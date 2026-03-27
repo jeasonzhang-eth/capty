@@ -85,6 +85,7 @@ export interface AppConfig {
   readonly ttsProviders: TtsProvider[];
   readonly selectedTtsProviderId: string | null;
   readonly selectedTtsModelId: string | null;
+  readonly selectedTtsVoice: string;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -144,6 +145,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ],
   selectedTtsProviderId: "sidecar",
   selectedTtsModelId: null,
+  selectedTtsVoice: "auto",
 };
 
 export function readConfig(configDir: string): AppConfig {

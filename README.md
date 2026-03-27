@@ -24,7 +24,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
-- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止
+- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型和声音（按语言分组，显示友好名称），选择持久化保存
 - **TTS Provider 管理** — Settings 左侧栏独立 "TTS Providers" tab（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
 - **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
@@ -175,6 +175,7 @@ Capty 的数据分布在两个目录：**配置目录**（Electron 默认 userDa
 | `ttsProviders` | `TtsProvider[]` | TTS Provider 列表，每个含 id / name / baseUrl / apiKey / model / voice / isSidecar；默认含一个 Local Sidecar |
 | `selectedTtsProviderId` | `string \| null` | 当前激活的 TTS Provider ID |
 | `selectedTtsModelId` | `string \| null` | 当前选中的 TTS 模型 ID |
+| `selectedTtsVoice` | `string` | 当前选中的 TTS 声音 ID，默认 `"auto"` |
 
 ### 数据目录
 
@@ -291,6 +292,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (34)
+
+- **TTS 模型/声音选择器** — SummaryPanel 摘要卡片支持选择 TTS 模型和声音
+  - 每张摘要卡片播放按钮旁新增 Model 和 Voice 下拉选择器
+  - Model 选择器：显示所有已下载的 TTS 模型，切换时自动刷新声音列表
+  - Voice 选择器：按语言分组（`<optgroup>`），显示友好名称（如 "Heart (F)"）
+  - 声音列表从 sidecar 动态获取（扫描模型目录下 `voices/*.safetensors`，解析文件名提取语言/性别/名称）
+  - 默认 "Auto" 声音（自动检测语言选择匹配声音）
+  - 选中的模型和声音持久化到 config.json，重启后恢复
+  - 无已下载 TTS 模型时，播放按钮置灰不可点，hover 提示去 Settings 下载
+  - Sidecar 新增 `GET /tts/voices?model_dir=...` endpoint
+  - config.json 新增 `selectedTtsVoice` 字段（默认 `"auto"`）
 
 ### 2026-03-27 (33)
 
