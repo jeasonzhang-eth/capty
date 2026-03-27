@@ -15,7 +15,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — macOS 系统设置风格左侧边栏导航，4 个页面：General（数据目录、配置目录）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、Language Models（LLM provider 配置与测试）
+- **设置页面** — macOS 系统设置风格左侧边栏导航，固定高度（85vh）弹窗，4 个页面：General（数据目录、配置目录）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — Obsidian 社区插件风格独立全屏模态框：Settings 中 Sidecar 卡片仅显示 "Model Market" 入口 + 已安装数量 + "Browse" 按钮；点击 Browse 弹出 720px 宽模态框，分三组显示（Installed / Recommended / Search Results）；推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）

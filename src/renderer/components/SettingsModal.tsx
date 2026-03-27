@@ -3047,7 +3047,7 @@ export function SettingsModal({
           width: "640px",
           minWidth: "640px",
           maxWidth: "90vw",
-          maxHeight: "85vh",
+          height: "85vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
