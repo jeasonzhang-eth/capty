@@ -15,7 +15,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — macOS 系统设置风格左侧边栏导航，3 个页面：General（数据目录、配置目录）、Speech（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、Language Models（LLM provider 配置与测试）
+- **设置页面** — macOS 系统设置风格左侧边栏导航，4 个页面：General（数据目录、配置目录）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、Language Models（LLM provider 配置与测试）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — Obsidian 社区插件风格独立全屏模态框：Settings 中 Sidecar 卡片仅显示 "Model Market" 入口 + 已安装数量 + "Browse" 按钮；点击 Browse 弹出 720px 宽模态框，分三组显示（Installed / Recommended / Search Results）；推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
@@ -25,7 +25,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
 - **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止
-- **TTS Provider 管理** — Settings 中新增 TTS Providers section（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
+- **TTS Provider 管理** — Settings 左侧栏独立 "TTS Providers" tab（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
 - **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
@@ -296,8 +296,8 @@ pytest
 
 - **模型目录拆分 + TTS Provider 管理** — 完善模型管理和 TTS 设置
   - 模型目录从 `models/` 拆分为 `models/asr/` + `models/tts/`，启动时自动迁移旧结构
-  - Settings 中 "Speech" tab 改名为 "ASR Providers"
-  - 新增 TTS Providers section（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务
+  - Settings 中 "Speech" tab 改名为 "ASR Providers"，TTS Providers 拆分为独立侧栏 tab
+  - ASR / TTS Providers 各自独立页面，无冗余标题（tab 名即标题）
   - Sidecar TTS Provider 含独立 TTS Model Market（下载/删除/搜索 HuggingFace TTS 模型）
   - 推荐 TTS 模型：Kokoro 82M (bf16)，支持中英日韩语音合成
   - 新增 Sidecar `/tts/switch` 和 `/tts/status` endpoints，支持动态切换 TTS 模型
