@@ -308,6 +308,7 @@ async function searchHuggingFaceModels(
   const baseUrl = mirrorUrl ?? "https://huggingface.co";
   const params = new URLSearchParams({
     search: query,
+    author: "mlx-community",
     pipeline_tag: "automatic-speech-recognition",
     sort: "downloads",
     direction: "-1",
@@ -329,14 +330,9 @@ async function searchHuggingFaceModels(
   }
 
   // Filter: only MLX-compatible models (must have mlx/safetensors tag)
-  // Also require query to appear in model name (after "/"), not just author name
-  const queryLower = query.toLowerCase();
   const mlxResults = results.filter((r) => {
     const tags = r.tags.map((t) => t.toLowerCase());
-    const isMlx = tags.includes("mlx") || tags.includes("safetensors");
-    const modelName = r.id.includes("/") ? r.id.split("/").pop()! : r.id;
-    const nameMatch = modelName.toLowerCase().includes(queryLower);
-    return isMlx && nameMatch;
+    return tags.includes("mlx") || tags.includes("safetensors");
   });
 
   // Fetch file sizes for each result in parallel via the tree API
