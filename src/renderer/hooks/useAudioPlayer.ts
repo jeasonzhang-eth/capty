@@ -19,6 +19,7 @@ export function useAudioPlayer() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const playbackRateRef = useRef(1.0);
 
   const cleanup = useCallback(() => {
     if (audioRef.current) {
@@ -79,11 +80,11 @@ export function useAudioPlayer() {
       }));
 
       // Apply preserved playback rate
-      audio.playbackRate = state.playbackRate;
+      audio.playbackRate = playbackRateRef.current;
 
       await audio.play();
     },
-    [cleanup, stop, state.playbackRate],
+    [cleanup, stop],
   );
 
   const pause = useCallback(() => {
@@ -106,6 +107,7 @@ export function useAudioPlayer() {
   }, []);
 
   const setPlaybackRate = useCallback((rate: number) => {
+    playbackRateRef.current = rate;
     if (audioRef.current) {
       audioRef.current.playbackRate = rate;
     }

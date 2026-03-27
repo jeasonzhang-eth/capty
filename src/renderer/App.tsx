@@ -23,6 +23,9 @@ function App(): React.JSX.Element {
   const audioCapture = useAudioCapture();
   const session = useSession();
   const audioPlayer = useAudioPlayer();
+  const audioPlayerRef = useRef(audioPlayer);
+  audioPlayerRef.current = audioPlayer;
+
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -74,6 +77,9 @@ function App(): React.JSX.Element {
     onError: onErrorCallback,
   });
 
+  const sendSegmentEndRef = useRef(transcription.sendSegmentEnd);
+  sendSegmentEndRef.current = transcription.sendSegmentEnd;
+
   const vad = useVAD({
     onSpeechStart: useCallback(() => {
       segmentStartRef.current = getAudioSeconds();
@@ -81,11 +87,8 @@ function App(): React.JSX.Element {
     onSpeechEnd: useCallback(() => {
       segmentEndRef.current = getAudioSeconds();
       // Speech ended - pass timestamps captured NOW (not later at callback time)
-      transcription.sendSegmentEnd(
-        segmentStartRef.current,
-        segmentEndRef.current,
-      );
-    }, [transcription]),
+      sendSegmentEndRef.current(segmentStartRef.current, segmentEndRef.current);
+    }, []),
   });
 
   // Regeneration state
@@ -661,8 +664,8 @@ function App(): React.JSX.Element {
     async (sessionId: number) => {
       try {
         // Stop playback if deleting the playing session
-        if (audioPlayer.playingSessionId === sessionId) {
-          audioPlayer.stop();
+        if (audioPlayerRef.current.playingSessionId === sessionId) {
+          audioPlayerRef.current.stop();
         }
         await window.capty.deleteSession(sessionId);
         // If deleting the currently viewed session, clear it

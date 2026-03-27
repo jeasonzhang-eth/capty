@@ -307,6 +307,15 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (42)
+
+- **修复多处 stale closure 问题** — 使用 ref 模式避免 useCallback 闭包捕获过时的状态值
+  - `useAudioCapture.start()`: 通过 `selectedDeviceRef` 读取最新的选中设备 ID，而非闭包中的 `state.selectedDeviceId`
+  - `useAudioPlayer.play()`: 通过 `playbackRateRef` 读取最新的播放速率，而非闭包中的 `state.playbackRate`
+  - `App.tsx` VAD `onSpeechEnd`: 通过 `sendSegmentEndRef` 引用最新的 `transcription.sendSegmentEnd`，依赖数组改为 `[]` 避免频繁重建
+  - `App.tsx` `handleDeleteSession`: 通过 `audioPlayerRef` 读取最新的 `audioPlayer` 状态，避免遗漏依赖导致引用过时的 `playingSessionId`
+  - `SummaryPanel` 拖拽调整宽度: 通过 `latestWidthRef` 跟踪拖拽过程中的最新宽度，`handleMouseUp` 不再依赖 `panelWidth` 闭包值
+
 ### 2026-03-28 (41)
 
 - **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃
