@@ -36,11 +36,15 @@ function App(): React.JSX.Element {
     Math.round(audioSamplesRef.current / SAMPLE_RATE);
 
   const onFinalCallback = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      _segId: number,
+      startTime: number,
+      endTime: number,
+    ) => {
       if (!text.trim()) return;
-      const startTime = segmentStartRef.current;
-      const endTime = segmentEndRef.current;
-      // Persist to database
+      // startTime/endTime are captured at send time (not callback time)
+      // to avoid race conditions with subsequent speech events.
       if (store.currentSessionId) {
         await window.capty.addSegment({
           sessionId: store.currentSessionId,
@@ -51,7 +55,6 @@ function App(): React.JSX.Element {
           isFinal: true,
         });
       }
-      // Update in-memory store
       store.addSegment({
         id: Date.now(),
         start_time: startTime,
@@ -77,8 +80,11 @@ function App(): React.JSX.Element {
     }, []),
     onSpeechEnd: useCallback(() => {
       segmentEndRef.current = getAudioSeconds();
-      // Speech ended - signal the sidecar to transcribe accumulated audio
-      transcription.sendSegmentEnd();
+      // Speech ended - pass timestamps captured NOW (not later at callback time)
+      transcription.sendSegmentEnd(
+        segmentStartRef.current,
+        segmentEndRef.current,
+      );
     }, [transcription]),
   });
 
@@ -577,7 +583,10 @@ function App(): React.JSX.Element {
 
     // Gracefully disconnect: flush remaining audio with segment_end,
     // wait for final transcription result, then close
-    await transcription.gracefulDisconnect();
+    await transcription.gracefulDisconnect(
+      segmentStartRef.current,
+      segmentEndRef.current,
+    );
 
     await session.stopSession(elapsedRef.current);
 

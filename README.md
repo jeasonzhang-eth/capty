@@ -307,6 +307,12 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (40)
+
+- **修复录音会话时间显示为 UTC 而非本地时间** — `createSession` 不再依赖 SQLite DEFAULT（旧数据库的 DEFAULT 可能仍是 UTC），改为在 JS 层显式生成本地时间写入 `started_at` 和 `title`
+- **修复实时录音段落时间戳重复** — `onFinal` 回调中读取 `segmentStartRef/segmentEndRef` 时存在竞态条件，多个异步转录可能读到同一个 ref 值；改为在 `sendSegmentEnd` 调用时捕获时间戳并通过闭包传递给回调
+- **修复 `tts:list-voices` 启动报错** — sidecar 未启动时优雅返回空列表，不再抛异常
+
 ### 2026-03-27 (39)
 
 - **修复音频导入转录** — 上传音频后实时逐段转录显示（与重新生成字幕行为完全一致）

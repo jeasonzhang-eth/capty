@@ -1,7 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 
 interface TranscriptionCallbacks {
-  readonly onFinal?: (text: string, segmentId: number) => void;
+  readonly onFinal?: (
+    text: string,
+    segmentId: number,
+    startTime: number,
+    endTime: number,
+  ) => void;
   readonly onError?: (message: string) => void;
 }
 
@@ -50,45 +55,58 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
     bufferRef.current.push(new Int16Array(pcmBuffer));
   }, []);
 
-  const sendSegmentEnd = useCallback(() => {
-    const provider = providerRef.current;
-    if (!provider) return;
+  const sendSegmentEnd = useCallback(
+    (startTime: number, endTime: number) => {
+      const provider = providerRef.current;
+      if (!provider) return;
 
-    const chunks = bufferRef.current;
-    bufferRef.current = [];
+      const chunks = bufferRef.current;
+      bufferRef.current = [];
 
-    if (chunks.length === 0) return;
+      if (chunks.length === 0) return;
 
-    // Merge buffered chunks into a single PCM buffer
-    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-    const merged = new Int16Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
+      // Merge buffered chunks into a single PCM buffer
+      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+      const merged = new Int16Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
 
-    const segId = ++segmentIdRef.current;
-    pendingRef.current++;
+      const segId = ++segmentIdRef.current;
+      pendingRef.current++;
 
-    // Fire-and-forget HTTP POST via IPC
-    window.capty
-      .asrTranscribe(merged.buffer as ArrayBuffer, {
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-      })
-      .then((result) => {
-        pendingRef.current--;
-        callbacksRef.current.onFinal?.(result.text, segId);
-      })
-      .catch((err: unknown) => {
-        pendingRef.current--;
-        const msg =
-          err instanceof Error ? err.message : "Transcription failed";
-        callbacksRef.current.onError?.(msg);
-      });
-  }, []);
+      // Capture startTime/endTime at send time (not at callback time)
+      // to avoid race conditions with subsequent speech events.
+      const capturedStart = startTime;
+      const capturedEnd = endTime;
+
+      // Fire-and-forget HTTP POST via IPC
+      window.capty
+        .asrTranscribe(merged.buffer as ArrayBuffer, {
+          baseUrl: provider.baseUrl,
+          apiKey: provider.apiKey,
+          model: provider.model,
+        })
+        .then((result) => {
+          pendingRef.current--;
+          callbacksRef.current.onFinal?.(
+            result.text,
+            segId,
+            capturedStart,
+            capturedEnd,
+          );
+        })
+        .catch((err: unknown) => {
+          pendingRef.current--;
+          const msg =
+            err instanceof Error ? err.message : "Transcription failed";
+          callbacksRef.current.onError?.(msg);
+        });
+    },
+    [],
+  );
 
   const disconnect = useCallback(() => {
     readyRef.current = false;
@@ -97,49 +115,60 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
   }, []);
 
   /** Flush remaining audio buffer, wait for result, then disconnect. */
-  const gracefulDisconnect = useCallback((): Promise<void> => {
-    const provider = providerRef.current;
-    const chunks = bufferRef.current;
-    bufferRef.current = [];
+  const gracefulDisconnect = useCallback(
+    (startTime: number, endTime: number): Promise<void> => {
+      const provider = providerRef.current;
+      const chunks = bufferRef.current;
+      bufferRef.current = [];
 
-    if (!provider || chunks.length === 0) {
-      readyRef.current = false;
-      setState({ isConnected: false, isReady: false });
-      return Promise.resolve();
-    }
-
-    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-    const merged = new Int16Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const segId = ++segmentIdRef.current;
-    pendingRef.current++;
-
-    return window.capty
-      .asrTranscribe(merged.buffer as ArrayBuffer, {
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-      })
-      .then((result) => {
-        pendingRef.current--;
-        callbacksRef.current.onFinal?.(result.text, segId);
-      })
-      .catch((err: unknown) => {
-        pendingRef.current--;
-        const msg =
-          err instanceof Error ? err.message : "Transcription failed";
-        callbacksRef.current.onError?.(msg);
-      })
-      .finally(() => {
+      if (!provider || chunks.length === 0) {
         readyRef.current = false;
         setState({ isConnected: false, isReady: false });
-      });
-  }, []);
+        return Promise.resolve();
+      }
+
+      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+      const merged = new Int16Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      const segId = ++segmentIdRef.current;
+      pendingRef.current++;
+
+      const capturedStart = startTime;
+      const capturedEnd = endTime;
+
+      return window.capty
+        .asrTranscribe(merged.buffer as ArrayBuffer, {
+          baseUrl: provider.baseUrl,
+          apiKey: provider.apiKey,
+          model: provider.model,
+        })
+        .then((result) => {
+          pendingRef.current--;
+          callbacksRef.current.onFinal?.(
+            result.text,
+            segId,
+            capturedStart,
+            capturedEnd,
+          );
+        })
+        .catch((err: unknown) => {
+          pendingRef.current--;
+          const msg =
+            err instanceof Error ? err.message : "Transcription failed";
+          callbacksRef.current.onError?.(msg);
+        })
+        .finally(() => {
+          readyRef.current = false;
+          setState({ isConnected: false, isReady: false });
+        });
+    },
+    [],
+  );
 
   return {
     ...state,

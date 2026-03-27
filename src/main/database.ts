@@ -192,8 +192,16 @@ export function createSession(
   db: Database.Database,
   opts: CreateSessionOpts,
 ): number {
-  const stmt = db.prepare("INSERT INTO sessions (model_name) VALUES (?)");
-  const result = stmt.run(opts.modelName);
+  // Explicitly set started_at and title to local time instead of relying on
+  // DEFAULT, because existing databases may have an older DEFAULT that stores
+  // UTC (CREATE TABLE IF NOT EXISTS won't update the DEFAULT expression).
+  const now = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const localTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const stmt = db.prepare(
+    "INSERT INTO sessions (model_name, started_at, title) VALUES (?, ?, ?)",
+  );
+  const result = stmt.run(opts.modelName, localTime, localTime);
   return result.lastInsertRowid as number;
 }
 
