@@ -307,6 +307,8 @@ pytest
   - config.json 新增 `selectedTtsVoice` 字段（默认 `"auto"`）
   - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
   - 修复中文朗读截断：CJK 文本分块上限从 300 字符降至 120 字符，避免超出 Kokoro 510 phoneme 限制
+  - 修复切换模型时旧 voice 残留：切换时立即重置为 "auto"，初始化时校验 voice 有效性
+  - 非 Kokoro 模型（如 Qwen3-TTS）不再传递 voice/lang_code 参数，避免参数不兼容
 
 ### 2026-03-27 (33)
 

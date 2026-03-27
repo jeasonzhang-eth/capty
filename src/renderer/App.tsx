@@ -382,6 +382,22 @@ function App(): React.JSX.Element {
                 `${dataDir}/models/tts/${effectiveTtsModelId}`,
               );
               setTtsVoices(voiceResult.voices);
+              // Validate saved voice — reset to "auto" if not in this model's list
+              const currentVoice = savedTtsVoice ?? "auto";
+              if (
+                voiceResult.voices.length > 0 &&
+                !voiceResult.voices.some(
+                  (v: { id: string }) => v.id === currentVoice,
+                )
+              ) {
+                setSelectedTtsVoice("auto");
+              } else if (
+                voiceResult.voices.length === 0 &&
+                currentVoice !== "auto"
+              ) {
+                // Model has no voices dir — force auto
+                setSelectedTtsVoice("auto");
+              }
             } catch {
               // Voice listing not available
             }
@@ -938,10 +954,19 @@ function App(): React.JSX.Element {
 
   const handleChangeTtsModelForPlay = useCallback(
     async (modelId: string) => {
+      // Immediately reset voice to "auto" to avoid stale voice for new model
       setSelectedTtsModelId(modelId);
+      setSelectedTtsVoice("auto");
+      setTtsVoices([]);
+
       const config = await window.capty.getConfig();
-      await window.capty.setConfig({ ...config, selectedTtsModelId: modelId });
-      // Refresh voice list for the new model
+      await window.capty.setConfig({
+        ...config,
+        selectedTtsModelId: modelId,
+        selectedTtsVoice: "auto",
+      });
+
+      // Fetch voice list for the new model
       const dataDir = store.dataDir;
       if (!dataDir) return;
       try {
@@ -949,20 +974,11 @@ function App(): React.JSX.Element {
           `${dataDir}/models/tts/${modelId}`,
         );
         setTtsVoices(result.voices);
-        // Reset voice to auto if current voice not in new list
-        if (!result.voices.some((v) => v.id === selectedTtsVoice)) {
-          setSelectedTtsVoice("auto");
-          await window.capty.setConfig({
-            ...config,
-            selectedTtsModelId: modelId,
-            selectedTtsVoice: "auto",
-          });
-        }
       } catch {
         setTtsVoices([]);
       }
     },
-    [store.dataDir, selectedTtsVoice],
+    [store.dataDir],
   );
 
   const handleDownloadTtsModel = useCallback(

@@ -197,16 +197,30 @@ class TTSRunner:
         model = self._model
         loop = asyncio.get_event_loop()
 
+        # Check if model directory has a voices/ subdir (Kokoro-style).
+        # If not, skip voice/lang_code params as the model may not support them.
+        has_voices_dir = (
+            self._model_id is not None
+            and Path(self._model_id).joinpath("voices").is_dir()
+        )
+
         def _generate_all() -> bytes:
             all_audio: list[np.ndarray] = []
             for chunk in chunks:
                 try:
-                    results = model.generate(
-                        text=chunk,
-                        voice=effective_voice,
-                        speed=speed,
-                        lang_code=effective_lang,
-                    )
+                    if has_voices_dir:
+                        results = model.generate(
+                            text=chunk,
+                            voice=effective_voice,
+                            speed=speed,
+                            lang_code=effective_lang,
+                        )
+                    else:
+                        # Non-Kokoro models: only pass text and speed
+                        results = model.generate(
+                            text=chunk,
+                            speed=speed,
+                        )
                     for result in results:
                         audio_np = np.array(result.audio)
                         all_audio.append(audio_np)
