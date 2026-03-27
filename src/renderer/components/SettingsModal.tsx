@@ -1195,7 +1195,7 @@ function SpeechTab({
                         </div>
                       </div>
 
-                      {/* Models */}
+                      {/* Model Market */}
                       <div
                         style={{
                           marginTop: "16px",
@@ -1209,7 +1209,7 @@ function SpeechTab({
                             marginBottom: "8px",
                           }}
                         >
-                          Models ({models.length})
+                          Model Market
                         </div>
                         <div
                           style={{
@@ -1243,28 +1243,10 @@ function SpeechTab({
                                 fontSize: "13px",
                               }}
                             >
-                              No models yet. Search HuggingFace below to add
-                              models.
+                              No models available. Search HuggingFace below to
+                              find models.
                             </div>
                           )}
-                        </div>
-                      </div>
-
-                      {/* Download Models */}
-                      <div
-                        style={{
-                          marginTop: "16px",
-                          borderTop: "1px solid var(--border)",
-                          paddingTop: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            ...sectionTitleStyle,
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Download Models
                         </div>
 
                         {/* HuggingFace Mirror URL */}
@@ -1378,7 +1360,7 @@ function SpeechTab({
                               value={searchQuery}
                               onChange={(e) => setSearchQuery(e.target.value)}
                               onKeyDown={handleSearchKeyDown}
-                              placeholder="Search ASR models, e.g. whisper, wav2vec2..."
+                              placeholder="Search more models on HuggingFace..."
                               style={{
                                 ...inputStyle,
                                 flex: 1,

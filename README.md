@@ -283,6 +283,13 @@ pytest
 
 ## 更新日志
 
+### 2026-03-27 (30)
+
+- **Model Market：合并模型列表与搜索为统一市场** — 将 Settings > Speech > Sidecar 中分离的 "Models" 和 "Download Models" 两个区域合并为统一的 "Model Market"
+  - 已下载模型 + 推荐模型 + HuggingFace 搜索 + 镜像配置整合在同一区域内
+  - 删除 "Download Models" 标题和分隔线，减少视觉割裂
+  - 搜索框提示文案更新为 "Search more models on HuggingFace..."
+
 ### 2026-03-27 (29)
 
 - **模型管理重构：磁盘驱动，无静态注册表** — 移除双重注册表（`resources/models.json` + `user-models.json`），改为纯磁盘扫描
