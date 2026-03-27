@@ -185,16 +185,24 @@ class TTSRunner:
                 )
                 for i, result in enumerate(results):
                     audio_np = np.array(result.audio)
+                    has_nan = bool(np.any(np.isnan(audio_np)))
+                    has_inf = bool(np.any(np.isinf(audio_np)))
+                    logger.info(
+                        "TTS segment %d: %d samples (%.1fs), dtype=%s, "
+                        "min=%.6f, max=%.6f, nan=%s, inf=%s",
+                        i,
+                        audio_np.shape[0],
+                        audio_np.shape[0] / sample_rate,
+                        audio_np.dtype,
+                        float(np.nanmin(audio_np)),
+                        float(np.nanmax(audio_np)),
+                        has_nan,
+                        has_inf,
+                    )
                     all_audio.append(audio_np)
                     # Use sample rate from result if available
                     if hasattr(result, "sample_rate") and result.sample_rate:
                         sample_rate = result.sample_rate
-                    logger.info(
-                        "TTS segment %d: %d samples (%.1fs)",
-                        i,
-                        audio_np.shape[0],
-                        audio_np.shape[0] / sample_rate,
-                    )
             except Exception:
                 logger.exception("TTS generation failed")
 
