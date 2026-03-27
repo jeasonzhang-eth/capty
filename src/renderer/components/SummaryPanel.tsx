@@ -1150,23 +1150,45 @@ function SummaryCard({
         bytes.byteOffset + bytes.byteLength,
       );
       const audioBuffer = await globalAudioCtx.decodeAudioData(arrayBuf);
+      // Check audio data amplitude
+      const channelData = audioBuffer.getChannelData(0);
+      let maxAmp = 0;
+      for (let i = 0; i < channelData.length; i++) {
+        const abs = Math.abs(channelData[i]);
+        if (abs > maxAmp) maxAmp = abs;
+      }
       console.log(
         "[TTS] Decoded audio:",
         audioBuffer.duration.toFixed(1) + "s",
         audioBuffer.sampleRate + "Hz",
         audioBuffer.numberOfChannels + "ch",
+        "maxAmplitude:",
+        maxAmp.toFixed(6),
+      );
+      console.log(
+        "[TTS] AudioContext state:",
+        globalAudioCtx.state,
+        "sampleRate:",
+        globalAudioCtx.sampleRate,
+        "destination channels:",
+        globalAudioCtx.destination.maxChannelCount,
       );
 
       const source = globalAudioCtx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(globalAudioCtx.destination);
       source.onended = () => {
+        console.log("[TTS] Playback ended");
         globalSourceNode = null;
         globalPlayingCardId = null;
         setTtsState("idle");
       };
 
       source.start();
+      console.log(
+        "[TTS] source.start() called, AudioContext state:",
+        globalAudioCtx.state,
+      );
       globalSourceNode = source;
       globalPlayingCardId = summary.id;
       setTtsState("playing");
