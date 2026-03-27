@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TTS_MODEL = "mlx-community/Kokoro-82M-bf16"
 TTS_SAMPLE_RATE = 24000
-MAX_CHUNK_CHARS = 300
+MAX_CHUNK_CHARS_EN = 300
+MAX_CHUNK_CHARS_CJK = 120  # CJK chars generate ~3 phonemes each; 120 * 3 = 360 < 510 limit
 
 # CJK Unicode ranges for language auto-detection
 _CJK_RE = re.compile(
@@ -99,8 +100,13 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
-def _split_text(text: str) -> list[str]:
-    """Split text into chunks suitable for Kokoro (< MAX_CHUNK_CHARS each)."""
+def _split_text(text: str, lang: str = "a") -> list[str]:
+    """Split text into chunks suitable for Kokoro.
+
+    Uses a smaller chunk limit for CJK languages since each character
+    generates ~3 phonemes, easily exceeding Kokoro's 510 phoneme limit.
+    """
+    max_chars = MAX_CHUNK_CHARS_CJK if lang == "z" else MAX_CHUNK_CHARS_EN
     # Split on sentence boundaries and newlines
     segments = re.split(r"(?<=[。！？.!?\n])\s*", text)
     chunks: list[str] = []
@@ -109,7 +115,7 @@ def _split_text(text: str) -> list[str]:
         seg = seg.strip()
         if not seg:
             continue
-        if len(current) + len(seg) > MAX_CHUNK_CHARS and current:
+        if len(current) + len(seg) > max_chars and current:
             chunks.append(current)
             current = seg
         else:
@@ -187,7 +193,7 @@ class TTSRunner:
         effective_voice = _DEFAULT_VOICES.get(effective_lang, "af_heart") if voice == "auto" else voice
         logger.info("TTS: lang=%s, voice=%s, text_len=%d", effective_lang, effective_voice, len(plain))
 
-        chunks = _split_text(plain)
+        chunks = _split_text(plain, lang=effective_lang)
         model = self._model
         loop = asyncio.get_event_loop()
 

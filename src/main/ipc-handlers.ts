@@ -1394,8 +1394,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       );
       const url = provider?.baseUrl ?? "http://localhost:8765";
 
+      // Resolve the TTS model path so the sidecar can auto-switch
+      const ttsModelId = config.selectedTtsModelId;
+      let ttsModelPath = "";
+      if (ttsModelId) {
+        const dataDir = config.dataDir ?? join(configDir, "data");
+        ttsModelPath = join(dataDir, "models", "tts", ttsModelId);
+      }
+
       const formData = new FormData();
       formData.append("input", text);
+      if (ttsModelPath) formData.append("model", ttsModelPath);
       formData.append("voice", opts?.voice ?? provider?.voice ?? "auto");
       formData.append("speed", String(opts?.speed ?? 1.0));
       formData.append("lang_code", opts?.langCode ?? "auto");

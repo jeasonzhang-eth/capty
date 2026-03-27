@@ -305,6 +305,8 @@ pytest
   - 无已下载 TTS 模型时，播放按钮置灰不可点，hover 提示去 Settings 下载
   - Sidecar 新增 `GET /tts/voices?model_dir=...` endpoint
   - config.json 新增 `selectedTtsVoice` 字段（默认 `"auto"`）
+  - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
+  - 修复中文朗读截断：CJK 文本分块上限从 300 字符降至 120 字符，避免超出 Kokoro 510 phoneme 限制
 
 ### 2026-03-27 (33)
 
