@@ -1192,6 +1192,32 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return null;
   });
 
+  // Get audio file path for a session (finds first matching audio file)
+  ipcMain.handle("audio:get-file-path", (_event, sessionId: number) => {
+    const session = getSession(db, sessionId);
+    if (!session?.audio_path) return null;
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const audioDir = join(dataDir, "audio", session.audio_path);
+    const audioExts = [
+      ".wav",
+      ".mp3",
+      ".m4a",
+      ".flac",
+      ".ogg",
+      ".aac",
+      ".opus",
+    ];
+    const candidates = [
+      ...audioExts.map((ext) => join(audioDir, `${session.audio_path}${ext}`)),
+      join(audioDir, "full.wav"),
+    ];
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) return filePath;
+    }
+    return null;
+  });
+
   // Get audio directory path for a session
   ipcMain.handle("audio:get-dir", (_event, sessionId: number) => {
     const session = getSession(db, sessionId);

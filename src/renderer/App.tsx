@@ -726,8 +726,42 @@ function App(): React.JSX.Element {
         await window.capty.deleteSegments(sessionId);
         store.clearSegments();
 
+        // Check if file is WAV (starts with "RIFF") or needs decoding
+        const header = new Uint8Array(audioBuffer, 0, 4);
+        const isWav =
+          header[0] === 0x52 && // R
+          header[1] === 0x49 && // I
+          header[2] === 0x46 && // F
+          header[3] === 0x46; // F
+
+        let wavBuffer: ArrayBuffer;
+        if (isWav) {
+          wavBuffer = audioBuffer;
+        } else {
+          // Non-WAV file (mp3/m4a/flac etc.) — decode via sidecar
+          const activeProvider = store.asrProviders.find(
+            (p) => p.id === store.selectedAsrProviderId,
+          );
+          if (!activeProvider?.isSidecar) {
+            console.error("Non-WAV audio requires sidecar for decoding");
+            setRegeneratingSessionId(null);
+            return;
+          }
+          // Get the audio file path from session directory
+          const audioFilePath = await window.capty.getAudioFilePath(sessionId);
+          if (!audioFilePath) {
+            console.error("Cannot find audio file path for decoding");
+            setRegeneratingSessionId(null);
+            return;
+          }
+          wavBuffer = await window.capty.decodeAudioFile(
+            audioFilePath,
+            activeProvider.baseUrl,
+          );
+        }
+
         // PCM data (skip 44-byte WAV header)
-        const pcmData = new Uint8Array(audioBuffer, 44);
+        const pcmData = new Uint8Array(wavBuffer, 44);
         const totalBytes = pcmData.length;
         const bytesPerSecond = 32000; // 16kHz * 16bit * mono = 32000 bytes/sec
         const segmentSeconds = 15; // transcribe in 15-second segments

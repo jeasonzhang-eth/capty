@@ -160,6 +160,10 @@ const api = {
   // Audio read
   readAudioFile: (sessionId: number) =>
     ipcRenderer.invoke("audio:read-file", sessionId),
+  getAudioFilePath: (sessionId: number) =>
+    ipcRenderer.invoke("audio:get-file-path", sessionId) as Promise<
+      string | null
+    >,
   getAudioDir: (sessionId: number) =>
     ipcRenderer.invoke("audio:get-dir", sessionId),
   openAudioFolder: (sessionId: number) =>

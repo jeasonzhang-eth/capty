@@ -310,6 +310,7 @@ pytest
 ### 2026-03-28 (43)
 
 - **音频导入与转录解耦** — 上传音频不再自动触发转录，仅完成文件重命名、数据库入库和时长检测（WAV 直接读 header，其他格式通过 sidecar decode 获取）；转录作为独立操作（右键"重新生成字幕"）
+- **修复非 WAV 格式重新生成字幕** — `handleRegenerateSubtitles` 现在检测文件是否为 WAV（RIFF header），非 WAV 格式（mp3/m4a/flac 等）先通过 sidecar decode 转为 WAV 再分段转录
 
 ### 2026-03-28 (42)
 
