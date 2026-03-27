@@ -57,6 +57,9 @@ class ModelRunner:
     def load(self, model_id: str, models_dir: Path | str) -> None:
         """Load model from a local directory using mlx_audio.stt.load.
 
+        If a different model is already loaded it is unloaded first so that
+        callers do not need to manage the lifecycle manually.
+
         Parameters
         ----------
         model_id:
@@ -72,6 +75,10 @@ class ModelRunner:
         if not model_path.is_dir():
             raise FileNotFoundError(f"Model directory not found: {model_path}")
 
+        # Unload any previously loaded model before loading a new one.
+        if self._model is not None:
+            self.unload()
+
         logger.info("Loading model %s from %s", model_id, model_path)
         self._model = load(str(model_path))
         self._model_id = model_id
@@ -82,10 +89,12 @@ class ModelRunner:
         return self._model is not None
 
     def unload(self) -> None:
-        """Free model from memory."""
+        """Free model from memory and release GPU resources."""
         self._model = None
         self._model_id = None
-        logger.info("Model unloaded")
+        mx.clear_cache()
+        gc.collect()
+        logger.info("Model unloaded and memory cleared")
 
     @property
     def current_model_id(self) -> Optional[str]:
@@ -110,10 +119,10 @@ class ModelRunner:
 
         audio_float = _pcm_bytes_to_float32(audio_pcm)
         model = self._model
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             _mlx_executor,
-            lambda: _run_and_cleanup(lambda: model.generate(audio_float)),
+            lambda m=model, a=audio_float: _run_and_cleanup(lambda: m.generate(a)),
         )
         return result.text if result else ""
 
@@ -127,10 +136,10 @@ class ModelRunner:
             raise RuntimeError("No model loaded")
 
         model = self._model
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             _mlx_executor,
-            lambda: _run_and_cleanup(lambda: model.generate(audio_np)),
+            lambda m=model, a=audio_np: _run_and_cleanup(lambda: m.generate(a)),
         )
         return result.text if result else ""
 

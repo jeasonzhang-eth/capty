@@ -82,9 +82,16 @@ class TTSRunner:
     def load(self, model_id: str = DEFAULT_TTS_MODEL) -> None:
         """Load TTS model. Called on the MLX executor thread.
 
+        If a different model is already loaded it is unloaded first so that
+        callers do not need to manage the lifecycle manually.
+
         model_id can be a HuggingFace repo ID or a local directory path.
         """
         from mlx_audio.tts.utils import load_model
+
+        # Unload any previously loaded model before loading a new one.
+        if self._model is not None:
+            self.unload()
 
         logger.info("Loading TTS model %s", model_id)
         self._model = load_model(model_id)
@@ -98,7 +105,9 @@ class TTSRunner:
     def unload(self) -> None:
         self._model = None
         self._model_id = None
-        logger.info("TTS model unloaded")
+        mx.clear_cache()
+        gc.collect()
+        logger.info("TTS model unloaded and memory cleared")
 
     async def synthesize(
         self,
@@ -132,7 +141,7 @@ class TTSRunner:
         )
 
         model = self._model
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _generate_all() -> bytes:
             all_audio: list[np.ndarray] = []
@@ -166,8 +175,9 @@ class TTSRunner:
                     # Use sample rate from result if available
                     if hasattr(result, "sample_rate") and result.sample_rate:
                         sample_rate = result.sample_rate
-            except Exception:
+            except Exception as exc:
                 logger.exception("TTS generation failed")
+                raise RuntimeError(f"TTS generation failed: {exc}") from exc
 
             if not all_audio:
                 raise RuntimeError("TTS produced no audio")

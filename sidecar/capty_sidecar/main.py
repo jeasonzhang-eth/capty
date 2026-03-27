@@ -13,12 +13,12 @@ import uvicorn
 from capty_sidecar.server import create_app
 
 
-def _detect_models_dir() -> str:
-    """Auto-detect ASR models directory from Electron's config.json.
+def _detect_data_dir() -> str:
+    """Auto-detect the user data directory from Electron's config.json.
 
     Reads ``~/Library/Application Support/Capty/config.json`` to find the
-    ``dataDir`` setting, then returns ``<dataDir>/models/asr``.
-    Falls back to the Electron default data path if config is missing.
+    ``dataDir`` setting.  Falls back to the Electron default data path if
+    the config is missing or unreadable.
     """
     config_path = (
         Path.home() / "Library" / "Application Support" / "Capty" / "config.json"
@@ -31,12 +31,11 @@ def _detect_models_dir() -> str:
         try:
             with config_path.open("r", encoding="utf-8") as f:
                 config = json.load(f)
-            data_dir = config.get("dataDir") or default_data_dir
-            return str(Path(data_dir) / "models" / "asr")
+            return config.get("dataDir") or default_data_dir
         except Exception:
             pass
 
-    return str(Path(default_data_dir) / "models" / "asr")
+    return default_data_dir
 
 
 def main() -> None:
@@ -70,10 +69,23 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    models_dir = args.models_dir or os.environ.get("CAPTY_MODELS_DIR") or _detect_models_dir()
-    logging.getLogger(__name__).info("Using models directory: %s", models_dir)
+    log = logging.getLogger(__name__)
 
-    app = create_app(models_dir=models_dir)
+    # Resolve models directory: CLI arg > env var > auto-detect from Electron config
+    if args.models_dir:
+        models_dir = args.models_dir
+        data_dir = str(Path(models_dir).resolve().parent.parent)
+    elif os.environ.get("CAPTY_MODELS_DIR"):
+        models_dir = os.environ["CAPTY_MODELS_DIR"]
+        data_dir = str(Path(models_dir).resolve().parent.parent)
+    else:
+        data_dir = _detect_data_dir()
+        models_dir = str(Path(data_dir) / "models" / "asr")
+
+    log.info("Using models directory: %s", models_dir)
+    log.info("Using data directory: %s", data_dir)
+
+    app = create_app(models_dir=models_dir, data_dir=data_dir)
     uvicorn.run(app, host="127.0.0.1", port=args.port)
 
 
