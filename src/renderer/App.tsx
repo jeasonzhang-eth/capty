@@ -837,7 +837,34 @@ function App(): React.JSX.Element {
     const result = await window.capty.importAudio();
     if (!result) return; // user cancelled
 
-    // Import only: rename file + save to database. Transcription is a separate step.
+    // Detect audio duration via HTMLAudioElement and update session
+    try {
+      const audioEl = new Audio(`file://${result.audioPath}`);
+      const duration = await new Promise<number>((resolve, reject) => {
+        audioEl.addEventListener(
+          "loadedmetadata",
+          () => {
+            resolve(Math.round(audioEl.duration));
+          },
+          { once: true },
+        );
+        audioEl.addEventListener(
+          "error",
+          () => {
+            reject(new Error("Failed to load audio metadata"));
+          },
+          { once: true },
+        );
+      });
+      if (duration > 0 && isFinite(duration)) {
+        await window.capty.updateSession(result.sessionId, {
+          durationSeconds: duration,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not detect audio duration:", err);
+    }
+
     await store.loadSessions();
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);
