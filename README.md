@@ -307,6 +307,16 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (42)
+
+- **杂项修复与代码质量改进** — 6 项修复
+  - 移除 `ipc-handlers.ts` 中下载进度通道的无效条件分支（copy-paste 错误，两个分支返回相同值）
+  - 将 `App.tsx` 中所有 `id: Date.now()` 段落 ID 替换为单调递增计数器（`segmentIdCounter`），避免快速连续段落产生重复 ID
+  - 新增 `ErrorBoundary` 组件包裹 `<App />`，渲染崩溃时显示错误信息和重载按钮，而非白屏
+  - `deleteSession` 操作包裹在 SQLite 事务中，确保删除 summaries/segments/session 的原子性
+  - 为 `getSession`、`listSessions`、`getSegments`、`getSummaries` 添加强类型返回接口（`SessionRow`/`SegmentRow`/`SummaryRow`），替代 `any`
+  - `transcription.connect()` 从 fire-and-forget `.catch()` 改为 `try/catch await`，正确处理连接失败
+
 ### 2026-03-28 (41)
 
 - **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃

@@ -491,11 +491,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         modelsDir,
         mirrorUrl: config.hfMirrorUrl ?? undefined,
         onProgress: (progress) => {
-          const channel =
-            progress.category === "tts"
-              ? "download:progress"
-              : "download:progress";
-          win?.webContents.send(channel, progress);
+          win?.webContents.send("download:progress", progress);
           // Also send legacy progress events for backward compatibility
           const legacyChannel =
             progress.category === "tts"

@@ -26,6 +26,9 @@ function App(): React.JSX.Element {
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Monotonic counter for segment IDs (avoids Date.now() collisions)
+  const segmentIdCounter = useRef(0);
+
   // Precise audio time tracking (sample-based, not wall-clock)
   const audioSamplesRef = useRef(0); // total samples fed since recording start
   const segmentStartRef = useRef(0); // seconds (from audio samples)
@@ -56,7 +59,7 @@ function App(): React.JSX.Element {
         });
       }
       store.addSegment({
-        id: Date.now(),
+        id: ++segmentIdCounter.current,
         start_time: startTime,
         end_time: endTime,
         text,
@@ -555,9 +558,12 @@ function App(): React.JSX.Element {
           ? store.selectedModelId
           : activeProvider.model,
       });
-      transcription
-        .connect()
-        .catch((err: unknown) => console.warn("ASR connect failed:", err));
+      try {
+        await transcription.connect();
+      } catch (err) {
+        console.error("ASR connection failed:", err);
+        // Don't block recording — transcription will just be unavailable
+      }
     } catch (err) {
       console.error("Failed to start recording:", err);
       store.setRecording(false);
@@ -794,7 +800,7 @@ function App(): React.JSX.Element {
               // Use getState() to avoid stale closure after session switch
               if (useAppStore.getState().currentSessionId === sessionId) {
                 store.addSegment({
-                  id: Date.now(),
+                  id: ++segmentIdCounter.current,
                   start_time: startTime,
                   end_time: endTime,
                   text,
@@ -926,7 +932,7 @@ function App(): React.JSX.Element {
                 useAppStore.getState().currentSessionId === result.sessionId
               ) {
                 store.addSegment({
-                  id: Date.now(),
+                  id: ++segmentIdCounter.current,
                   start_time: startTime,
                   end_time: endTime,
                   text,
@@ -969,7 +975,7 @@ function App(): React.JSX.Element {
       });
       if (useAppStore.getState().currentSessionId === result.sessionId) {
         store.addSegment({
-          id: Date.now(),
+          id: ++segmentIdCounter.current,
           start_time: 0,
           end_time: 0,
           text: `[Transcription failed] ${errMsg}`,

@@ -205,14 +205,46 @@ export function createSession(
   return result.lastInsertRowid as number;
 }
 
-export function getSession(db: Database.Database, id: number): any {
-  const stmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
-  return stmt.get(id);
+export interface SessionRow {
+  readonly id: number;
+  readonly title: string;
+  readonly started_at: string;
+  readonly ended_at: string | null;
+  readonly duration_seconds: number | null;
+  readonly audio_path: string | null;
+  readonly model_name: string;
+  readonly status: string;
 }
 
-export function listSessions(db: Database.Database): any[] {
+export interface SegmentRow {
+  readonly id: number;
+  readonly session_id: number;
+  readonly segment_index: number;
+  readonly start_time: number;
+  readonly end_time: number;
+  readonly text: string;
+}
+
+export interface SummaryRow {
+  readonly id: number;
+  readonly session_id: number;
+  readonly provider: string;
+  readonly model: string;
+  readonly content: string;
+  readonly created_at: string;
+}
+
+export function getSession(
+  db: Database.Database,
+  id: number,
+): SessionRow | undefined {
+  const stmt = db.prepare("SELECT * FROM sessions WHERE id = ?");
+  return stmt.get(id) as SessionRow | undefined;
+}
+
+export function listSessions(db: Database.Database): SessionRow[] {
   const stmt = db.prepare("SELECT * FROM sessions ORDER BY started_at DESC");
-  return stmt.all();
+  return stmt.all() as SessionRow[];
 }
 
 export function addSegment(
@@ -233,11 +265,14 @@ export function addSegment(
   return result.lastInsertRowid as number;
 }
 
-export function getSegments(db: Database.Database, sessionId: number): any[] {
+export function getSegments(
+  db: Database.Database,
+  sessionId: number,
+): SegmentRow[] {
   const stmt = db.prepare(
     "SELECT * FROM segments WHERE session_id = ? ORDER BY start_time ASC",
   );
-  return stmt.all(sessionId);
+  return stmt.all(sessionId) as SegmentRow[];
 }
 
 export function deleteSegmentsBySession(
@@ -248,9 +283,12 @@ export function deleteSegmentsBySession(
 }
 
 export function deleteSession(db: Database.Database, id: number): void {
-  deleteSummariesBySession(db, id);
-  deleteSegmentsBySession(db, id);
-  db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  const del = db.transaction(() => {
+    deleteSummariesBySession(db, id);
+    deleteSegmentsBySession(db, id);
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  });
+  del();
 }
 
 export function updateSession(
@@ -316,17 +354,17 @@ export function getSummaries(
   db: Database.Database,
   sessionId: number,
   promptType?: string,
-): any[] {
+): SummaryRow[] {
   if (promptType) {
     const stmt = db.prepare(
       "SELECT * FROM summaries WHERE session_id = ? AND prompt_type = ? ORDER BY created_at ASC",
     );
-    return stmt.all(sessionId, promptType);
+    return stmt.all(sessionId, promptType) as SummaryRow[];
   }
   const stmt = db.prepare(
     "SELECT * FROM summaries WHERE session_id = ? ORDER BY created_at ASC",
   );
-  return stmt.all(sessionId);
+  return stmt.all(sessionId) as SummaryRow[];
 }
 
 export function deleteSummary(db: Database.Database, id: number): void {
