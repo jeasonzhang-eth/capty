@@ -432,6 +432,517 @@ function ModelCard({
   );
 }
 
+/* ─── Model Market Modal ─── */
+
+function ModelMarketModal({
+  models,
+  selectedModelId,
+  isDownloading,
+  downloadingModelId,
+  downloadProgress,
+  downloadError,
+  isRecording,
+  hfMirrorUrl,
+  defaultHfUrl,
+  onSelectModel,
+  onDownloadModel,
+  onDeleteModel,
+  onSearchModels,
+  onChangeHfMirrorUrl,
+  onClose,
+}: {
+  readonly models: readonly ModelInfo[];
+  readonly selectedModelId: string;
+  readonly isDownloading: boolean;
+  readonly downloadingModelId: string | null;
+  readonly downloadProgress: number;
+  readonly downloadError: string | null;
+  readonly isRecording: boolean;
+  readonly hfMirrorUrl: string;
+  readonly defaultHfUrl: string;
+  readonly onSelectModel: (modelId: string) => void;
+  readonly onDownloadModel: (model: ModelInfo) => void;
+  readonly onDeleteModel: (modelId: string) => void;
+  readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
+  readonly onChangeHfMirrorUrl: (url: string) => void;
+  readonly onClose: () => void;
+}): React.ReactElement {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
+  const [hfUrlSaved, setHfUrlSaved] = useState(false);
+  const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Sync search results' downloaded status
+  useEffect(() => {
+    if (searchResults.length === 0) return;
+    const downloadedIds = new Set(
+      models.filter((m) => m.downloaded).map((m) => m.id),
+    );
+    const needsUpdate = searchResults.some(
+      (r) => !r.downloaded && downloadedIds.has(r.id),
+    );
+    if (needsUpdate) {
+      setSearchResults((prev) =>
+        prev.map((r) =>
+          downloadedIds.has(r.id) ? { ...r, downloaded: true } : r,
+        ),
+      );
+    }
+  }, [models, searchResults]);
+
+  const installed = models.filter((m) => m.downloaded);
+  const recommended = models.filter((m) => !m.downloaded);
+
+  const handleDeleteModel = useCallback(
+    (modelId: string) => {
+      if (modelId === selectedModelId) return;
+      setConfirmDeleteId(modelId);
+    },
+    [selectedModelId],
+  );
+
+  const confirmDelete = useCallback(() => {
+    if (confirmDeleteId) {
+      onDeleteModel(confirmDeleteId);
+      setConfirmDeleteId(null);
+    }
+  }, [confirmDeleteId, onDeleteModel]);
+
+  const handleSaveHfUrl = useCallback(() => {
+    onChangeHfMirrorUrl(editingHfUrl);
+    setHfUrlSaved(true);
+    setTimeout(() => setHfUrlSaved(false), 2000);
+  }, [editingHfUrl, onChangeHfMirrorUrl]);
+
+  const handleResetHfUrl = useCallback(() => {
+    setEditingHfUrl(defaultHfUrl);
+  }, [defaultHfUrl]);
+
+  const handleSearch = useCallback(async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setIsSearching(true);
+    setHasSearched(true);
+    try {
+      const results = await onSearchModels(q);
+      const existingIds = new Set(models.map((m) => m.id));
+      setSearchResults(results.filter((r) => !existingIds.has(r.id)));
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchQuery, onSearchModels, models]);
+
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") handleSearch();
+    },
+    [handleSearch],
+  );
+
+  const sectionHeaderStyle: React.CSSProperties = {
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    marginBottom: "8px",
+    paddingBottom: "6px",
+    borderBottom: "1px solid var(--border)",
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0,0,0,0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 4000,
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "var(--bg-secondary)",
+          border: "1px solid var(--border)",
+          borderRadius: "12px",
+          width: "720px",
+          maxWidth: "90vw",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "16px",
+              fontWeight: 700,
+              margin: 0,
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            Model Market
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: "18px",
+              cursor: "pointer",
+              padding: "4px 8px",
+              borderRadius: "4px",
+            }}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+          {/* Search */}
+          <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search models on HuggingFace..."
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button
+              onClick={handleSearch}
+              disabled={isSearching || !searchQuery.trim()}
+              style={{
+                ...primaryBtnStyle,
+                cursor:
+                  isSearching || !searchQuery.trim()
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+              }}
+            >
+              {isSearching ? "Searching..." : "Search"}
+            </button>
+          </div>
+
+          {/* HuggingFace Mirror URL */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "16px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              HuggingFace Mirror:
+            </span>
+            <input
+              type="text"
+              value={editingHfUrl}
+              onChange={(e) => setEditingHfUrl(e.target.value)}
+              placeholder={defaultHfUrl}
+              style={{
+                ...inputStyle,
+                flex: 1,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: "11px",
+              }}
+            />
+            {hfUrlChanged && (
+              <button
+                onClick={handleSaveHfUrl}
+                style={{ ...primaryBtnStyle, fontSize: "11px" }}
+              >
+                Save
+              </button>
+            )}
+            {!hfUrlChanged && hfUrlSaved && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "#4ADE80",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Saved
+              </span>
+            )}
+            <button
+              onClick={handleResetHfUrl}
+              disabled={editingHfUrl === defaultHfUrl}
+              style={{
+                ...secondaryBtnStyle,
+                fontSize: "11px",
+                padding: "0 8px",
+                color: "var(--text-muted)",
+                cursor:
+                  editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+                opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
+              }}
+              title="Reset to default"
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Download error */}
+          {downloadError && (
+            <div
+              style={{
+                padding: "8px 12px",
+                marginBottom: "12px",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "6px",
+                fontSize: "12px",
+                color: "#EF4444",
+                lineHeight: "18px",
+              }}
+            >
+              {downloadError}
+            </div>
+          )}
+
+          {/* Installed */}
+          <div style={sectionHeaderStyle}>Installed ({installed.length})</div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              marginBottom: "20px",
+            }}
+          >
+            {installed.length === 0 && (
+              <div
+                style={{
+                  padding: "12px",
+                  textAlign: "center",
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                No models installed yet.
+              </div>
+            )}
+            {installed.map((model) => (
+              <ModelCard
+                key={model.id}
+                model={model}
+                isSelected={model.id === selectedModelId}
+                isThisDownloading={
+                  isDownloading && downloadingModelId === model.id
+                }
+                downloadProgress={downloadProgress}
+                isRecording={isRecording}
+                isDownloading={isDownloading}
+                onDownloadModel={onDownloadModel}
+                onSelectModel={onSelectModel}
+                onDelete={handleDeleteModel}
+              />
+            ))}
+          </div>
+
+          {/* Recommended */}
+          {recommended.length > 0 && (
+            <>
+              <div style={sectionHeaderStyle}>Recommended</div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  marginBottom: "20px",
+                }}
+              >
+                {recommended.map((model) => (
+                  <ModelCard
+                    key={model.id}
+                    model={model}
+                    isSelected={model.id === selectedModelId}
+                    isThisDownloading={
+                      isDownloading && downloadingModelId === model.id
+                    }
+                    downloadProgress={downloadProgress}
+                    isRecording={isRecording}
+                    isDownloading={isDownloading}
+                    onDownloadModel={onDownloadModel}
+                    onSelectModel={onSelectModel}
+                    onDelete={null}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Search Results */}
+          {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
+            <>
+              <div style={sectionHeaderStyle}>Search Results</div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                {searchResults.map((model) => (
+                  <ModelCard
+                    key={model.id}
+                    model={model}
+                    isSelected={model.id === selectedModelId}
+                    isThisDownloading={
+                      isDownloading && downloadingModelId === model.id
+                    }
+                    downloadProgress={downloadProgress}
+                    isRecording={isRecording}
+                    isDownloading={isDownloading}
+                    onDownloadModel={onDownloadModel}
+                    onSelectModel={onSelectModel}
+                    onDelete={null}
+                  />
+                ))}
+                {hasSearched && !isSearching && searchResults.length === 0 && (
+                  <div
+                    style={{
+                      padding: "12px",
+                      textAlign: "center",
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                    }}
+                  >
+                    No models found. Try different keywords.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      {confirmDeleteId !== null && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 5000,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmDeleteId(null);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              padding: "20px",
+              width: "320px",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+                marginBottom: "8px",
+              }}
+            >
+              Delete Model
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-secondary)",
+                marginBottom: "16px",
+                lineHeight: "18px",
+              }}
+            >
+              Are you sure you want to delete{" "}
+              <strong>
+                {models.find((m) => m.id === confirmDeleteId)?.name ??
+                  confirmDeleteId}
+              </strong>
+              ? The downloaded model files will be permanently removed.
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+              }}
+            >
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                style={secondaryBtnStyle}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  ...primaryBtnStyle,
+                  backgroundColor: "#ef4444",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Page: General ─── */
 
 function GeneralTab({
@@ -609,33 +1120,8 @@ function SpeechTab({
     {},
   );
 
-  // Models state
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
-  const [hfUrlSaved, setHfUrlSaved] = useState(false);
-  const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
-
-  // Sync search results' downloaded status
-  useEffect(() => {
-    if (searchResults.length === 0) return;
-    const downloadedIds = new Set(
-      models.filter((m) => m.downloaded).map((m) => m.id),
-    );
-    const needsUpdate = searchResults.some(
-      (r) => !r.downloaded && downloadedIds.has(r.id),
-    );
-    if (needsUpdate) {
-      setSearchResults((prev) =>
-        prev.map((r) =>
-          downloadedIds.has(r.id) ? { ...r, downloaded: true } : r,
-        ),
-      );
-    }
-  }, [models, searchResults]);
+  // Model Market modal state
+  const [showModelMarket, setShowModelMarket] = useState(false);
 
   const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
 
@@ -803,55 +1289,6 @@ function SpeechTab({
       }
     },
     [providers],
-  );
-
-  // Models handlers
-  const handleDeleteModel = useCallback(
-    (modelId: string) => {
-      if (modelId === selectedModelId) return;
-      setConfirmDeleteId(modelId);
-    },
-    [selectedModelId],
-  );
-
-  const confirmDelete = useCallback(() => {
-    if (confirmDeleteId) {
-      onDeleteModel(confirmDeleteId);
-      setConfirmDeleteId(null);
-    }
-  }, [confirmDeleteId, onDeleteModel]);
-
-  const handleSaveHfUrl = useCallback(() => {
-    onChangeHfMirrorUrl(editingHfUrl);
-    setHfUrlSaved(true);
-    setTimeout(() => setHfUrlSaved(false), 2000);
-  }, [editingHfUrl, onChangeHfMirrorUrl]);
-
-  const handleResetHfUrl = useCallback(() => {
-    setEditingHfUrl(defaultHfUrl);
-  }, [defaultHfUrl]);
-
-  const handleSearch = useCallback(async () => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    setIsSearching(true);
-    setHasSearched(true);
-    try {
-      const results = await onSearchModels(q);
-      const existingIds = new Set(models.map((m) => m.id));
-      setSearchResults(results.filter((r) => !existingIds.has(r.id)));
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [searchQuery, onSearchModels, models]);
-
-  const handleSearchKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter") handleSearch();
-    },
-    [handleSearch],
   );
 
   return (
@@ -1195,7 +1632,7 @@ function SpeechTab({
                         </div>
                       </div>
 
-                      {/* Model Market */}
+                      {/* Model Market Entry */}
                       <div
                         style={{
                           marginTop: "16px",
@@ -1205,227 +1642,29 @@ function SpeechTab({
                       >
                         <div
                           style={{
-                            ...sectionTitleStyle,
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Model Market
-                        </div>
-                        <div
-                          style={{
                             display: "flex",
-                            flexDirection: "column",
-                            gap: "8px",
+                            justifyContent: "space-between",
+                            alignItems: "center",
                           }}
                         >
-                          {models.map((model) => (
-                            <ModelCard
-                              key={model.id}
-                              model={model}
-                              isSelected={model.id === selectedModelId}
-                              isThisDownloading={
-                                isDownloading && downloadingModelId === model.id
-                              }
-                              downloadProgress={downloadProgress}
-                              isRecording={isRecording}
-                              isDownloading={isDownloading}
-                              onDownloadModel={onDownloadModel}
-                              onSelectModel={onSelectModel}
-                              onDelete={handleDeleteModel}
-                            />
-                          ))}
-                          {models.length === 0 && (
+                          <div>
+                            <div style={sectionTitleStyle}>Model Market</div>
                             <div
                               style={{
-                                padding: "12px",
-                                textAlign: "center",
+                                fontSize: "12px",
                                 color: "var(--text-muted)",
-                                fontSize: "13px",
                               }}
                             >
-                              No models available. Search HuggingFace below to
-                              find models.
+                              {models.filter((m) => m.downloaded).length}{" "}
+                              model(s) installed
                             </div>
-                          )}
-                        </div>
-
-                        {/* HuggingFace Mirror URL */}
-                        <div
-                          style={{
-                            ...cardStyle,
-                            marginBottom: "8px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: "11px",
-                              color: "var(--text-muted)",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            HuggingFace Mirror (model download source)
                           </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                            }}
+                          <button
+                            onClick={() => setShowModelMarket(true)}
+                            style={primaryBtnStyle}
                           >
-                            <input
-                              type="text"
-                              value={editingHfUrl}
-                              onChange={(e) => setEditingHfUrl(e.target.value)}
-                              placeholder={defaultHfUrl}
-                              style={{
-                                ...inputStyle,
-                                flex: 1,
-                                fontFamily: "'JetBrains Mono', monospace",
-                                fontSize: "11px",
-                              }}
-                            />
-                            {hfUrlChanged && (
-                              <button
-                                onClick={handleSaveHfUrl}
-                                style={{
-                                  ...primaryBtnStyle,
-                                  fontSize: "11px",
-                                }}
-                              >
-                                Save
-                              </button>
-                            )}
-                            {!hfUrlChanged && hfUrlSaved && (
-                              <span
-                                style={{
-                                  fontSize: "11px",
-                                  color: "#4ADE80",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                Saved
-                              </span>
-                            )}
-                            <button
-                              onClick={handleResetHfUrl}
-                              disabled={editingHfUrl === defaultHfUrl}
-                              style={{
-                                ...secondaryBtnStyle,
-                                fontSize: "11px",
-                                padding: "0 8px",
-                                color: "var(--text-muted)",
-                                cursor:
-                                  editingHfUrl === defaultHfUrl
-                                    ? "not-allowed"
-                                    : "pointer",
-                                opacity:
-                                  editingHfUrl === defaultHfUrl ? 0.4 : 1,
-                              }}
-                              title="Reset to default"
-                            >
-                              Reset
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Download error */}
-                        {downloadError && (
-                          <div
-                            style={{
-                              padding: "8px 12px",
-                              marginBottom: "8px",
-                              backgroundColor: "rgba(239, 68, 68, 0.1)",
-                              border: "1px solid rgba(239, 68, 68, 0.3)",
-                              borderRadius: "6px",
-                              fontSize: "12px",
-                              color: "#EF4444",
-                              lineHeight: "18px",
-                            }}
-                          >
-                            {downloadError}
-                          </div>
-                        )}
-
-                        {/* Search */}
-                        <div>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "6px",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            <input
-                              type="text"
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              onKeyDown={handleSearchKeyDown}
-                              placeholder="Search more models on HuggingFace..."
-                              style={{
-                                ...inputStyle,
-                                flex: 1,
-                              }}
-                            />
-                            <button
-                              onClick={handleSearch}
-                              disabled={isSearching || !searchQuery.trim()}
-                              style={{
-                                ...primaryBtnStyle,
-                                cursor:
-                                  isSearching || !searchQuery.trim()
-                                    ? "not-allowed"
-                                    : "pointer",
-                                opacity:
-                                  isSearching || !searchQuery.trim() ? 0.5 : 1,
-                              }}
-                            >
-                              {isSearching ? "Searching..." : "Search"}
-                            </button>
-                          </div>
-
-                          {/* Search results */}
-                          {(searchResults.length > 0 ||
-                            (hasSearched && !isSearching)) && (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "8px",
-                              }}
-                            >
-                              {searchResults.map((model) => (
-                                <ModelCard
-                                  key={model.id}
-                                  model={model}
-                                  isSelected={model.id === selectedModelId}
-                                  isThisDownloading={
-                                    isDownloading &&
-                                    downloadingModelId === model.id
-                                  }
-                                  downloadProgress={downloadProgress}
-                                  isRecording={isRecording}
-                                  isDownloading={isDownloading}
-                                  onDownloadModel={onDownloadModel}
-                                  onSelectModel={onSelectModel}
-                                  onDelete={null}
-                                />
-                              ))}
-                              {hasSearched &&
-                                !isSearching &&
-                                searchResults.length === 0 && (
-                                  <div
-                                    style={{
-                                      padding: "12px",
-                                      textAlign: "center",
-                                      color: "var(--text-muted)",
-                                      fontSize: "12px",
-                                    }}
-                                  >
-                                    No models found. Try different keywords.
-                                  </div>
-                                )}
-                            </div>
-                          )}
+                            Browse
+                          </button>
                         </div>
                       </div>
                     </>
@@ -1619,87 +1858,25 @@ function SpeechTab({
         })}
       </div>
 
-      {/* Delete confirmation dialog */}
-      {confirmDeleteId !== null && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.7)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 4000,
-            backdropFilter: "blur(4px)",
-            WebkitBackdropFilter: "blur(4px)",
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setConfirmDeleteId(null);
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "var(--bg-secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              padding: "20px",
-              width: "320px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "14px",
-                fontWeight: 600,
-                color: "var(--text-primary)",
-                marginBottom: "8px",
-              }}
-            >
-              Delete Model
-            </div>
-            <div
-              style={{
-                fontSize: "12px",
-                color: "var(--text-secondary)",
-                marginBottom: "16px",
-                lineHeight: "18px",
-              }}
-            >
-              Are you sure you want to delete{" "}
-              <strong>
-                {models.find((m) => m.id === confirmDeleteId)?.name ??
-                  confirmDeleteId}
-              </strong>
-              ? The downloaded model files will be permanently removed.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-              }}
-            >
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                style={secondaryBtnStyle}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                style={{
-                  ...primaryBtnStyle,
-                  backgroundColor: "#ef4444",
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Model Market Modal */}
+      {showModelMarket && (
+        <ModelMarketModal
+          models={models}
+          selectedModelId={selectedModelId}
+          isDownloading={isDownloading}
+          downloadingModelId={downloadingModelId}
+          downloadProgress={downloadProgress}
+          downloadError={downloadError}
+          isRecording={isRecording}
+          hfMirrorUrl={hfMirrorUrl}
+          defaultHfUrl={defaultHfUrl}
+          onSelectModel={onSelectModel}
+          onDownloadModel={onDownloadModel}
+          onDeleteModel={onDeleteModel}
+          onSearchModels={onSearchModels}
+          onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+          onClose={() => setShowModelMarket(false)}
+        />
       )}
     </>
   );
