@@ -60,22 +60,72 @@ def _extract_pcm(raw_bytes: bytes) -> bytes:
     return raw_bytes
 
 
+async def _ensure_model_loaded(
+    runner: ModelRunner,
+    registry: ModelRegistry,
+    target_model: str,
+    models_dir: str,
+) -> None:
+    """Ensure the requested ASR model is loaded, switching if needed.
+
+    Uses ``runner.load()`` which internally unloads any previously loaded
+    model, avoiding the race condition of a separate unload-then-load sequence.
+
+    Raises ``HTTPException`` if the model is not found or fails to load.
+    """
+    if runner.current_model_id == target_model:
+        return
+    info = registry.get_model_info(target_model)
+    if info is None:
+        raise HTTPException(
+            status_code=404, detail=f"Model '{target_model}' not found"
+        )
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        _mlx_executor,
+        lambda m=target_model, d=models_dir: runner.load(m, models_dir=Path(d)),
+    )
+
+
+def _validate_file_path(file_path: str, data_dir: str) -> Path:
+    """Validate that *file_path* is under the allowed *data_dir*.
+
+    Returns the resolved ``Path`` on success; raises ``HTTPException``
+    with status 403 if the path is outside the allowed directory.
+    """
+    resolved = Path(file_path).resolve()
+    allowed = Path(data_dir).resolve()
+    if not str(resolved).startswith(str(allowed)):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: path outside allowed directory",
+        )
+    return resolved
+
+
 # ---------------------------------------------------------------------------
 # Application factory
 # ---------------------------------------------------------------------------
 
-def create_app(models_dir: str) -> FastAPI:
+def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
     """Create and return the FastAPI application.
 
     Parameters
     ----------
     models_dir:
         Filesystem path where downloaded model directories live.
+    data_dir:
+        Root data directory.  File-path based endpoints (transcribe-file,
+        decode) only allow paths under this directory.  When empty, falls
+        back to the parent of *models_dir* (``models_dir/..``).
     """
     app = FastAPI(title="Capty ASR Sidecar")
     registry = ModelRegistry(models_dir=Path(models_dir))
     runner = ModelRunner()
     tts_runner = TTSRunner()
+
+    # Resolve the allowed data directory for path validation.
+    effective_data_dir = data_dir if data_dir else str(Path(models_dir).resolve().parent)
 
     # ------------------------------------------------------------------
     # HTTP routes
@@ -96,31 +146,28 @@ def create_app(models_dir: str) -> FastAPI:
 
     @app.post("/models/switch")
     async def switch_model(body: SwitchModelRequest):
-        model_info = registry.get_model_info(body.model)
+        target = body.model
+        model_info = registry.get_model_info(target)
         if model_info is None:
             raise HTTPException(status_code=404, detail="Unknown model ID")
-        if not registry.is_downloaded(body.model):
+        if not registry.is_downloaded(target):
             raise HTTPException(
                 status_code=400,
-                detail=f"Model '{body.model}' is not downloaded",
+                detail=f"Model '{target}' is not downloaded",
             )
-        # Unload current model (if any) and load the new one
-        runner.unload()
         try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                _mlx_executor,
-                lambda: runner.load(body.model, models_dir=Path(models_dir)),
-            )
+            await _ensure_model_loaded(runner, registry, target, models_dir)
+        except HTTPException:
+            raise
         except Exception as exc:
-            logger.exception("Failed to load model %s", body.model)
+            logger.exception("Failed to load model %s", target)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to load model: {exc}",
             ) from exc
         return {
             "status": "ok",
-            "model": body.model,
+            "model": target,
         }
 
     # ------------------------------------------------------------------
@@ -136,34 +183,26 @@ def create_app(models_dir: str) -> FastAPI:
         """OpenAI Whisper-compatible transcription endpoint.
 
         Accepts multipart/form-data with a WAV audio file and returns
-        ``{"text": "..."}`` — same schema as OpenAI's API.
+        ``{"text": "..."}`` -- same schema as OpenAI's API.
         """
         # Load / switch model if requested and different from current
         target_model = model.strip() if model else None
         if target_model:
-            model_info = registry.get_model_info(target_model)
-            if not model_info or not registry.is_downloaded(target_model):
+            if not registry.is_downloaded(target_model):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Model '{target_model}' not found in models directory ({models_dir}). "
                     f"Make sure the model is downloaded and the sidecar --models-dir points to the correct ASR models path.",
                 )
-            if not runner.is_loaded() or runner.current_model_id != target_model:
-                runner.unload()
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        _mlx_executor,
-                        lambda: runner.load(
-                            target_model,
-                            models_dir=Path(models_dir),
-                        ),
-                    )
-                except Exception as exc:
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to load model: {exc}",
-                    ) from exc
+            try:
+                await _ensure_model_loaded(runner, registry, target_model, models_dir)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load model: {exc}",
+                ) from exc
 
         if not runner.is_loaded():
             raise HTTPException(
@@ -207,32 +246,27 @@ def create_app(models_dir: str) -> FastAPI:
         if not file_path or not Path(file_path).is_file():
             raise HTTPException(status_code=400, detail="File not found")
 
+        # Path validation: only allow files under the data directory
+        _validate_file_path(file_path, effective_data_dir)
+
         # Load / switch model if requested
         target_model = body.model.strip() if body.model else None
         if target_model:
-            model_info = registry.get_model_info(target_model)
-            if not model_info or not registry.is_downloaded(target_model):
+            if not registry.is_downloaded(target_model):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Model '{target_model}' not found in models directory ({models_dir}). "
                     f"Make sure the model is downloaded and the sidecar --models-dir points to the correct ASR models path.",
                 )
-            if not runner.is_loaded() or runner.current_model_id != target_model:
-                runner.unload()
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        _mlx_executor,
-                        lambda: runner.load(
-                            target_model,
-                            models_dir=Path(models_dir),
-                        ),
-                    )
-                except Exception as exc:
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to load model: {exc}",
-                    ) from exc
+            try:
+                await _ensure_model_loaded(runner, registry, target_model, models_dir)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load model: {exc}",
+                ) from exc
 
         if not runner.is_loaded():
             raise HTTPException(
@@ -244,10 +278,11 @@ def create_app(models_dir: str) -> FastAPI:
         try:
             from mlx_audio.stt.utils import load_audio
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
+            fp = file_path  # capture for lambda
             audio = await loop.run_in_executor(
                 _mlx_executor,
-                lambda: load_audio(file_path, sr=SAMPLE_RATE),
+                lambda p=fp: load_audio(p, sr=SAMPLE_RATE),
             )
             audio_np = np.array(audio, dtype=np.float32)
         except Exception as exc:
@@ -260,7 +295,7 @@ def create_app(models_dir: str) -> FastAPI:
         if audio_np.size == 0:
             return {"segments": [], "text": "", "duration": 0}
 
-        # Transcribe — split into 15-second segments with timestamps
+        # Transcribe -- split into 15-second segments with timestamps
         segment_seconds = 15
         max_chunk_samples = segment_seconds * SAMPLE_RATE
         total_duration = round(audio_np.size / SAMPLE_RATE)
@@ -286,7 +321,7 @@ def create_app(models_dir: str) -> FastAPI:
         }
 
     # ------------------------------------------------------------------
-    # Audio decode (any format → 16kHz mono 16-bit PCM WAV)
+    # Audio decode (any format -> 16kHz mono 16-bit PCM WAV)
     # ------------------------------------------------------------------
 
     @app.post("/v1/audio/decode")
@@ -300,13 +335,17 @@ def create_app(models_dir: str) -> FastAPI:
         if not file_path or not Path(file_path).is_file():
             raise HTTPException(status_code=400, detail="File not found")
 
+        # Path validation: only allow files under the data directory
+        _validate_file_path(file_path, effective_data_dir)
+
         try:
             from mlx_audio.stt.utils import load_audio
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
+            fp = file_path  # capture for lambda
             audio = await loop.run_in_executor(
                 _mlx_executor,
-                lambda: load_audio(file_path, sr=SAMPLE_RATE),
+                lambda p=fp: load_audio(p, sr=SAMPLE_RATE),
             )
             audio_np = np.array(audio, dtype=np.float32)
         except Exception as exc:
@@ -316,7 +355,7 @@ def create_app(models_dir: str) -> FastAPI:
                 detail=f"Failed to decode audio: {exc}",
             ) from exc
 
-        # Convert float32 → 16-bit signed PCM
+        # Convert float32 -> 16-bit signed PCM
         pcm_int16 = (audio_np * 32767).clip(-32768, 32767).astype(np.int16)
 
         # Build WAV in memory
@@ -341,12 +380,12 @@ def create_app(models_dir: str) -> FastAPI:
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):
         """Switch the active TTS model."""
-        tts_runner.unload()
         try:
-            loop = asyncio.get_event_loop()
+            target = body.model
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 _mlx_executor,
-                lambda: tts_runner.load(body.model),
+                lambda m=target: tts_runner.load(m),
             )
         except Exception as exc:
             logger.exception("Failed to load TTS model %s", body.model)
@@ -384,12 +423,11 @@ def create_app(models_dir: str) -> FastAPI:
         target_model = model.strip() if model else None
         if target_model:
             if not tts_runner.is_loaded() or tts_runner._model_id != target_model:
-                tts_runner.unload()
                 try:
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     await loop.run_in_executor(
                         _mlx_executor,
-                        lambda: tts_runner.load(target_model),
+                        lambda m=target_model: tts_runner.load(m),
                     )
                 except Exception as exc:
                     logger.exception("Failed to load TTS model %s", target_model)
@@ -400,7 +438,7 @@ def create_app(models_dir: str) -> FastAPI:
         elif not tts_runner.is_loaded():
             # Lazy-load default TTS model on first request
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(_mlx_executor, tts_runner.load)
             except Exception as exc:
                 logger.exception("Failed to load TTS model")

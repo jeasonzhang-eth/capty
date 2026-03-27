@@ -307,6 +307,15 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (42)
+
+- **修复 Sidecar 模型切换竞态条件** — `switch_model`、`transcriptions`、`transcribe_file` 端点中 `unload()` + `load()` 分离调用导致并发请求在两次调用之间看到无模型状态；改为 `load()` 内部自动卸载旧模型，并提取 `_ensure_model_loaded()` 辅助函数消除三处重复代码
+- **修复 Lambda 闭包变量捕获** — `server.py` 和 `model_runner.py` 中所有通过 `run_in_executor` 传递的 lambda 改用默认参数绑定（`lambda m=target_model: ...`），避免闭包延迟求值导致变量被后续覆盖
+- **新增文件路径校验** — `transcribe-file` 和 `decode` 端点新增路径验证，仅允许访问 `data_dir` 下的文件，防止路径遍历攻击（403 Forbidden）
+- **修复 TTS 异常被吞没** — `tts_runner.py` 的 `_generate_all()` 中 `except Exception` 仅记录日志但不重新抛出，导致后续报错为误导性的 "TTS produced no audio"；改为 `raise RuntimeError` 携带原始异常
+- **替换废弃 asyncio API** — `server.py`、`model_runner.py`、`tts_runner.py` 中所有 `asyncio.get_event_loop()` 替换为 `asyncio.get_running_loop()`
+- **增强模型卸载内存清理** — `ModelRunner.unload()` 和 `TTSRunner.unload()` 现在调用 `mx.clear_cache()` + `gc.collect()` 主动释放 GPU 缓存和 Python 对象
+
 ### 2026-03-28 (41)
 
 - **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃

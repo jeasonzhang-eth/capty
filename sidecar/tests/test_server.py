@@ -23,7 +23,7 @@ async def test_health(tmp_path):
 
 @pytest.mark.asyncio
 async def test_list_models(tmp_path):
-    """GET /models returns a list of available models."""
+    """GET /models returns a list (empty when no models on disk)."""
     app = create_app(models_dir=str(tmp_path))
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -31,17 +31,18 @@ async def test_list_models(tmp_path):
         assert resp.status_code == 200
         models = resp.json()
         assert isinstance(models, list)
-        assert len(models) > 0
-        # Each model should have expected fields
-        for m in models:
-            assert "id" in m
-            assert "name" in m
-            assert "downloaded" in m
+        # tmp_path is empty, so no models should be listed
+        assert len(models) == 0
 
 
 @pytest.mark.asyncio
 async def test_switch_model_not_downloaded(tmp_path):
-    """POST /models/switch returns 400 when model is not downloaded."""
+    """POST /models/switch returns error when model is not available.
+
+    With disk-driven registry, a model that has no directory on disk is
+    treated as unknown (404).  A model with a directory but no weight
+    files would return 400 (not downloaded).
+    """
     app = create_app(models_dir=str(tmp_path))
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -49,9 +50,8 @@ async def test_switch_model_not_downloaded(tmp_path):
             "/models/switch",
             json={"model": "qwen3-asr-0.6b"},
         )
-        assert resp.status_code == 400
-        data = resp.json()
-        assert "not downloaded" in data["detail"].lower() or "not found" in data["detail"].lower()
+        # Model directory doesn't exist -> 404 Unknown model ID
+        assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -76,3 +76,46 @@ async def test_health_after_cors(tmp_path):
         resp = await client.get("/health")
         # Server should respond successfully regardless of origin
         assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_transcribe_file_path_outside_data_dir(tmp_path):
+    """POST /v1/audio/transcribe-file rejects paths outside data_dir."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    models_dir = data_dir / "models" / "asr"
+    models_dir.mkdir(parents=True)
+
+    app = create_app(models_dir=str(models_dir), data_dir=str(data_dir))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/v1/audio/transcribe-file",
+            json={"file_path": "/etc/passwd"},
+        )
+        # /etc/passwd exists but is outside data_dir -> 400 (file not found
+        # because we check existence before path validation) or 403
+        assert resp.status_code in (400, 403)
+
+
+@pytest.mark.asyncio
+async def test_decode_audio_path_outside_data_dir(tmp_path):
+    """POST /v1/audio/decode rejects paths outside data_dir."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    models_dir = data_dir / "models" / "asr"
+    models_dir.mkdir(parents=True)
+
+    # Create a file outside data_dir
+    outside_file = tmp_path / "outside.wav"
+    outside_file.write_bytes(b"RIFF" + b"\x00" * 40)
+
+    app = create_app(models_dir=str(models_dir), data_dir=str(data_dir))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/v1/audio/decode",
+            json={"file_path": str(outside_file)},
+        )
+        assert resp.status_code == 403
+        assert "outside allowed directory" in resp.json()["detail"]
