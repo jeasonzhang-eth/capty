@@ -182,9 +182,9 @@ export function useSession() {
   const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /** Merge pending chunks and send to main process for disk write. */
-  const flushAudio = useCallback(() => {
+  const flushAudio = useCallback((): Promise<void> => {
     const chunks = pendingChunksRef.current;
-    if (chunks.length === 0) return;
+    if (chunks.length === 0) return Promise.resolve();
     pendingChunksRef.current = [];
 
     const totalLength = chunks.reduce((sum, buf) => sum + buf.length, 0);
@@ -195,8 +195,7 @@ export function useSession() {
       offset += buf.length;
     }
 
-    // Fire-and-forget — don't await to avoid blocking audio callback
-    window.capty.appendAudioStream(merged.buffer as ArrayBuffer);
+    return window.capty.appendAudioStream(merged.buffer as ArrayBuffer);
   }, []);
 
   const startSession = useCallback(
@@ -278,7 +277,7 @@ export function useSession() {
       }
 
       // Final flush of any remaining buffered audio
-      flushAudio();
+      await flushAudio();
 
       // Finalize the WAV file (fix header sizes)
       await window.capty.closeAudioStream();

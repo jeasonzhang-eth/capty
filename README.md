@@ -307,6 +307,13 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (42)
+
+- **修复数据完整性问题** — 三项修复，防止音频数据丢失和事件监听器泄漏
+  - **音频刷写竞态条件**：`stopSession` 中 `flushAudio()` 未被 await，导致 `closeAudioStream()` 可能在最后一块音频写入完成前执行，丢失尾部音频数据；改为 `await flushAudio()` 确保顺序执行
+  - **Audio 元素资源泄漏**：`useAudioPlayer` cleanup 使用 `src = ""` 不会释放底层媒体资源，改为 `removeAttribute('src')` + `load()` 强制释放；`ended` 事件监听器改用 `{ once: true }` 避免重复注册
+  - **IPC 监听器误清理**：preload 中 4 处 `removeAllListeners(channel)` 会清除同一 channel 上所有监听器（包括其他组件注册的），改为 `removeListener(channel, handler)` 只移除当前实例注册的 handler
+
 ### 2026-03-28 (41)
 
 - **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃

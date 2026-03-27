@@ -23,7 +23,8 @@ export function useAudioPlayer() {
   const cleanup = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = "";
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load(); // forces resource release
       audioRef.current = null;
     }
     if (blobUrlRef.current) {
@@ -66,9 +67,13 @@ export function useAudioPlayer() {
         setState((prev) => ({ ...prev, currentTime: audio.currentTime }));
       });
 
-      audio.addEventListener("ended", () => {
-        stop();
-      });
+      audio.addEventListener(
+        "ended",
+        () => {
+          stop();
+        },
+        { once: true },
+      );
 
       setState((prev) => ({
         playingSessionId: sessionId,
