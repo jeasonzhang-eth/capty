@@ -1126,7 +1126,13 @@ function SummaryCard({
         setTtsState("idle");
         return;
       }
-      const blob = new Blob([buffer], { type: "audio/wav" });
+      // Ensure we have a proper Uint8Array for Blob constructor
+      const bytes =
+        buffer instanceof ArrayBuffer
+          ? new Uint8Array(buffer)
+          : new Uint8Array(buffer as unknown as ArrayBufferLike);
+      console.log("[TTS] Received audio buffer:", bytes.byteLength, "bytes");
+      const blob = new Blob([bytes], { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       globalAudioRef = audio;
@@ -1138,7 +1144,8 @@ function SummaryCard({
         globalPlayingCardId = null;
         setTtsState("idle");
       };
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error("[TTS] Audio playback error:", e);
         URL.revokeObjectURL(url);
         globalAudioRef = null;
         globalPlayingCardId = null;
@@ -1147,7 +1154,8 @@ function SummaryCard({
 
       await audio.play();
       setTtsState("playing");
-    } catch {
+    } catch (err) {
+      console.error("[TTS] TTS failed:", err);
       globalPlayingCardId = null;
       setTtsState("idle");
     }
