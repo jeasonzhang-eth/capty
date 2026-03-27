@@ -307,6 +307,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (41)
+
+- **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃
+
 ### 2026-03-28 (40)
 
 - **修复录音会话时间显示为 UTC 而非本地时间** — `createSession` 不再依赖 SQLite DEFAULT（旧数据库的 DEFAULT 可能仍是 UTC），改为在 JS 层显式生成本地时间写入 `started_at` 和 `title`
