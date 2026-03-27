@@ -313,6 +313,10 @@ pytest
   - **路径遍历防护** — 新增 `assertPathWithin()` 验证函数，在 `models:delete`、`tts-models:delete`、`audio:save-segment`、`audio:save-full`、`audio:stream-open` 五个 IPC handler 中校验路径参数，防止通过 `../` 删除或写入任意文件
   - **启用 Electron sandbox** — `BrowserWindow` 的 `sandbox` 从 `false` 改为 `true`，限制渲染进程的系统访问能力（preload 仅使用 `contextBridge` + `ipcRenderer`，无需禁用 sandbox）
   - **HTML 输出 XSS 防护** — 引入 DOMPurify，`SummaryPanel` 的 Markdown 渲染结果在 `dangerouslySetInnerHTML` 前经过 `DOMPurify.sanitize()` 过滤，防止 LLM 返回的恶意 HTML/JS 执行
+- **修复数据完整性问题** — 三项修复，防止音频数据丢失和事件监听器泄漏
+  - **音频刷写竞态条件**：`stopSession` 中 `flushAudio()` 未被 await，导致 `closeAudioStream()` 可能在最后一块音频写入完成前执行，丢失尾部音频数据；改为 `await flushAudio()` 确保顺序执行
+  - **Audio 元素资源泄漏**：`useAudioPlayer` cleanup 使用 `src = ""` 不会释放底层媒体资源，改为 `removeAttribute('src')` + `load()` 强制释放；`ended` 事件监听器改用 `{ once: true }` 避免重复注册
+  - **IPC 监听器误清理**：preload 中 4 处 `removeAllListeners(channel)` 会清除同一 channel 上所有监听器（包括其他组件注册的），改为 `removeListener(channel, handler)` 只移除当前实例注册的 handler
 
 ### 2026-03-28 (41)
 

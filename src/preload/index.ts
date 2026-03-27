@@ -103,11 +103,10 @@ const api = {
       percent: number;
     }) => void,
   ) => {
-    ipcRenderer.on("models:download-progress", (_event, progress) =>
-      callback(progress),
-    );
+    const handler = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on("models:download-progress", handler);
     return () => {
-      ipcRenderer.removeAllListeners("models:download-progress");
+      ipcRenderer.removeListener("models:download-progress", handler);
     };
   },
 
@@ -140,11 +139,10 @@ const api = {
       error?: string;
     }) => void,
   ) => {
-    ipcRenderer.on("download:progress", (_event, progress) =>
-      callback(progress),
-    );
+    const handler = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on("download:progress", handler);
     return () => {
-      ipcRenderer.removeAllListeners("download:progress");
+      ipcRenderer.removeListener("download:progress", handler);
     };
   },
 
@@ -232,11 +230,10 @@ const api = {
       percent: number;
     }) => void,
   ) => {
-    ipcRenderer.on("tts-models:download-progress", (_event, progress) =>
-      callback(progress),
-    );
+    const handler = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on("tts-models:download-progress", handler);
     return () => {
-      ipcRenderer.removeAllListeners("tts-models:download-progress");
+      ipcRenderer.removeListener("tts-models:download-progress", handler);
     };
   },
   saveTtsSettings: (settings: {
@@ -268,9 +265,10 @@ const api = {
   onSummaryChunk: (
     callback: (data: { content: string; done: boolean }) => void,
   ) => {
-    ipcRenderer.on("llm:summary-chunk", (_event, data) => callback(data));
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("llm:summary-chunk", handler);
     return () => {
-      ipcRenderer.removeAllListeners("llm:summary-chunk");
+      ipcRenderer.removeListener("llm:summary-chunk", handler);
     };
   },
   listSummaries: (sessionId: number, promptType?: string) =>
