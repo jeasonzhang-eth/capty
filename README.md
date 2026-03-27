@@ -293,6 +293,7 @@ pytest
   - 模态框状态（搜索、HF URL 编辑等）打开时初始化，关闭时自然销毁，不污染 SpeechTab
   - 点击 × 或点击背景关闭模态框
 - **HuggingFace 搜索限定 mlx-community** — 搜索范围从全站改为仅搜索 `mlx-community` 组织下的 ASR 模型，避免返回非 MLX 格式的无关结果
+- **ModelCard 点击切换模型** — 移除 "Use" 按钮，已下载模型直接点击卡片即可切换为活跃模型；Active 标签和 Delete 按钮保持不变
 
 ### 2026-03-27 (30)
 

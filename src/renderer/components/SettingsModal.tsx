@@ -231,8 +231,11 @@ function ModelCard({
   readonly onSelectModel: (id: string) => void;
   readonly onDelete: ((id: string) => void) | null;
 }): React.ReactElement {
+  const canSelect = model.downloaded && !isSelected && !isRecording;
+
   return (
     <div
+      onClick={canSelect ? () => onSelectModel(model.id) : undefined}
       style={{
         padding: "12px",
         backgroundColor: isSelected ? "var(--bg-tertiary)" : "transparent",
@@ -240,7 +243,8 @@ function ModelCard({
           ? "1px solid var(--accent)"
           : "1px solid var(--border)",
         borderRadius: "8px",
-        transition: "border-color 0.2s",
+        transition: "border-color 0.2s, background-color 0.15s",
+        cursor: canSelect ? "pointer" : "default",
       }}
     >
       <div
@@ -328,7 +332,10 @@ function ModelCard({
         >
           {!model.downloaded && !isThisDownloading && (
             <button
-              onClick={() => onDownloadModel(model)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownloadModel(model);
+              }}
               disabled={isRecording || isDownloading}
               style={{
                 ...primaryBtnStyle,
@@ -341,24 +348,6 @@ function ModelCard({
               }}
             >
               Download
-            </button>
-          )}
-          {model.downloaded && !isSelected && (
-            <button
-              onClick={() => onSelectModel(model.id)}
-              disabled={isRecording}
-              style={{
-                ...secondaryBtnStyle,
-                height: "28px",
-                padding: "0 12px",
-                fontSize: "11px",
-                borderColor: "var(--accent)",
-                color: "var(--accent)",
-                cursor: isRecording ? "not-allowed" : "pointer",
-                opacity: isRecording ? 0.5 : 1,
-              }}
-            >
-              Use
             </button>
           )}
           {isSelected && model.downloaded && (
@@ -376,7 +365,10 @@ function ModelCard({
           )}
           {model.downloaded && !isSelected && onDelete && (
             <button
-              onClick={() => onDelete(model.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(model.id);
+              }}
               disabled={isRecording || isDownloading}
               style={{
                 ...secondaryBtnStyle,
