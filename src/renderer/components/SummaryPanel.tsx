@@ -161,12 +161,14 @@ export function SummaryPanel({
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(initialWidth);
+  const latestWidthRef = useRef(panelWidth);
 
   // Sync when initialWidth changes from async config load
   useEffect(() => {
     if (!isDragging.current) {
       setPanelWidth(initialWidth);
       startWidth.current = initialWidth;
+      latestWidthRef.current = initialWidth;
     }
   }, [initialWidth]);
 
@@ -189,12 +191,13 @@ export function SummaryPanel({
         Math.max(MIN_WIDTH, startWidth.current + delta),
       );
       setPanelWidth(newWidth);
+      latestWidthRef.current = newWidth;
     };
 
     const handleMouseUp = (): void => {
       if (isDragging.current) {
         isDragging.current = false;
-        onWidthChange(panelWidth);
+        onWidthChange(latestWidthRef.current);
       }
     };
 
@@ -204,7 +207,7 @@ export function SummaryPanel({
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [onWidthChange, panelWidth]);
+  }, [onWidthChange]);
 
   const openEdit = useCallback((pt: PromptType) => {
     setEditingType(pt);

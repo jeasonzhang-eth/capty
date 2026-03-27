@@ -18,6 +18,7 @@ export function useAudioCapture() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const onAudioDataRef = useRef<((pcm: Int16Array) => void) | null>(null);
   const onDeviceRemovedRef = useRef<(() => void) | null>(null);
+  const selectedDeviceRef = useRef<string | null>(null);
 
   const refreshDevices = useCallback(async () => {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -68,6 +69,7 @@ export function useAudioCapture() {
   }, [refreshDevices]);
 
   const setSelectedDevice = useCallback((deviceId: string | null) => {
+    selectedDeviceRef.current = deviceId;
     setState((prev) => ({ ...prev, selectedDeviceId: deviceId }));
   }, []);
 
@@ -75,67 +77,66 @@ export function useAudioCapture() {
     onDeviceRemovedRef.current = cb;
   }, []);
 
-  const start = useCallback(
-    async (onAudioData: (pcm: Int16Array) => void) => {
-      onAudioDataRef.current = onAudioData;
+  const start = useCallback(async (onAudioData: (pcm: Int16Array) => void) => {
+    onAudioDataRef.current = onAudioData;
 
-      const baseAudio = {
-        sampleRate: 16000,
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-      };
+    const baseAudio = {
+      sampleRate: 16000,
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+    };
 
-      let stream: MediaStream;
-      if (state.selectedDeviceId) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              ...baseAudio,
-              deviceId: { exact: state.selectedDeviceId },
-            },
-          });
-        } catch {
-          // Selected device unavailable (unplugged) — fallback to default
-          console.warn("Selected device unavailable, falling back to default");
-          setState((prev) => ({ ...prev, selectedDeviceId: null }));
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: baseAudio,
-          });
-        }
-      } else {
+    const deviceId = selectedDeviceRef.current;
+    let stream: MediaStream;
+    if (deviceId) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...baseAudio,
+            deviceId: { exact: deviceId },
+          },
+        });
+      } catch {
+        // Selected device unavailable (unplugged) — fallback to default
+        console.warn("Selected device unavailable, falling back to default");
+        selectedDeviceRef.current = null;
+        setState((prev) => ({ ...prev, selectedDeviceId: null }));
         stream = await navigator.mediaDevices.getUserMedia({
           audio: baseAudio,
         });
       }
-      streamRef.current = stream;
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: baseAudio,
+      });
+    }
+    streamRef.current = stream;
 
-      const audioContext = new AudioContext({ sampleRate: 16000 });
-      audioContextRef.current = audioContext;
+    const audioContext = new AudioContext({ sampleRate: 16000 });
+    audioContextRef.current = audioContext;
 
-      const source = audioContext.createMediaStreamSource(stream);
-      // Use ScriptProcessor for simplicity (AudioWorklet would be better for production)
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+    const source = audioContext.createMediaStreamSource(stream);
+    // Use ScriptProcessor for simplicity (AudioWorklet would be better for production)
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processorRef.current = processor;
 
-      processor.onaudioprocess = (event) => {
-        const float32Data = event.inputBuffer.getChannelData(0);
-        // Convert float32 [-1, 1] to int16
-        const int16Data = new Int16Array(float32Data.length);
-        for (let i = 0; i < float32Data.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32Data[i]));
-          int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-        onAudioDataRef.current?.(int16Data);
-      };
+    processor.onaudioprocess = (event) => {
+      const float32Data = event.inputBuffer.getChannelData(0);
+      // Convert float32 [-1, 1] to int16
+      const int16Data = new Int16Array(float32Data.length);
+      for (let i = 0; i < float32Data.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Data[i]));
+        int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      onAudioDataRef.current?.(int16Data);
+    };
 
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+    source.connect(processor);
+    processor.connect(audioContext.destination);
 
-      setState((prev) => ({ ...prev, isCapturing: true }));
-    },
-    [state.selectedDeviceId],
-  );
+    setState((prev) => ({ ...prev, isCapturing: true }));
+  }, []);
 
   const stop = useCallback(() => {
     processorRef.current?.disconnect();
