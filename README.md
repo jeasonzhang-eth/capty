@@ -311,7 +311,8 @@ pytest
 
 - **修复 ASR 模型查找失败静默跳过的 bug** — sidecar 的 `transcriptions` 和 `transcribe-file` 端点在模型未找到时静默跳过加载，导致模糊的 "No model loaded" 错误
   - 改为在模型未找到时立即返回 400 错误，明确指出未找到的模型 ID 和 `--models-dir` 路径
-  - 更新 npm sidecar 脚本默认 `--models-dir` 路径从 `$HOME/Desktop/capty/models` 到 `~/Library/Application Support/Capty/data/models/asr`（与 Electron app 下载路径一致）
+  - **sidecar 自动检测 models 目录**：`--models-dir` 改为可选参数，未提供时自动读取 Electron 的 `config.json`（`~/Library/Application Support/Capty/config.json`）获取 `dataDir` 设置，拼接 `/models/asr` 路径；也支持 `CAPTY_MODELS_DIR` 环境变量覆盖；优先级：`--models-dir` > `$CAPTY_MODELS_DIR` > 自动检测
+  - npm sidecar 脚本简化为 `capty-sidecar --port 8765`，不再需要手动配置 models 路径
   - 音频导入转录失败时，在转录区域显示 `[Transcription failed]` 错误信息（之前仅 console.error）
 
 ### 2026-03-27 (37)
