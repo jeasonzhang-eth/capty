@@ -976,7 +976,8 @@ function StreamingCard({
 }
 
 // Global ref to track the currently playing audio across all cards
-let globalAudioRef: HTMLAudioElement | null = null;
+let globalAudioCtx: AudioContext | null = null;
+let globalSourceNode: AudioBufferSourceNode | null = null;
 let globalPlayingCardId: number | null = null;
 
 function stripMarkdown(md: string): string {
@@ -1097,10 +1098,10 @@ function SummaryCard({
   const handleTtsClick = useCallback(async () => {
     if (ttsState === "playing" || ttsState === "loading") {
       // Stop playback
-      if (globalAudioRef) {
-        globalAudioRef.pause();
-        URL.revokeObjectURL(globalAudioRef.src);
-        globalAudioRef = null;
+      if (globalSourceNode) {
+        globalSourceNode.stop();
+        globalSourceNode.disconnect();
+        globalSourceNode = null;
       }
       globalPlayingCardId = null;
       setTtsState("idle");
@@ -1108,10 +1109,10 @@ function SummaryCard({
     }
 
     // Stop any other card's playback
-    if (globalAudioRef) {
-      globalAudioRef.pause();
-      URL.revokeObjectURL(globalAudioRef.src);
-      globalAudioRef = null;
+    if (globalSourceNode) {
+      globalSourceNode.stop();
+      globalSourceNode.disconnect();
+      globalSourceNode = null;
       globalPlayingCardId = null;
     }
 
@@ -1126,33 +1127,48 @@ function SummaryCard({
         setTtsState("idle");
         return;
       }
-      // Ensure we have a proper Uint8Array for Blob constructor
+
+      // Convert IPC buffer to ArrayBuffer for Web Audio API
       const bytes =
         buffer instanceof ArrayBuffer
           ? new Uint8Array(buffer)
           : new Uint8Array(buffer as unknown as ArrayBufferLike);
       console.log("[TTS] Received audio buffer:", bytes.byteLength, "bytes");
-      const blob = new Blob([bytes], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      globalAudioRef = audio;
+
+      // Use Web Audio API for reliable playback
+      if (!globalAudioCtx) {
+        globalAudioCtx = new AudioContext();
+      }
+      // Resume AudioContext if suspended (autoplay policy)
+      if (globalAudioCtx.state === "suspended") {
+        await globalAudioCtx.resume();
+      }
+
+      // decodeAudioData needs a standalone ArrayBuffer (not a view into a larger buffer)
+      const arrayBuf = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      );
+      const audioBuffer = await globalAudioCtx.decodeAudioData(arrayBuf);
+      console.log(
+        "[TTS] Decoded audio:",
+        audioBuffer.duration.toFixed(1) + "s",
+        audioBuffer.sampleRate + "Hz",
+        audioBuffer.numberOfChannels + "ch",
+      );
+
+      const source = globalAudioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(globalAudioCtx.destination);
+      source.onended = () => {
+        globalSourceNode = null;
+        globalPlayingCardId = null;
+        setTtsState("idle");
+      };
+
+      source.start();
+      globalSourceNode = source;
       globalPlayingCardId = summary.id;
-
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        globalAudioRef = null;
-        globalPlayingCardId = null;
-        setTtsState("idle");
-      };
-      audio.onerror = (e) => {
-        console.error("[TTS] Audio playback error:", e);
-        URL.revokeObjectURL(url);
-        globalAudioRef = null;
-        globalPlayingCardId = null;
-        setTtsState("idle");
-      };
-
-      await audio.play();
       setTtsState("playing");
     } catch (err) {
       console.error("[TTS] TTS failed:", err);
@@ -1164,10 +1180,10 @@ function SummaryCard({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (globalPlayingCardId === summary.id && globalAudioRef) {
-        globalAudioRef.pause();
-        URL.revokeObjectURL(globalAudioRef.src);
-        globalAudioRef = null;
+      if (globalPlayingCardId === summary.id && globalSourceNode) {
+        globalSourceNode.stop();
+        globalSourceNode.disconnect();
+        globalSourceNode = null;
         globalPlayingCardId = null;
       }
     };

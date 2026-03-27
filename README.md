@@ -307,7 +307,7 @@ pytest
   - SummaryPanel 摘要卡片支持选择 TTS 模型，无已下载模型时播放按钮置灰
   - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
   - 修复音频 NaN/Inf 导致 WAV 损坏：转换前用 `nan_to_num` 清理异常值
-  - 修复 TTS 播放失败无反馈：添加 audio buffer 类型处理和错误日志
+  - 修复 TTS 播放无声音：改用 Web Audio API (AudioContext) 替代 HTMLAudioElement，解决 Chromium autoplay 限制
 
 ### 2026-03-27 (33)
 
