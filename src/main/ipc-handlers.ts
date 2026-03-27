@@ -1,6 +1,22 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
 import fs from "fs";
+import path from "node:path";
 import { join } from "path";
+
+/**
+ * Validates that `targetPath` resolves to a location within `basePath`.
+ * Throws if a path traversal is detected (e.g. via `../`).
+ */
+function assertPathWithin(basePath: string, targetPath: string): void {
+  const resolved = path.resolve(targetPath);
+  const resolvedBase = path.resolve(basePath);
+  if (
+    !resolved.startsWith(resolvedBase + path.sep) &&
+    resolved !== resolvedBase
+  ) {
+    throw new Error(`Path traversal detected: ${targetPath}`);
+  }
+}
 import Database from "better-sqlite3";
 import {
   createSession,
@@ -611,6 +627,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       segmentIndex: number,
       pcmData: ArrayBuffer,
     ) => {
+      const config = readConfig(configDir);
+      const audioBase = join(
+        config.dataDir ?? join(configDir, "data"),
+        "audio",
+      );
+      assertPathWithin(audioBase, sessionDir);
       saveSegmentAudio(sessionDir, segmentIndex, Buffer.from(pcmData));
     },
   );
@@ -618,6 +640,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(
     "audio:save-full",
     (_event, sessionDir: string, pcmData: ArrayBuffer, fileName?: string) => {
+      const config = readConfig(configDir);
+      const audioBase = join(
+        config.dataDir ?? join(configDir, "data"),
+        "audio",
+      );
+      assertPathWithin(audioBase, sessionDir);
       saveFullAudio(sessionDir, Buffer.from(pcmData), fileName);
     },
   );
@@ -904,6 +932,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const dataDir = config.dataDir ?? join(configDir, "data");
     const modelsDir = join(dataDir, "models", "asr");
     const modelPath = join(modelsDir, modelId);
+    assertPathWithin(modelsDir, modelPath);
 
     if (fs.existsSync(modelPath)) {
       fs.rmSync(modelPath, { recursive: true, force: true });
@@ -995,7 +1024,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle("tts-models:delete", async (_event, modelId: string) => {
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    const modelPath = join(dataDir, "models", "tts", modelId);
+    const ttsModelsDir = join(dataDir, "models", "tts");
+    const modelPath = join(ttsModelsDir, modelId);
+    assertPathWithin(ttsModelsDir, modelPath);
     if (fs.existsSync(modelPath)) {
       fs.rmSync(modelPath, { recursive: true, force: true });
     }
@@ -1112,6 +1143,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(
     "audio:stream-open",
     (_event, sessionDir: string, fileName: string) => {
+      const config = readConfig(configDir);
+      const audioBase = join(
+        config.dataDir ?? join(configDir, "data"),
+        "audio",
+      );
+      assertPathWithin(audioBase, sessionDir);
       openAudioStream(sessionDir, fileName);
     },
   );
