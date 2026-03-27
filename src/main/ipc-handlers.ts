@@ -1155,9 +1155,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       const formData = new FormData();
       formData.append("input", text);
-      formData.append("voice", opts?.voice ?? "af_heart");
+      formData.append("voice", opts?.voice ?? "auto");
       formData.append("speed", String(opts?.speed ?? 1.0));
-      formData.append("lang_code", opts?.langCode ?? "a");
+      formData.append("lang_code", opts?.langCode ?? "auto");
 
       const resp = await net.fetch(`${url}/v1/audio/speech`, {
         method: "POST",

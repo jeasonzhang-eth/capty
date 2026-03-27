@@ -184,9 +184,9 @@ def create_app(models_dir: str) -> FastAPI:
     @app.post("/v1/audio/speech")
     async def text_to_speech(
         input: str = Form(...),
-        voice: str = Form("af_heart"),
+        voice: str = Form("auto"),
         speed: float = Form(1.0),
-        lang_code: str = Form("a"),
+        lang_code: str = Form("auto"),
     ):
         """OpenAI-compatible TTS endpoint.
 

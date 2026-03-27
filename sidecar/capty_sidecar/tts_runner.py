@@ -25,6 +25,32 @@ DEFAULT_TTS_MODEL = "mlx-community/Kokoro-82M-bf16"
 TTS_SAMPLE_RATE = 24000
 MAX_CHUNK_CHARS = 300
 
+# CJK Unicode ranges for language auto-detection
+_CJK_RE = re.compile(
+    r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
+    r"\U00020000-\U0002a6df\U0002a700-\U0002ebef]"
+)
+
+# Voice defaults per language
+_DEFAULT_VOICES = {
+    "z": "zf_xiaobei",
+    "a": "af_heart",
+    "b": "bf_emma",
+    "j": "jf_alpha",
+}
+
+
+def _detect_lang(text: str) -> str:
+    """Auto-detect language code from text content.
+
+    Returns 'z' for Chinese, 'a' for English (default).
+    """
+    cjk_count = len(_CJK_RE.findall(text))
+    total = len(text.strip())
+    if total > 0 and cjk_count / total > 0.15:
+        return "z"
+    return "a"
+
 
 def _strip_markdown(text: str) -> str:
     """Remove Markdown formatting, keeping only plain text."""
@@ -101,11 +127,15 @@ class TTSRunner:
     async def synthesize(
         self,
         text: str,
-        voice: str = "af_heart",
+        voice: str = "auto",
         speed: float = 1.0,
-        lang_code: str = "a",
+        lang_code: str = "auto",
     ) -> bytes:
-        """Generate speech from text, return WAV bytes."""
+        """Generate speech from text, return WAV bytes.
+
+        When lang_code is "auto", detects language from text content.
+        When voice is "auto", picks a default voice for the detected language.
+        """
         if not self.is_loaded():
             raise RuntimeError("TTS model not loaded")
 
@@ -113,6 +143,11 @@ class TTSRunner:
         plain = _strip_markdown(text)
         if not plain:
             raise ValueError("Empty text after stripping markdown")
+
+        # Auto-detect language and voice
+        effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
+        effective_voice = _DEFAULT_VOICES.get(effective_lang, "af_heart") if voice == "auto" else voice
+        logger.info("TTS: lang=%s, voice=%s, text_len=%d", effective_lang, effective_voice, len(plain))
 
         chunks = _split_text(plain)
         model = self._model
@@ -124,9 +159,9 @@ class TTSRunner:
                 try:
                     results = model.generate(
                         text=chunk,
-                        voice=voice,
+                        voice=effective_voice,
                         speed=speed,
-                        lang_code=lang_code,
+                        lang_code=effective_lang,
                     )
                     for result in results:
                         audio_np = np.array(result.audio)
