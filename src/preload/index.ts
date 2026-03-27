@@ -150,6 +150,11 @@ const api = {
     ipcRenderer.invoke("export:save-file", defaultName, content),
 
   // TTS
+  checkTtsProvider: () =>
+    ipcRenderer.invoke("tts:check-provider") as Promise<{
+      ready: boolean;
+      reason: string;
+    }>,
   ttsListVoices: (modelDir: string) =>
     ipcRenderer.invoke("tts:list-voices", modelDir) as Promise<{
       model: string;

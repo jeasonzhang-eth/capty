@@ -1294,6 +1294,25 @@ function App(): React.JSX.Element {
     return () => clearInterval(timer);
   }, [store.asrProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // TTS provider health polling (every 10s when a TTS provider is selected)
+  useEffect(() => {
+    if (!selectedTtsProviderId || ttsProviders.length === 0) {
+      store.setTtsProviderReady(false);
+      return;
+    }
+    const poll = async (): Promise<void> => {
+      try {
+        const result = await window.capty.checkTtsProvider();
+        store.setTtsProviderReady(result.ready);
+      } catch {
+        store.setTtsProviderReady(false);
+      }
+    };
+    poll(); // Check immediately on mount/change
+    const timer = setInterval(poll, 10000);
+    return () => clearInterval(timer);
+  }, [selectedTtsProviderId, ttsProviders]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Listen for LLM streaming chunks
   useEffect(() => {
     const unsub = window.capty.onSummaryChunk(({ content, done }) => {
@@ -1403,6 +1422,7 @@ function App(): React.JSX.Element {
           selectedTtsModelId={selectedTtsModelId}
           selectedTtsVoice={selectedTtsVoice}
           ttsVoices={ttsVoices}
+          ttsProviderReady={store.ttsProviderReady}
           onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}

@@ -55,6 +55,7 @@ interface SummaryPanelProps {
   readonly selectedTtsModelId: string;
   readonly selectedTtsVoice: string;
   readonly ttsVoices: readonly TtsVoiceInfo[];
+  readonly ttsProviderReady: boolean;
   readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (providerId: string, promptType: string) => void;
   readonly onChangePromptType: (promptType: string) => void;
@@ -99,6 +100,7 @@ export function SummaryPanel({
   selectedTtsModelId,
   selectedTtsVoice,
   ttsVoices,
+  ttsProviderReady,
   onWidthChange,
   onSummarize,
   onChangePromptType,
@@ -533,6 +535,7 @@ export function SummaryPanel({
             selectedTtsModelId={selectedTtsModelId}
             selectedTtsVoice={selectedTtsVoice}
             ttsVoices={ttsVoices}
+            ttsProviderReady={ttsProviderReady}
             onChangeTtsModel={onChangeTtsModel}
             onChangeTtsVoice={onChangeTtsVoice}
           />
@@ -1064,6 +1067,7 @@ function SummaryCard({
   selectedTtsModelId,
   selectedTtsVoice,
   ttsVoices,
+  ttsProviderReady,
   onChangeTtsModel,
   onChangeTtsVoice,
 }: {
@@ -1073,6 +1077,7 @@ function SummaryCard({
   readonly selectedTtsModelId: string;
   readonly selectedTtsVoice: string;
   readonly ttsVoices: readonly TtsVoiceInfo[];
+  readonly ttsProviderReady: boolean;
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly onChangeTtsVoice: (voice: string) => void;
 }): React.ReactElement {
@@ -1244,15 +1249,21 @@ function SummaryCard({
       >
         <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <button
-            onClick={ttsModels.length > 0 ? handleTtsClick : undefined}
+            onClick={
+              ttsModels.length > 0 && ttsProviderReady
+                ? handleTtsClick
+                : undefined
+            }
             title={
               ttsModels.length === 0
                 ? "Download a TTS model in Settings"
-                : ttsState === "idle"
-                  ? "Read aloud"
-                  : ttsState === "loading"
-                    ? "Loading..."
-                    : "Stop"
+                : !ttsProviderReady
+                  ? "TTS provider is not available"
+                  : ttsState === "idle"
+                    ? "Read aloud"
+                    : ttsState === "loading"
+                      ? "Loading..."
+                      : "Stop"
             }
             className="tts-play-btn"
             style={{
@@ -1260,11 +1271,14 @@ function SummaryCard({
               fontSize: "12px",
               backgroundColor: "transparent",
               border: "none",
-              cursor: ttsModels.length > 0 ? "pointer" : "not-allowed",
+              cursor:
+                ttsModels.length > 0 && ttsProviderReady
+                  ? "pointer"
+                  : "not-allowed",
               color:
                 ttsState === "playing" ? "var(--accent)" : "var(--text-muted)",
               opacity:
-                ttsModels.length === 0
+                ttsModels.length === 0 || !ttsProviderReady
                   ? 0.3
                   : ttsState === "loading"
                     ? 0.5

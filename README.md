@@ -293,6 +293,15 @@ pytest
 
 ## 更新日志
 
+### 2026-03-27 (36)
+
+- **TTS Provider 交互保护** — TTS 调用前增加 provider 可用性检测，避免请求挂起超时
+  - 新增 `tts:check-provider` IPC handler：Sidecar 检查 `/health`，外部 Provider 检查 `/v1/audio/speech` 可达性
+  - `tts:speak` 和 `tts:list-voices` 开头增加 provider 可达性 guard，不可用时抛出明确错误信息
+  - appStore 新增 `ttsProviderReady` 状态，App.tsx 每 10 秒轮询 TTS provider 状态
+  - SummaryPanel TTS 播放按钮在 provider 不可用时自动置灰，hover 提示 "TTS provider is not available"
+  - preload 新增 `checkTtsProvider` API
+
 ### 2026-03-27 (35)
 
 - **全面使用 mlx-audio 重构后端** — 移除所有 Kokoro 遗留代码，简化依赖和音频处理流程

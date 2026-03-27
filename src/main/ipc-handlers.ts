@@ -1406,6 +1406,42 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // TTS provider reachability check
+  ipcMain.handle("tts:check-provider", async () => {
+    const config = readConfig(configDir);
+    const selectedId = config.selectedTtsProviderId ?? "sidecar";
+    const provider = (config.ttsProviders ?? []).find(
+      (p) => p.id === selectedId,
+    );
+    if (!provider) {
+      return { ready: false, reason: "No TTS provider configured" };
+    }
+    const url = provider.baseUrl ?? "http://localhost:8765";
+    try {
+      if (provider.isSidecar) {
+        // Check sidecar /health endpoint for tts_loaded
+        const resp = await fetch(`${url}/health`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (!resp.ok) {
+          return { ready: false, reason: `Sidecar returned ${resp.status}` };
+        }
+        const data = (await resp.json()) as Record<string, unknown>;
+        return { ready: true, reason: "Sidecar online", ...data };
+      } else {
+        // External: check if /v1/audio/speech endpoint is reachable
+        const resp = await net.fetch(`${url}/v1/audio/speech`, {
+          method: "OPTIONS",
+          signal: AbortSignal.timeout(3000),
+        });
+        // Any non-network-error response means the server is reachable
+        return { ready: true, reason: `Provider reachable (${resp.status})` };
+      }
+    } catch {
+      return { ready: false, reason: "Provider unreachable" };
+    }
+  });
+
   // TTS voice listing
   ipcMain.handle("tts:list-voices", async (_event, modelDir: string) => {
     const config = readConfig(configDir);
@@ -1413,6 +1449,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       (p) => p.id === (config.selectedTtsProviderId ?? "sidecar"),
     );
     const url = provider?.baseUrl ?? "http://localhost:8765";
+
+    // Guard: check provider reachability first
+    try {
+      await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    } catch {
+      throw new Error(
+        "TTS provider is not available. Check that the sidecar or external TTS server is running.",
+      );
+    }
+
     const resp = await net.fetch(
       `${url}/tts/voices?model_dir=${encodeURIComponent(modelDir)}`,
       { signal: AbortSignal.timeout(10000) },
@@ -1434,7 +1480,19 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const provider = (config.ttsProviders ?? []).find(
         (p) => p.id === selectedId,
       );
-      const url = provider?.baseUrl ?? "http://localhost:8765";
+      if (!provider) {
+        throw new Error("No TTS provider configured. Add one in Settings.");
+      }
+      const url = provider.baseUrl ?? "http://localhost:8765";
+
+      // Guard: check provider reachability before making TTS request
+      try {
+        await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+      } catch {
+        throw new Error(
+          "TTS provider is not available. Check that the sidecar or external TTS server is running.",
+        );
+      }
 
       // Resolve the TTS model path so the sidecar can auto-switch
       const ttsModelId = config.selectedTtsModelId;
