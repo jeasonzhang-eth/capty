@@ -748,12 +748,76 @@ function App(): React.JSX.Element {
 
     // Refresh session list
     await store.loadSessions();
-
-    // Select the new session and load its segments (empty initially)
     await handleSelectSession(result.sessionId);
 
-    // Auto-trigger transcription (reuse regeneration flow)
-    handleRegenerateSubtitles(result.sessionId);
+    // Determine ASR provider for file-based transcription
+    const activeProvider = store.asrProviders.find(
+      (p) => p.id === store.selectedAsrProviderId,
+    );
+    if (!activeProvider) {
+      console.warn("No ASR provider selected for import transcription");
+      return;
+    }
+
+    const model = activeProvider.isSidecar
+      ? store.selectedModelId || activeProvider.model
+      : activeProvider.model;
+    if (!model) {
+      console.error("No ASR model selected");
+      return;
+    }
+
+    // Use file-based transcription via sidecar (supports any audio format)
+    setRegeneratingSessionId(result.sessionId);
+    setRegenerationProgress(0);
+    try {
+      const provider = {
+        baseUrl: activeProvider.baseUrl,
+        apiKey: activeProvider.apiKey,
+        model,
+      };
+
+      // For sidecar: use file-path-based transcription (no ffmpeg needed)
+      // For external: fall back to PCM-based regeneration flow
+      if (activeProvider.isSidecar && result.audioPath) {
+        setRegenerationProgress(10);
+        const transcribeResult = await window.capty.transcribeFile(
+          result.audioPath,
+          provider,
+        );
+        setRegenerationProgress(90);
+
+        const text = transcribeResult.text?.trim();
+        if (text) {
+          await window.capty.addSegment({
+            sessionId: result.sessionId,
+            startTime: 0,
+            endTime: 0,
+            text,
+            audioPath: "",
+            isFinal: true,
+          });
+          if (useAppStore.getState().currentSessionId === result.sessionId) {
+            store.addSegment({
+              id: Date.now(),
+              start_time: 0,
+              end_time: 0,
+              text,
+            });
+          }
+        }
+        setRegenerationProgress(100);
+      } else {
+        // External provider: use regeneration flow (requires WAV)
+        handleRegenerateSubtitles(result.sessionId);
+        return; // regeneration manages its own state
+      }
+    } catch (err) {
+      console.error("Failed to transcribe imported audio:", err);
+    } finally {
+      setRegeneratingSessionId(null);
+      setRegenerationProgress(0);
+    }
   }, [
     store,
     regeneratingSessionId,

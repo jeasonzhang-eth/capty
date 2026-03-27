@@ -1,5 +1,4 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
-import { spawn } from "child_process";
 import fs from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
@@ -164,6 +163,39 @@ function readModelMeta(dirPath: string, dirName: string): ModelEntry {
   };
 }
 
+/** Known STT model types from mlx-audio MODEL_REMAPPING. */
+const KNOWN_STT_TYPES = new Set([
+  "fireredasr2",
+  "glm",
+  "sensevoice",
+  "voxtral",
+  "voxtral_realtime",
+  "vibevoice",
+  "qwen3_asr",
+  "canary",
+  "moonshine",
+  "mms",
+  "granite_speech",
+]);
+
+/** Known TTS model types from mlx-audio MODEL_REMAPPING. */
+const KNOWN_TTS_TYPES = new Set([
+  "qwen3_tts",
+  "outetts",
+  "spark",
+  "marvis",
+  "csm",
+  "voxcpm",
+  "voxcpm1.5",
+  "vibevoice_streaming",
+  "chatterbox_turbo",
+  "soprano",
+  "bailingmm",
+  "kitten",
+  "echo_tts",
+  "fish_qwen3_omni",
+]);
+
 /** Infer model type from config.json's model_type / architectures fields. */
 function inferModelTypeFromDir(dirPath: string): string {
   const configPath = join(dirPath, "config.json");
@@ -171,6 +203,12 @@ function inferModelTypeFromDir(dirPath: string): string {
     if (!fs.existsSync(configPath)) return "auto";
     const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const modelType = (cfg.model_type ?? "").toLowerCase();
+
+    // Check against mlx-audio known model types
+    if (KNOWN_STT_TYPES.has(modelType)) return modelType;
+    if (KNOWN_TTS_TYPES.has(modelType)) return modelType;
+
+    // Fallback: keyword-based detection
     const architectures = (cfg.architectures ?? [])
       .map((a: string) => a.toLowerCase())
       .join(" ");
@@ -435,36 +473,6 @@ async function searchHuggingFaceModels(
   );
 
   return mlxResults.map((r, i) => hfModelToEntry(r, sizes[i]));
-}
-
-function convertToWav(inputPath: string, outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const ffmpeg = spawn("ffmpeg", [
-      "-i",
-      inputPath,
-      "-ar",
-      "16000",
-      "-ac",
-      "1",
-      "-sample_fmt",
-      "s16",
-      "-f",
-      "wav",
-      "-y",
-      outputPath,
-    ]);
-    ffmpeg.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}`));
-    });
-    ffmpeg.on("error", (err) => {
-      reject(
-        new Error(
-          `Failed to run ffmpeg. Make sure ffmpeg is installed (brew install ffmpeg). ${err.message}`,
-        ),
-      );
-    });
-  });
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -1026,16 +1034,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     finalizeAudioStream();
   });
 
-  // Audio read
+  // Audio read (supports WAV, MP3, FLAC, OGG, etc.)
   ipcMain.handle("audio:read-file", (_event, sessionId: number) => {
     const session = getSession(db, sessionId);
     if (!session?.audio_path) return null;
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const audioDir = join(dataDir, "audio", session.audio_path);
-    // Try {timestamp}.wav first, fall back to full.wav for old recordings
+    // Try common audio extensions, then fall back to full.wav
+    const audioExts = [
+      ".wav",
+      ".mp3",
+      ".m4a",
+      ".flac",
+      ".ogg",
+      ".aac",
+      ".opus",
+    ];
     const candidates = [
-      join(audioDir, `${session.audio_path}.wav`),
+      ...audioExts.map((ext) => join(audioDir, `${session.audio_path}${ext}`)),
       join(audioDir, "full.wav"),
     ];
     for (const filePath of candidates) {
@@ -1295,7 +1312,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     writeConfig(configDir, { ...config, promptTypes: types });
   });
 
-  // Audio import (upload existing audio file)
+  // Audio import (upload existing audio file — no ffmpeg needed)
   ipcMain.handle("audio:import", async () => {
     const win = getMainWindow();
     if (!win) return null;
@@ -1322,6 +1339,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || !result.filePaths.length) return null;
 
     const filePath = result.filePaths[0];
+    const ext = filePath.substring(filePath.lastIndexOf("."));
 
     // 2. Get file birthtime for session name
     const stat = fs.statSync(filePath);
@@ -1329,12 +1347,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
     // 3. Format timestamps
     const pad = (n: number): string => String(n).padStart(2, "0");
-    // Filesystem-safe format for audio directory (same as useSession.ts)
     const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
-    // Human-readable format for title and started_at (matches existing sessions)
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 4. Create session with file's birthtime
+    // 4. Create session
     const sessionId = createSession(db, { modelName: "imported" });
     updateSession(db, sessionId, {
       audioPath: dirTimestamp,
@@ -1342,27 +1358,53 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       startedAt: readableTimestamp,
     });
 
-    // 5. Create audio directory
+    // 5. Copy original file to session directory (no conversion needed)
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const sessionDir = join(dataDir, "audio", dirTimestamp);
     fs.mkdirSync(sessionDir, { recursive: true });
+    const destPath = join(sessionDir, `${dirTimestamp}${ext}`);
+    fs.copyFileSync(filePath, destPath);
 
-    // 6. Convert to 16kHz mono WAV via ffmpeg
-    const outputPath = join(sessionDir, `${dirTimestamp}.wav`);
-    await convertToWav(filePath, outputPath);
+    // 6. Mark session completed (duration determined after transcription)
+    updateSession(db, sessionId, { status: "completed" });
 
-    // 7. Calculate duration and update session
-    const wavBuffer = fs.readFileSync(outputPath);
-    const pcmBytes = wavBuffer.length - 44;
-    const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
-    updateSession(db, sessionId, {
-      status: "completed",
-      durationSeconds,
-    });
-
-    return { sessionId, timestamp: dirTimestamp };
+    return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
   });
+
+  // Transcribe audio file via sidecar (file-path based, no ffmpeg)
+  ipcMain.handle(
+    "audio:transcribe-file",
+    async (
+      _event,
+      filePath: string,
+      provider: { baseUrl: string; apiKey: string; model: string },
+    ) => {
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+      const resp = await net.fetch(`${baseUrl}/v1/audio/transcribe-file`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          file_path: filePath,
+          model: provider.model,
+        }),
+        signal: AbortSignal.timeout(300000), // 5min for large files
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`Transcribe file error (${resp.status}): ${errBody}`);
+      }
+
+      const data = (await resp.json()) as { text?: string };
+      return { text: data.text ?? "" };
+    },
+  );
 
   // TTS voice listing
   ipcMain.handle("tts:list-voices", async (_event, modelDir: string) => {

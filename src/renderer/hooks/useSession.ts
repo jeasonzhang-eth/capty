@@ -92,7 +92,12 @@ declare global {
       importAudio: () => Promise<{
         sessionId: number;
         timestamp: string;
+        audioPath: string;
       } | null>;
+      transcribeFile: (
+        filePath: string,
+        provider: { baseUrl: string; apiKey: string; model: string },
+      ) => Promise<{ text: string }>;
       saveFile: (
         defaultName: string,
         content: string,

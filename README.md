@@ -19,7 +19,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — Obsidian 社区插件风格独立全屏模态框：Settings 中 Sidecar 卡片仅显示 "Model Market" 入口 + 已安装数量 + "Browse" 按钮；点击 Browse 弹出 720px 宽模态框，分三组显示（Installed / Recommended / Search Results）；推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
-- **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），自动转换为 16kHz WAV 并触发转录（需系统安装 ffmpeg）
+- **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），直接复制原始文件并通过 sidecar 转录（无需 ffmpeg）
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
@@ -292,6 +292,21 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (35)
+
+- **全面使用 mlx-audio 重构后端** — 移除所有 Kokoro 遗留代码，简化依赖和音频处理流程
+  - **移除 8 个 Kokoro 专属依赖**：misaki, phonemizer, spacy (~500MB), pypinyin, jieba, cn2an, num2words, ordered-set 从 pyproject.toml 清除
+  - **推荐 TTS 模型从 Kokoro 切换为 Qwen3-TTS** — `recommended-tts-models.json` 替换为 Qwen3-TTS-12Hz-1.7B-Base-8bit（支持中英日韩，voice cloning）
+  - **新增文件路径转录端点** — sidecar 新增 `POST /v1/audio/transcribe-file`，接受 `file_path` 参数，使用 `mlx_audio.stt.utils.load_audio` 直接加载 WAV/FLAC/MP3/OGG 等任意格式，无需 ffmpeg
+  - **音频导入去除 ffmpeg 依赖** — `audio:import` handler 不再调用 ffmpeg 转换，直接复制原始文件到会话目录；转录通过 sidecar 文件路径端点完成
+  - **音频播放支持多格式** — `audio:read-file` 现在搜索 .wav/.mp3/.m4a/.flac/.ogg/.aac/.opus 等所有常见扩展名，`useAudioPlayer` Blob 类型改为 `audio/*`
+  - **移除 Kokoro voice 解析代码** — 删除 `tts_runner.py` 中 `LANG_MAP`、`GENDER_MAP`、`list_voices()` 函数（Qwen3-TTS 不使用预定义 voice 文件）
+  - **`/tts/voices` 端点简化** — 固定返回空列表（Qwen3-TTS 使用自由文本 voice 参数）
+  - **模型类型推断增强** — `model_registry.py` 和 `ipc-handlers.ts` 使用 mlx-audio `MODEL_REMAPPING` 识别 25+ 种 STT/TTS 模型类型（fireredasr2, sensevoice, voxtral, qwen3_tts, outetts, spark 等）
+  - **新增 `transcribe_array()` 方法** — `ModelRunner` 新增接受 float32 numpy 数组的转录方法（供文件转录端点使用）
+  - **新增 `transcribeFile` preload API** — 前端可直接发送文件路径给 sidecar 转录，5 分钟超时适配大文件
+  - 删除 `convertToWav` 函数和 `child_process.spawn` 引用
 
 ### 2026-03-27 (34)
 

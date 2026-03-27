@@ -9,13 +9,14 @@ import wave
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
 from capty_sidecar.model_runner import ModelRunner, _mlx_executor as _mlx_executor
-from capty_sidecar.tts_runner import TTSRunner, list_voices
+from capty_sidecar.tts_runner import TTSRunner
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ MAX_CHUNK_BYTES = MAX_CHUNK_SECONDS * BYTES_PER_SECOND
 
 class SwitchModelRequest(BaseModel):
     model: str
+
+
+class TranscribeFileRequest(BaseModel):
+    file_path: str
+    model: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -178,16 +184,89 @@ def create_app(models_dir: str) -> FastAPI:
         return {"text": " ".join(all_texts)}
 
     # ------------------------------------------------------------------
+    # File-based transcription (uses mlx-audio load_audio)
+    # ------------------------------------------------------------------
+
+    @app.post("/v1/audio/transcribe-file")
+    async def transcribe_file(body: TranscribeFileRequest):
+        """Transcribe audio directly from a file path.
+
+        Uses mlx-audio's ``load_audio`` to read WAV/FLAC/MP3/OGG etc.
+        without requiring ffmpeg.
+        """
+        file_path = body.file_path.strip()
+        if not file_path or not Path(file_path).is_file():
+            raise HTTPException(status_code=400, detail="File not found")
+
+        # Load / switch model if requested
+        target_model = body.model.strip() if body.model else None
+        if target_model:
+            model_info = registry.get_model_info(target_model)
+            if model_info and registry.is_downloaded(target_model):
+                if not runner.is_loaded() or runner.current_model_id != target_model:
+                    runner.unload()
+                    try:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(
+                            _mlx_executor,
+                            lambda: runner.load(
+                                target_model,
+                                models_dir=Path(models_dir),
+                            ),
+                        )
+                    except Exception as exc:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Failed to load model: {exc}",
+                        ) from exc
+
+        if not runner.is_loaded():
+            raise HTTPException(
+                status_code=400,
+                detail="No model loaded. Send a model ID or pre-load via /models/switch.",
+            )
+
+        # Load audio using mlx-audio (supports WAV/FLAC/MP3/OGG etc.)
+        try:
+            from mlx_audio.stt.utils import load_audio
+
+            loop = asyncio.get_event_loop()
+            audio = await loop.run_in_executor(
+                _mlx_executor,
+                lambda: load_audio(file_path, sr=SAMPLE_RATE),
+            )
+            audio_np = np.array(audio, dtype=np.float32)
+        except Exception as exc:
+            logger.exception("Failed to load audio file: %s", file_path)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to load audio: {exc}",
+            ) from exc
+
+        if audio_np.size == 0:
+            return {"text": ""}
+
+        # Transcribe — split into chunks for long audio
+        max_chunk_samples = MAX_CHUNK_SECONDS * SAMPLE_RATE
+        all_texts: list[str] = []
+        offset = 0
+        while offset < audio_np.size:
+            chunk = audio_np[offset : offset + max_chunk_samples]
+            offset += max_chunk_samples
+            text = await runner.transcribe_array(chunk)
+            if text and text.strip():
+                all_texts.append(text.strip())
+
+        return {"text": " ".join(all_texts)}
+
+    # ------------------------------------------------------------------
     # OpenAI-compatible TTS API
     # ------------------------------------------------------------------
 
     @app.get("/tts/voices")
     async def tts_voices(model_dir: str = ""):
-        """List available voices for a TTS model by scanning local directory."""
-        if not model_dir:
-            return {"model": "", "voices": []}
-        voices = list_voices(model_dir)
-        return {"model": Path(model_dir).name, "voices": voices}
+        """List available voices. Returns empty list (Qwen3-TTS uses free-form voice)."""
+        return {"model": Path(model_dir).name if model_dir else "", "voices": []}
 
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):

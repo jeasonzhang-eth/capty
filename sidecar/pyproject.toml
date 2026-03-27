@@ -8,14 +8,6 @@ dependencies = [
     "python-multipart>=0.0.9",
     "mlx-audio[stt]>=0.4.0",
     "numpy>=1.24",
-    "misaki>=0.7.0",
-    "num2words>=0.5.14",
-    "phonemizer>=3.3.0",
-    "spacy>=3.7",
-    "pypinyin>=0.53",
-    "ordered-set>=4.1",
-    "jieba>=0.42",
-    "cn2an>=0.5",
 ]
 
 [project.optional-dependencies]

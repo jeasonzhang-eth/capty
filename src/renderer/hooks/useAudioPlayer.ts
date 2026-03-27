@@ -51,7 +51,7 @@ export function useAudioPlayer() {
       const buffer = await window.capty.readAudioFile(sessionId);
       if (!buffer) return;
 
-      const blob = new Blob([buffer], { type: "audio/wav" });
+      const blob = new Blob([buffer], { type: "audio/*" });
       const url = URL.createObjectURL(blob);
       blobUrlRef.current = url;
 

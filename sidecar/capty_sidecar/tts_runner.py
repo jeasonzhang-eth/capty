@@ -30,43 +30,6 @@ _CJK_RE = re.compile(
     r"\U00020000-\U0002a6df\U0002a700-\U0002ebef]"
 )
 
-# Voice file metadata maps (used by list_voices to parse filenames)
-LANG_MAP = {
-    "a": "English (US)",
-    "b": "English (UK)",
-    "z": "Chinese",
-    "j": "Japanese",
-    "k": "Korean",
-    "e": "Spanish",
-    "f": "French",
-    "h": "Hindi",
-    "i": "Italian",
-    "p": "Portuguese",
-}
-GENDER_MAP = {"f": "Female", "m": "Male"}
-
-
-def list_voices(model_dir: str) -> list[dict]:
-    """Scan voices/*.safetensors in model_dir, parse metadata from filename.
-
-    Returns an empty list if the model has no voices/ directory.
-    """
-    voices_dir = Path(model_dir) / "voices"
-    if not voices_dir.is_dir():
-        return []
-    result: list[dict] = [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
-    for f in sorted(voices_dir.glob("*.safetensors")):
-        voice_id = f.stem  # e.g. "af_heart"
-        if len(voice_id) >= 3 and voice_id[2] == "_":
-            lang = LANG_MAP.get(voice_id[0], voice_id[0])
-            gender = GENDER_MAP.get(voice_id[1], voice_id[1])
-            name = voice_id[3:].replace("_", " ").title()
-        else:
-            lang, gender, name = "Unknown", "", voice_id
-        result.append({"id": voice_id, "name": name, "lang": lang, "gender": gender})
-    return result
-
-
 def _detect_lang(text: str) -> str:
     """Auto-detect language from text content.
 

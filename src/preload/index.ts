@@ -135,7 +135,15 @@ const api = {
     ipcRenderer.invoke("audio:import") as Promise<{
       sessionId: number;
       timestamp: string;
+      audioPath: string;
     } | null>,
+  transcribeFile: (
+    filePath: string,
+    provider: { baseUrl: string; apiKey: string; model: string },
+  ) =>
+    ipcRenderer.invoke("audio:transcribe-file", filePath, provider) as Promise<{
+      text: string;
+    }>,
 
   // Export save file
   saveFile: (defaultName: string, content: string) =>

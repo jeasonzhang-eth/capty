@@ -37,25 +37,71 @@ def _read_model_meta(model_dir: Path) -> Optional[dict]:
         return None
 
 
-def _infer_model_type(model_dir: Path) -> str:
-    """Infer model type from ``config.json`` inside *model_dir*."""
+def _load_config(model_dir: Path) -> dict:
+    """Read ``config.json`` from *model_dir*, or return empty dict."""
     config_path = model_dir / "config.json"
     if not config_path.is_file():
-        return "auto"
+        return {}
     try:
         with config_path.open("r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        model_type = cfg.get("model_type", "")
-        architectures = cfg.get("architectures", [])
-        combined = (model_type + " " + " ".join(architectures)).lower()
-        if "whisper" in combined:
-            return "whisper"
-        if "qwen" in combined:
-            return "qwen-asr"
-        if "parakeet" in combined:
-            return "parakeet"
+            return json.load(f)
     except (OSError, json.JSONDecodeError):
-        pass
+        return {}
+
+
+# Lazy-loaded MODEL_REMAPPING caches
+_stt_remapping: dict | None = None
+_tts_remapping: dict | None = None
+
+
+def _get_stt_remapping() -> dict:
+    global _stt_remapping
+    if _stt_remapping is None:
+        try:
+            from mlx_audio.stt.utils import MODEL_REMAPPING
+            _stt_remapping = MODEL_REMAPPING
+        except ImportError:
+            _stt_remapping = {}
+    return _stt_remapping
+
+
+def _get_tts_remapping() -> dict:
+    global _tts_remapping
+    if _tts_remapping is None:
+        try:
+            from mlx_audio.tts.utils import MODEL_REMAPPING
+            _tts_remapping = MODEL_REMAPPING
+        except ImportError:
+            _tts_remapping = {}
+    return _tts_remapping
+
+
+def _infer_model_type(model_dir: Path) -> str:
+    """Infer model type from ``config.json`` using mlx-audio MODEL_REMAPPING."""
+    cfg = _load_config(model_dir)
+    if not cfg:
+        return "auto"
+
+    model_type = cfg.get("model_type", "")
+
+    # Check mlx-audio STT remapping first
+    if model_type in _get_stt_remapping():
+        return model_type
+
+    # Check mlx-audio TTS remapping
+    if model_type in _get_tts_remapping():
+        return model_type
+
+    # Fallback: keyword-based detection for models not in remapping
+    architectures = cfg.get("architectures", [])
+    combined = (model_type + " " + " ".join(architectures)).lower()
+    if "whisper" in combined:
+        return "whisper"
+    if "qwen" in combined:
+        return "qwen-asr"
+    if "parakeet" in combined:
+        return "parakeet"
+
     return "auto"
 
 

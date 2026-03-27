@@ -117,6 +117,23 @@ class ModelRunner:
         )
         return result.text if result else ""
 
+    async def transcribe_array(self, audio_np: np.ndarray) -> str:
+        """Transcribe a float32 numpy array and return text.
+
+        Unlike ``transcribe`` which accepts raw PCM bytes, this method
+        accepts a pre-processed float32 array (e.g. from ``load_audio``).
+        """
+        if not self.is_loaded():
+            raise RuntimeError("No model loaded")
+
+        model = self._model
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            _mlx_executor,
+            lambda: _run_and_cleanup(lambda: model.generate(audio_np)),
+        )
+        return result.text if result else ""
+
 
 def _run_and_cleanup(fn):
     """Run *fn*, then release MLX cache and collect garbage."""

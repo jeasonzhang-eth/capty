@@ -1,10 +1,10 @@
 [
   {
-    "repo": "mlx-community/Kokoro-82M-bf16",
-    "name": "Kokoro 82M (bf16)",
-    "type": "kokoro",
-    "size_gb": 0.34,
+    "repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+    "name": "Qwen3-TTS 1.7B 8bit",
+    "type": "qwen3-tts",
+    "size_gb": 1.0,
     "languages": ["zh", "en", "ja", "ko"],
-    "description": "Fast TTS, bilingual Chinese-English, 54 voices"
+    "description": "Qwen3-TTS, multilingual, voice cloning capable"
   }
 ]
