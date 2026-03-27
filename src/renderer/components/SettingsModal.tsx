@@ -1477,7 +1477,14 @@ function SpeechTab({
                       paddingLeft: "18px",
                     }}
                   >
-                    {provider.baseUrl || "No URL set"}
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      {provider.baseUrl || "No URL set"}
+                    </span>
                     {!provider.isSidecar && provider.model
                       ? ` \u00b7 ${provider.model}`
                       : ""}
@@ -1494,32 +1501,23 @@ function SpeechTab({
                   }}
                 >
                   <button
-                    onClick={() => handleTestProvider(provider)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTestProvider(provider);
+                    }}
                     disabled={testingId === provider.id}
                     style={{
                       ...secondaryBtnStyle,
                       height: "28px",
                       padding: "0 10px",
                       fontSize: "11px",
-                      color: "var(--text-muted)",
+                      color: "var(--text-secondary)",
                       cursor:
                         testingId === provider.id ? "not-allowed" : "pointer",
                       opacity: testingId === provider.id ? 0.6 : 1,
                     }}
                   >
                     {testingId === provider.id ? "Testing..." : "Test"}
-                  </button>
-                  <button
-                    onClick={() => handleToggleExpand(provider)}
-                    style={{
-                      ...secondaryBtnStyle,
-                      height: "28px",
-                      padding: "0 10px",
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    {isExpanded ? "Collapse" : "Edit"}
                   </button>
                   {!isActive && (
                     <button

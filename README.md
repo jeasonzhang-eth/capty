@@ -303,6 +303,7 @@ pytest
   - 新增 Sidecar `/tts/switch` 和 `/tts/status` endpoints，支持动态切换 TTS 模型
   - `/v1/audio/speech` endpoint 新增 `model` 字段，支持指定/自动切换 TTS 模型
   - `tts:speak` handler 改为从 `ttsProviders` 配置读取 URL（不再依赖 asrProviders）
+  - ASR Provider 卡片移除冗余 Edit 按钮（点击卡片即可展开），优化 URL 和 Test 按钮可读性
   - config.json 新增 `ttsProviders` / `selectedTtsProviderId` / `selectedTtsModelId` 字段
   - TTS 模型支持本地目录路径加载（由 Electron 下载到 `models/tts/`，sidecar 通过 API 接收路径）
 
