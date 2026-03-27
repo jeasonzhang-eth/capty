@@ -301,6 +301,16 @@ export async function downloadModel(
           }
         });
 
+        // Verify file size matches expected size from HEAD
+        if (sizeDiscovered && headFileSizes[i] > 0 && existsSync(filePath)) {
+          const actualSize = statSync(filePath).size;
+          if (actualSize < headFileSizes[i]) {
+            throw new Error(
+              `Incomplete download: ${file} is ${actualSize} bytes, expected ${headFileSizes[i]} bytes`,
+            );
+          }
+        }
+
         // If HEAD didn't know the size, update globalTotal from actual file
         if (!sizeDiscovered && existsSync(filePath)) {
           const actualSize = statSync(filePath).size;

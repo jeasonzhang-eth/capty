@@ -308,6 +308,7 @@ pytest
   - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
   - 修复音频 NaN/Inf 导致 WAV 损坏：转换前用 `nan_to_num` 清理异常值
   - 修复 TTS 播放无声音：改用 Web Audio API (AudioContext) 替代 HTMLAudioElement，解决 Chromium autoplay 限制
+  - 修复模型下载不完整无提示：下载后校验文件大小，不匹配时自动重试（防止 speech_tokenizer 损坏导致 NaN 音频）
 
 ### 2026-03-27 (33)
 
