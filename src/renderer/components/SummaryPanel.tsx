@@ -800,6 +800,10 @@ export function SummaryPanel({
         .provider-select:focus {
           border-color: var(--accent) !important;
         }
+        .tts-play-btn:hover {
+          opacity: 1 !important;
+          color: var(--accent) !important;
+        }
         .modal-input:focus {
           border-color: var(--accent) !important;
         }
@@ -932,6 +936,23 @@ function StreamingCard({
   );
 }
 
+// Global ref to track the currently playing audio across all cards
+let globalAudioRef: HTMLAudioElement | null = null;
+let globalPlayingCardId: number | null = null;
+
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/`{1,3}[^`]*`{1,3}/g, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function SummaryCard({
   summary,
   providerName,
@@ -943,6 +964,89 @@ function SummaryCard({
     () => renderMarkdown(summary.content),
     [summary.content],
   );
+
+  const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">(
+    "idle",
+  );
+
+  // Sync state if another card started playing
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (ttsState === "playing" && globalPlayingCardId !== summary.id) {
+        setTtsState("idle");
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [ttsState, summary.id]);
+
+  const handleTtsClick = useCallback(async () => {
+    if (ttsState === "playing" || ttsState === "loading") {
+      // Stop playback
+      if (globalAudioRef) {
+        globalAudioRef.pause();
+        URL.revokeObjectURL(globalAudioRef.src);
+        globalAudioRef = null;
+      }
+      globalPlayingCardId = null;
+      setTtsState("idle");
+      return;
+    }
+
+    // Stop any other card's playback
+    if (globalAudioRef) {
+      globalAudioRef.pause();
+      URL.revokeObjectURL(globalAudioRef.src);
+      globalAudioRef = null;
+      globalPlayingCardId = null;
+    }
+
+    setTtsState("loading");
+    try {
+      const plainText = stripMarkdown(summary.content);
+      const buffer = await window.capty.ttsSpeak(plainText);
+      // Check if user clicked stop while loading
+      if (globalPlayingCardId !== null && globalPlayingCardId !== summary.id) {
+        setTtsState("idle");
+        return;
+      }
+      const blob = new Blob([buffer], { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      globalAudioRef = audio;
+      globalPlayingCardId = summary.id;
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        globalAudioRef = null;
+        globalPlayingCardId = null;
+        setTtsState("idle");
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        globalAudioRef = null;
+        globalPlayingCardId = null;
+        setTtsState("idle");
+      };
+
+      await audio.play();
+      setTtsState("playing");
+    } catch {
+      globalPlayingCardId = null;
+      setTtsState("idle");
+    }
+  }, [ttsState, summary.content, summary.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (globalPlayingCardId === summary.id && globalAudioRef) {
+        globalAudioRef.pause();
+        URL.revokeObjectURL(globalAudioRef.src);
+        globalAudioRef = null;
+        globalPlayingCardId = null;
+      }
+    };
+  }, [summary.id]);
 
   return (
     <div
@@ -975,7 +1079,53 @@ function SummaryCard({
           color: "var(--text-muted)",
         }}
       >
-        <span>
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <button
+            onClick={handleTtsClick}
+            title={
+              ttsState === "idle"
+                ? "Read aloud"
+                : ttsState === "loading"
+                  ? "Loading..."
+                  : "Stop"
+            }
+            className="tts-play-btn"
+            style={{
+              padding: "2px 4px",
+              fontSize: "12px",
+              backgroundColor: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color:
+                ttsState === "playing" ? "var(--accent)" : "var(--text-muted)",
+              opacity: ttsState === "loading" ? 0.5 : 0.7,
+              transition: "opacity 0.15s ease, color 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "18px",
+              height: "18px",
+              flexShrink: 0,
+            }}
+          >
+            {ttsState === "loading" ? (
+              <span
+                style={{
+                  display: "inline-block",
+                  width: "10px",
+                  height: "10px",
+                  border: "1.5px solid var(--text-muted)",
+                  borderTopColor: "var(--accent)",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
+            ) : ttsState === "playing" ? (
+              "■"
+            ) : (
+              "▶"
+            )}
+          </button>
           {providerName ? `${providerName} · ` : ""}
           {summary.model_name}
         </span>

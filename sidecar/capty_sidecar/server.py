@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
 from capty_sidecar.model_runner import ModelRunner, _mlx_executor as _mlx_executor
+from capty_sidecar.tts_runner import TTSRunner
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,7 @@ def create_app(models_dir: str) -> FastAPI:
     app = FastAPI(title="Capty ASR Sidecar")
     registry = ModelRegistry(models_dir=Path(models_dir))
     runner = ModelRunner()
+    tts_runner = TTSRunner()
 
     # ------------------------------------------------------------------
     # HTTP routes
@@ -74,6 +77,7 @@ def create_app(models_dir: str) -> FastAPI:
             "status": "ok",
             "model_loaded": runner.is_loaded(),
             "current_model": runner.current_model_id,
+            "tts_loaded": tts_runner.is_loaded(),
         }
 
     @app.get("/models")
@@ -172,5 +176,52 @@ def create_app(models_dir: str) -> FastAPI:
                 all_texts.append(text.strip())
 
         return {"text": " ".join(all_texts)}
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible TTS API
+    # ------------------------------------------------------------------
+
+    @app.post("/v1/audio/speech")
+    async def text_to_speech(
+        input: str = Form(...),
+        voice: str = Form("af_heart"),
+        speed: float = Form(1.0),
+        lang_code: str = Form("a"),
+    ):
+        """OpenAI-compatible TTS endpoint.
+
+        Accepts multipart/form-data and returns WAV audio bytes.
+        The TTS model is lazily loaded on first request.
+        """
+        if not input.strip():
+            raise HTTPException(status_code=400, detail="Empty input text")
+
+        # Lazy-load TTS model on first request
+        if not tts_runner.is_loaded():
+            try:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(_mlx_executor, tts_runner.load)
+            except Exception as exc:
+                logger.exception("Failed to load TTS model")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load TTS model: {exc}",
+                ) from exc
+
+        try:
+            wav_bytes = await tts_runner.synthesize(
+                text=input,
+                voice=voice,
+                speed=speed,
+                lang_code=lang_code,
+            )
+        except Exception as exc:
+            logger.exception("TTS synthesis failed")
+            raise HTTPException(
+                status_code=500,
+                detail=f"TTS synthesis failed: {exc}",
+            ) from exc
+
+        return Response(content=wav_bytes, media_type="audio/wav")
 
     return app

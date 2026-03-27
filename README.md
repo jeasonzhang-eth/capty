@@ -24,6 +24,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
+- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
 
 ## 技术栈
@@ -33,7 +34,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 | 桌面框架 | Electron 33 + electron-vite |
 | 前端 | React 18 + TypeScript + Zustand + react-lrc + wavesurfer.js |
 | 数据库 | better-sqlite3 (SQLite) |
-| ML 推理 | Python sidecar (FastAPI + mlx-audio, Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
+| ML 推理 | Python sidecar (FastAPI + mlx-audio[stt,tts], Apple GPU 加速) 或外部 ASR 服务器（均通过 OpenAI 兼容 HTTP API） |
 | 音频处理 | Web Audio API + VAD (voice activity detection) |
 
 ## 架构
@@ -126,7 +127,8 @@ src/
 └── sidecar/             # Python ML 后端
     ├── server.py        # FastAPI REST API (OpenAI 兼容)
     ├── model_registry.py
-    └── model_runner.py
+    ├── model_runner.py  # ASR 模型加载与推理
+    └── tts_runner.py    # TTS 模型加载与语音合成
 ```
 
 ## 数据存储
@@ -282,6 +284,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-27 (32)
+
+- **TTS 朗读功能** — SummaryPanel 摘要卡片新增语音朗读按钮
+  - 每张摘要卡片底部 metadata 栏左侧新增 ▶ 播放按钮，点击即可朗读摘要内容
+  - 基于 mlx-audio Kokoro-82M 模型本地合成语音（首次使用自动下载 ~164MB 模型）
+  - 支持中英文语音合成，Markdown 格式自动剥离后朗读纯文本
+  - 长文本自动分段（每段 <300 字符），避免模型质量下降
+  - 播放状态三态切换：idle（▶）→ loading（spinner）→ playing（■）
+  - 同一时间只允许一个卡片播放，点击新卡片自动停止前一个
+  - Sidecar 新增 `/v1/audio/speech` TTS endpoint（OpenAI 兼容）
+  - 新增 `tts_runner.py` 独立 TTS 模块，与 ASR ModelRunner 分离
+  - pyproject.toml 依赖从 `mlx-audio[stt]` 升级为 `mlx-audio[stt,tts]`
 
 ### 2026-03-27 (31)
 

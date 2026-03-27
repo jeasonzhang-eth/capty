@@ -1139,6 +1139,42 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { sessionId, timestamp: dirTimestamp };
   });
 
+  // TTS (text-to-speech via sidecar)
+  ipcMain.handle(
+    "tts:speak",
+    async (
+      _event,
+      text: string,
+      opts?: { voice?: string; speed?: number; langCode?: string },
+    ) => {
+      const config = readConfig(configDir);
+      const sidecarProvider = (config.asrProviders ?? []).find(
+        (p) => p.isSidecar,
+      );
+      const url = sidecarProvider?.baseUrl ?? "http://localhost:8765";
+
+      const formData = new FormData();
+      formData.append("input", text);
+      formData.append("voice", opts?.voice ?? "af_heart");
+      formData.append("speed", String(opts?.speed ?? 1.0));
+      formData.append("lang_code", opts?.langCode ?? "a");
+
+      const resp = await net.fetch(`${url}/v1/audio/speech`, {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`TTS failed (${resp.status}): ${errBody}`);
+      }
+
+      const buffer = await resp.arrayBuffer();
+      return Buffer.from(buffer);
+    },
+  );
+
   // Export save file
   ipcMain.handle(
     "export:save-file",

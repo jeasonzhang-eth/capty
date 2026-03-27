@@ -141,6 +141,12 @@ const api = {
   saveFile: (defaultName: string, content: string) =>
     ipcRenderer.invoke("export:save-file", defaultName, content),
 
+  // TTS
+  ttsSpeak: (
+    text: string,
+    opts?: { voice?: string; speed?: number; langCode?: string },
+  ) => ipcRenderer.invoke("tts:speak", text, opts) as Promise<ArrayBuffer>,
+
   // LLM
   testLlmProvider: (provider: {
     baseUrl: string;
