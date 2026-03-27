@@ -172,6 +172,8 @@ const api = {
       timestamp: string;
       audioPath: string;
     } | null>,
+  getAudioDuration: (filePath: string) =>
+    ipcRenderer.invoke("audio:get-duration", filePath) as Promise<number>,
   transcribeFile: (
     filePath: string,
     provider: { baseUrl: string; apiKey: string; model: string },

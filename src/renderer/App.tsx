@@ -837,28 +837,14 @@ function App(): React.JSX.Element {
     const result = await window.capty.importAudio();
     if (!result) return; // user cancelled
 
-    // Detect audio duration via HTMLAudioElement and update session
+    // Detect audio duration via IPC (main process reads file)
     try {
-      const audioEl = new Audio(`file://${result.audioPath}`);
-      const duration = await new Promise<number>((resolve, reject) => {
-        audioEl.addEventListener(
-          "loadedmetadata",
-          () => {
-            resolve(Math.round(audioEl.duration));
-          },
-          { once: true },
-        );
-        audioEl.addEventListener(
-          "error",
-          () => {
-            reject(new Error("Failed to load audio metadata"));
-          },
-          { once: true },
-        );
-      });
-      if (duration > 0 && isFinite(duration)) {
+      const durationSeconds = await window.capty.getAudioDuration(
+        result.audioPath,
+      );
+      if (durationSeconds > 0 && isFinite(durationSeconds)) {
         await window.capty.updateSession(result.sessionId, {
-          durationSeconds: duration,
+          durationSeconds,
         });
       }
     } catch (err) {
