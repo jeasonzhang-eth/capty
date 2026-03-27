@@ -24,7 +24,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
-- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio Kokoro-82M 模型本地合成，支持中英文；同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型和声音（按语言分组，显示友好名称），选择持久化保存
+- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio 本地合成（推荐 Qwen3-TTS），支持中英文自动检测；同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型，选择持久化保存
 - **TTS Provider 管理** — Settings 左侧栏独立 "TTS Providers" tab（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
 - **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
@@ -295,21 +295,17 @@ pytest
 
 ### 2026-03-27 (34)
 
-- **TTS 模型/声音选择器** — SummaryPanel 摘要卡片支持选择 TTS 模型和声音
-  - 每张摘要卡片播放按钮旁新增 Model 和 Voice 下拉选择器
-  - Model 选择器：显示所有已下载的 TTS 模型，切换时自动刷新声音列表
-  - Voice 选择器：按语言分组（`<optgroup>`），显示友好名称（如 "Heart (F)"）
-  - 声音列表从 sidecar 动态获取（扫描模型目录下 `voices/*.safetensors`，解析文件名提取语言/性别/名称）
-  - 默认 "Auto" 声音（自动检测语言选择匹配声音）
-  - 选中的模型和声音持久化到 config.json，重启后恢复
-  - 无已下载 TTS 模型时，播放按钮置灰不可点，hover 提示去 Settings 下载
-  - Sidecar 新增 `GET /tts/voices?model_dir=...` endpoint
-  - config.json 新增 `selectedTtsVoice` 字段（默认 `"auto"`）
+- **TTS 引擎重构** — 去除 Kokoro 特定代码，改为通用 mlx-audio TTS 引擎
+  - 默认 TTS 模型改为 Qwen3-TTS-12Hz-1.7B-Base-8bit（替代 Kokoro-82M）
+  - 语言自动检测返回 mlx-audio 标准格式（"chinese"/"english"，替代 Kokoro 的 "z"/"a"）
+  - 去除手动文本分块逻辑，由模型自行处理文本分段
+  - 使用模型原生 sample_rate（替代硬编码 24000）
+  - voice="auto" 传递 None 给模型，由模型使用默认发音人
+  - 所有参数（text, voice, speed, lang_code）统一转发给 model.generate()
+  - 详细的分段生成日志（每段采样数、时长、总计）
+  - 保留 Voice 选择器基础设施（list_voices 扫描 voices/ 目录），无 voices 目录时自动隐藏
+  - SummaryPanel 摘要卡片支持选择 TTS 模型，无已下载模型时播放按钮置灰
   - 修复 TTS 模型切换不生效：`tts:speak` 现在传递选中的模型路径，sidecar 自动切换
-  - 修复中文朗读截断：CJK 文本分块上限从 300 字符降至 120 字符，避免超出 Kokoro 510 phoneme 限制
-  - 修复切换模型时旧 voice 残留：切换时立即重置为 "auto"，初始化时校验 voice 有效性
-  - 非 Kokoro 模型（如 Qwen3-TTS）不再传递 voice/lang_code 参数，避免参数不兼容
-  - 修复非 Kokoro 模型日志误报 voice：voice 解析移至 `has_voices_dir` 检查之后，非 Kokoro 模型不再解析 Kokoro 默认声音
 
 ### 2026-03-27 (33)
 
