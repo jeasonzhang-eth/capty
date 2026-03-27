@@ -138,23 +138,28 @@ def create_app(models_dir: str) -> FastAPI:
         target_model = model.strip() if model else None
         if target_model:
             model_info = registry.get_model_info(target_model)
-            if model_info and registry.is_downloaded(target_model):
-                if not runner.is_loaded() or runner.current_model_id != target_model:
-                    runner.unload()
-                    try:
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(
-                            _mlx_executor,
-                            lambda: runner.load(
-                                target_model,
-                                models_dir=Path(models_dir),
-                            ),
-                        )
-                    except Exception as exc:
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Failed to load model: {exc}",
-                        ) from exc
+            if not model_info or not registry.is_downloaded(target_model):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Model '{target_model}' not found in models directory ({models_dir}). "
+                    f"Make sure the model is downloaded and the sidecar --models-dir points to the correct ASR models path.",
+                )
+            if not runner.is_loaded() or runner.current_model_id != target_model:
+                runner.unload()
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        _mlx_executor,
+                        lambda: runner.load(
+                            target_model,
+                            models_dir=Path(models_dir),
+                        ),
+                    )
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to load model: {exc}",
+                    ) from exc
 
         if not runner.is_loaded():
             raise HTTPException(
@@ -202,23 +207,28 @@ def create_app(models_dir: str) -> FastAPI:
         target_model = body.model.strip() if body.model else None
         if target_model:
             model_info = registry.get_model_info(target_model)
-            if model_info and registry.is_downloaded(target_model):
-                if not runner.is_loaded() or runner.current_model_id != target_model:
-                    runner.unload()
-                    try:
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(
-                            _mlx_executor,
-                            lambda: runner.load(
-                                target_model,
-                                models_dir=Path(models_dir),
-                            ),
-                        )
-                    except Exception as exc:
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Failed to load model: {exc}",
-                        ) from exc
+            if not model_info or not registry.is_downloaded(target_model):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Model '{target_model}' not found in models directory ({models_dir}). "
+                    f"Make sure the model is downloaded and the sidecar --models-dir points to the correct ASR models path.",
+                )
+            if not runner.is_loaded() or runner.current_model_id != target_model:
+                runner.unload()
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        _mlx_executor,
+                        lambda: runner.load(
+                            target_model,
+                            models_dir=Path(models_dir),
+                        ),
+                    )
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to load model: {exc}",
+                    ) from exc
 
         if not runner.is_loaded():
             raise HTTPException(

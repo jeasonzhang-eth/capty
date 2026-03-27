@@ -887,6 +887,24 @@ function App(): React.JSX.Element {
       }
     } catch (err) {
       console.error("Failed to transcribe imported audio:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // Show error as a segment so user sees feedback in the UI
+      await window.capty.addSegment({
+        sessionId: result.sessionId,
+        startTime: 0,
+        endTime: 0,
+        text: `[Transcription failed] ${errMsg}`,
+        audioPath: "",
+        isFinal: true,
+      });
+      if (useAppStore.getState().currentSessionId === result.sessionId) {
+        store.addSegment({
+          id: Date.now(),
+          start_time: 0,
+          end_time: 0,
+          text: `[Transcription failed] ${errMsg}`,
+        });
+      }
     } finally {
       setRegeneratingSessionId(null);
       setRegenerationProgress(0);
