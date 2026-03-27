@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import type { LlmProvider } from "./SettingsModal";
 
 export interface PromptType {
@@ -72,7 +73,8 @@ const DEFAULT_WIDTH = 320;
 marked.setOptions({ breaks: true, gfm: true });
 
 function renderMarkdown(md: string): string {
-  return marked.parse(md) as string;
+  const rawHtml = marked.parse(md) as string;
+  return DOMPurify.sanitize(rawHtml);
 }
 
 function formatTime(dateStr: string): string {

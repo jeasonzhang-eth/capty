@@ -307,6 +307,13 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (42)
+
+- **安全加固** — 修复三类安全漏洞
+  - **路径遍历防护** — 新增 `assertPathWithin()` 验证函数，在 `models:delete`、`tts-models:delete`、`audio:save-segment`、`audio:save-full`、`audio:stream-open` 五个 IPC handler 中校验路径参数，防止通过 `../` 删除或写入任意文件
+  - **启用 Electron sandbox** — `BrowserWindow` 的 `sandbox` 从 `false` 改为 `true`，限制渲染进程的系统访问能力（preload 仅使用 `contextBridge` + `ipcRenderer`，无需禁用 sandbox）
+  - **HTML 输出 XSS 防护** — 引入 DOMPurify，`SummaryPanel` 的 Markdown 渲染结果在 `dangerouslySetInnerHTML` 前经过 `DOMPurify.sanitize()` 过滤，防止 LLM 返回的恶意 HTML/JS 执行
+
 ### 2026-03-28 (41)
 
 - **修复点击 ASR Provider 导致黑屏** — `SettingsModal` 函数遗漏了 `downloads`、`onPauseDownload`、`onResumeDownload`、`onCancelDownload` 四个 props 的解构，导致切换到 Speech tab 时触发 ReferenceError 崩溃
