@@ -28,19 +28,69 @@ const SKIP_FILES = new Set([".gitattributes", "README.md"]);
 /** Default timeout for network requests (ms). */
 const REQUEST_TIMEOUT = 30_000;
 
-/** Fetch with an AbortController timeout. */
+/** Max time to wait for data before considering the stream stalled (ms). */
+const STALL_TIMEOUT = 30_000;
+
+/** Max retry attempts per file. */
+const MAX_RETRIES = 3;
+
+/** Delay between retries (ms), multiplied by attempt number. */
+const RETRY_DELAY_BASE = 2_000;
+
+/** Fetch with an AbortController timeout (for connection + headers only). */
 async function fetchWithTimeout(
   url: string,
   opts: RequestInit = {},
   timeoutMs = REQUEST_TIMEOUT,
-): Promise<Response> {
+): Promise<{ response: Response; controller: AbortController }> {
   const controller = new AbortController();
+  // Merge with any existing signal
+  const mergedOpts = { ...opts, signal: controller.signal };
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...opts, signal: controller.signal });
+    const response = await fetch(url, mergedOpts);
+    return { response, controller };
+  } catch (err) {
+    controller.abort();
+    throw err;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Read a stream with a stall timeout: if no data arrives within
+ * `stallMs`, abort the controller and throw.
+ */
+async function readStreamWithStallTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  controller: AbortController,
+  stallMs: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new Error(`Download stalled: no data received for ${stallMs / 1000}s`),
+      );
+    }, stallMs);
+
+    reader.read().then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/** Sleep helper. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -53,7 +103,7 @@ async function fetchFileList(
 ): Promise<string[]> {
   const baseUrl = mirrorUrl ?? "https://huggingface.co";
   try {
-    const response = await fetchWithTimeout(
+    const { response } = await fetchWithTimeout(
       `${baseUrl}/api/models/${repo}`,
       {},
       15_000,
@@ -83,6 +133,82 @@ async function fetchFileList(
     "preprocessor_config.json",
     "chat_template.json",
   ];
+}
+
+/**
+ * Download a single file with resume support and stall detection.
+ * Returns the number of new bytes downloaded.
+ */
+async function downloadFile(
+  fileUrl: string,
+  filePath: string,
+  onData: (bytes: number) => void,
+): Promise<number> {
+  // Resume support: start from existing file size
+  let startByte = 0;
+  if (existsSync(filePath)) {
+    startByte = statSync(filePath).size;
+  }
+
+  const headers: Record<string, string> = {};
+  if (startByte > 0) {
+    headers["Range"] = `bytes=${startByte}-`;
+  }
+
+  const { response, controller } = await fetchWithTimeout(
+    fileUrl,
+    { headers },
+    60_000,
+  );
+
+  if (response.status === 416) {
+    // File already complete (range not satisfiable)
+    return 0;
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+  }
+
+  const body = response.body;
+  if (!body) {
+    throw new Error("Response body is null");
+  }
+
+  // Ensure parent dir exists for nested files
+  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+  if (dir && !existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const writer = createWriteStream(filePath, {
+    flags: startByte > 0 ? "a" : "w",
+  });
+  const reader = body.getReader();
+  let bytesWritten = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await readStreamWithStallTimeout(
+        reader,
+        controller,
+        STALL_TIMEOUT,
+      );
+      if (done) break;
+      writer.write(Buffer.from(value));
+      bytesWritten += value.byteLength;
+      onData(value.byteLength);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // ignore
+    }
+    writer.end();
+  }
+
+  return bytesWritten;
 }
 
 export async function downloadModel(
@@ -118,7 +244,7 @@ export async function downloadModel(
       const filePath = join(destDir, file);
       const existingSize = existsSync(filePath) ? statSync(filePath).size : 0;
       try {
-        const headResp = await fetchWithTimeout(
+        const { response: headResp } = await fetchWithTimeout(
           `${resolveUrl}/${file}`,
           { method: "HEAD" },
           10_000,
@@ -149,7 +275,6 @@ export async function downloadModel(
     }
   }
 
-  let filesCompleted = 0;
   let filesDownloaded = 0;
   let filesFailed = 0;
 
@@ -157,88 +282,77 @@ export async function downloadModel(
     const file = files[i];
     const filePath = join(destDir, file);
     const fileUrl = `${resolveUrl}/${file}`;
+    let succeeded = false;
 
-    // Resume support
-    let startByte = 0;
-    if (existsSync(filePath)) {
-      startByte = statSync(filePath).size;
-    }
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        let sizeDiscovered = headFileSizes[i] > 0;
 
-    const headers: Record<string, string> = {};
-    if (startByte > 0) {
-      headers["Range"] = `bytes=${startByte}-`;
-    }
+        const bytesWritten = await downloadFile(fileUrl, filePath, (bytes) => {
+          globalDownloaded += bytes;
+          if (globalTotal > 0) {
+            onProgress({
+              downloaded: globalDownloaded,
+              total: globalTotal,
+              percent: Math.min((globalDownloaded / globalTotal) * 100, 100),
+            });
+          }
+        });
 
-    try {
-      // Use a longer timeout for actual downloads (large files)
-      const response = await fetchWithTimeout(fileUrl, { headers }, 60_000);
-      if (!response.ok && response.status !== 416) {
-        // 416 means range not satisfiable (file already complete)
-        console.warn(
-          `[model-downloader] HTTP ${response.status} for ${file}, skipping`,
-        );
-        filesFailed++;
-        continue;
-      }
+        // If HEAD didn't know the size, update globalTotal from actual file
+        if (!sizeDiscovered && existsSync(filePath)) {
+          const actualSize = statSync(filePath).size;
+          if (actualSize > 0) {
+            globalTotal += actualSize;
+            // globalDownloaded already includes the bytes we wrote +
+            // any bytes from resume, so reconcile
+            globalDownloaded = globalDownloaded - bytesWritten + actualSize;
+            sizeDiscovered = true;
+          }
+        }
 
-      if (response.status === 416) {
-        // File already complete
-        filesCompleted++;
+        succeeded = true;
         filesDownloaded++;
-        continue;
-      }
-
-      // If HEAD missed this file's size, get it from the GET response
-      // and add to globalTotal so progress percentage stays sane
-      if (headFileSizes[i] === 0) {
-        const getContentLength = Number(
-          response.headers.get("content-length") ?? 0,
+        if (bytesWritten > 0) {
+          console.log(
+            `[model-downloader] Downloaded: ${file} (${(bytesWritten / 1024 / 1024).toFixed(1)} MB)`,
+          );
+        } else {
+          console.log(`[model-downloader] Already complete: ${file}`);
+        }
+        break;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[model-downloader] Attempt ${attempt}/${MAX_RETRIES} failed for ${file}: ${msg}`,
         );
-        if (getContentLength > 0) {
-          const fullSize = getContentLength + startByte;
-          globalTotal += fullSize;
-          globalDownloaded += startByte;
+
+        if (attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAY_BASE * attempt;
+          console.log(
+            `[model-downloader] Retrying ${file} in ${delay / 1000}s...`,
+          );
+          await sleep(delay);
+
+          // Re-sync globalDownloaded from actual file sizes (avoid double-count)
+          globalDownloaded = 0;
+          for (let j = 0; j < files.length; j++) {
+            const fp = join(destDir, files[j]);
+            const sz = existsSync(fp) ? statSync(fp).size : 0;
+            globalDownloaded += Math.min(
+              sz,
+              headFileSizes[j] > 0 ? headFileSizes[j] : sz,
+            );
+          }
         }
       }
+    }
 
-      const body = response.body;
-      if (!body) {
-        filesFailed++;
-        continue;
-      }
-
-      // Ensure parent dir exists for nested files
-      const dir = filePath.substring(0, filePath.lastIndexOf("/"));
-      if (dir && !existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-
-      const writer = createWriteStream(filePath, {
-        flags: startByte > 0 ? "a" : "w",
-      });
-      const reader = body.getReader();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        writer.write(Buffer.from(value));
-        globalDownloaded += value.byteLength;
-        if (globalTotal > 0) {
-          onProgress({
-            downloaded: globalDownloaded,
-            total: globalTotal,
-            percent: Math.min((globalDownloaded / globalTotal) * 100, 100),
-          });
-        }
-      }
-      writer.end();
-
-      filesCompleted++;
-      filesDownloaded++;
-      console.log(`[model-downloader] Downloaded: ${file}`);
-    } catch (err) {
+    if (!succeeded) {
       filesFailed++;
-      console.error(`[model-downloader] Failed to download ${file}:`, err);
+      console.error(
+        `[model-downloader] Failed to download ${file} after ${MAX_RETRIES} attempts`,
+      );
     }
   }
 
