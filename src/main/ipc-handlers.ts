@@ -329,9 +329,14 @@ async function searchHuggingFaceModels(
   }
 
   // Filter: only MLX-compatible models (must have mlx/safetensors tag)
+  // Also require query to appear in model name (after "/"), not just author name
+  const queryLower = query.toLowerCase();
   const mlxResults = results.filter((r) => {
     const tags = r.tags.map((t) => t.toLowerCase());
-    return tags.includes("mlx") || tags.includes("safetensors");
+    const isMlx = tags.includes("mlx") || tags.includes("safetensors");
+    const modelName = r.id.includes("/") ? r.id.split("/").pop()! : r.id;
+    const nameMatch = modelName.toLowerCase().includes(queryLower);
+    return isMlx && nameMatch;
   });
 
   // Fetch file sizes for each result in parallel via the tree API
