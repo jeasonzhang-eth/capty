@@ -305,7 +305,7 @@ pytest
   - `tts:speak` handler 改为从 `ttsProviders` 配置读取 URL（不再依赖 asrProviders）
   - ASR Provider 卡片移除冗余 Edit 按钮（点击卡片即可展开），优化 URL 和 Test 按钮可读性
   - 模型下载增加重试机制（每个文件最多 3 次重试，指数退避）和流式超时保护（30s 无数据自动断开重连）
-  - 模型下载支持断点续传，网络恢复后从已下载位置继续
+  - 模型下载支持断点续传，网络恢复后从已下载位置继续；下载时打印完整 URL 方便排查镜像问题
   - config.json 新增 `ttsProviders` / `selectedTtsProviderId` / `selectedTtsModelId` 字段
   - TTS 模型支持本地目录路径加载（由 Electron 下载到 `models/tts/`，sidecar 通过 API 接收路径）
 

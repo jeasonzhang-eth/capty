@@ -102,12 +102,10 @@ async function fetchFileList(
   mirrorUrl?: string,
 ): Promise<string[]> {
   const baseUrl = mirrorUrl ?? "https://huggingface.co";
+  const apiUrl = `${baseUrl}/api/models/${repo}`;
+  console.log(`[model-downloader] Fetching file list: ${apiUrl}`);
   try {
-    const { response } = await fetchWithTimeout(
-      `${baseUrl}/api/models/${repo}`,
-      {},
-      15_000,
-    );
+    const { response } = await fetchWithTimeout(apiUrl, {}, 15_000);
     if (response.ok) {
       const info = (await response.json()) as HFModelInfo;
       return info.siblings
@@ -154,6 +152,10 @@ async function downloadFile(
   if (startByte > 0) {
     headers["Range"] = `bytes=${startByte}-`;
   }
+
+  console.log(
+    `[model-downloader] GET ${fileUrl}${startByte > 0 ? ` (resume from ${(startByte / 1024 / 1024).toFixed(1)} MB)` : ""}`,
+  );
 
   const { response, controller } = await fetchWithTimeout(
     fileUrl,
