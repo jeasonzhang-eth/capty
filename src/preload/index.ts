@@ -180,6 +180,8 @@ const api = {
   ) =>
     ipcRenderer.invoke("audio:transcribe-file", filePath, provider) as Promise<{
       text: string;
+      segments: Array<{ start: number; end: number; text: string }>;
+      duration: number;
     }>,
 
   // Export save file

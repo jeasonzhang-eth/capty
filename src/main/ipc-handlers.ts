@@ -1491,8 +1491,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         throw new Error(`Transcribe file error (${resp.status}): ${errBody}`);
       }
 
-      const data = (await resp.json()) as { text?: string };
-      return { text: data.text ?? "" };
+      const data = (await resp.json()) as {
+        text?: string;
+        segments?: Array<{ start: number; end: number; text: string }>;
+        duration?: number;
+      };
+      return {
+        text: data.text ?? "",
+        segments: data.segments ?? [],
+        duration: data.duration ?? 0,
+      };
     },
   );
 

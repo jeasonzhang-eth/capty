@@ -307,6 +307,13 @@ pytest
 
 ## 更新日志
 
+### 2026-03-27 (39)
+
+- **修复音频导入转录** — 上传音频后按 15 秒分段转录（与重新生成字幕行为一致），每段带正确的 start/end 时间戳
+  - sidecar `transcribe-file` 端点从返回单个 `text` 改为返回 `{segments: [{start, end, text}], duration}` 结构
+  - 前端逐段添加 segment 并显示进度条，完成后更新 session 的 `durationSeconds`
+  - 修复导入音频后历史列表不显示时长（`--:--`）的问题
+
 ### 2026-03-27 (38)
 
 - **修复 ASR 模型查找失败静默跳过的 bug** — sidecar 的 `transcriptions` 和 `transcribe-file` 端点在模型未找到时静默跳过加载，导致模糊的 "No model loaded" 错误

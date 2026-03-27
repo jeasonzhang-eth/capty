@@ -254,20 +254,32 @@ def create_app(models_dir: str) -> FastAPI:
             ) from exc
 
         if audio_np.size == 0:
-            return {"text": ""}
+            return {"segments": [], "text": "", "duration": 0}
 
-        # Transcribe — split into chunks for long audio
-        max_chunk_samples = MAX_CHUNK_SECONDS * SAMPLE_RATE
-        all_texts: list[str] = []
+        # Transcribe — split into 15-second segments with timestamps
+        segment_seconds = 15
+        max_chunk_samples = segment_seconds * SAMPLE_RATE
+        total_duration = round(audio_np.size / SAMPLE_RATE)
+        segments: list[dict] = []
         offset = 0
         while offset < audio_np.size:
             chunk = audio_np[offset : offset + max_chunk_samples]
+            start_time = round(offset / SAMPLE_RATE)
+            end_time = round(min(offset + max_chunk_samples, audio_np.size) / SAMPLE_RATE)
             offset += max_chunk_samples
             text = await runner.transcribe_array(chunk)
             if text and text.strip():
-                all_texts.append(text.strip())
+                segments.append({
+                    "start": start_time,
+                    "end": end_time,
+                    "text": text.strip(),
+                })
 
-        return {"text": " ".join(all_texts)}
+        return {
+            "segments": segments,
+            "text": " ".join(s["text"] for s in segments),
+            "duration": total_duration,
+        }
 
     # ------------------------------------------------------------------
     # OpenAI-compatible TTS API

@@ -841,8 +841,10 @@ function App(): React.JSX.Element {
     }
 
     // Use file-based transcription via sidecar (supports any audio format)
+    // Sidecar returns segments with timestamps (like regeneration flow)
     setRegeneratingSessionId(result.sessionId);
     setRegenerationProgress(0);
+    cancelRegenerationRef.current = false;
     try {
       const provider = {
         baseUrl: activeProvider.baseUrl,
@@ -850,34 +852,48 @@ function App(): React.JSX.Element {
         model,
       };
 
-      // For sidecar: use file-path-based transcription (no ffmpeg needed)
-      // For external: fall back to PCM-based regeneration flow
       if (activeProvider.isSidecar && result.audioPath) {
-        setRegenerationProgress(10);
+        setRegenerationProgress(5);
         const transcribeResult = await window.capty.transcribeFile(
           result.audioPath,
           provider,
         );
-        setRegenerationProgress(90);
 
-        const text = transcribeResult.text?.trim();
-        if (text) {
+        const segments = transcribeResult.segments ?? [];
+        const duration = transcribeResult.duration ?? 0;
+
+        // Add each segment with proper timestamps (like regeneration)
+        for (let i = 0; i < segments.length; i++) {
+          if (cancelRegenerationRef.current) break;
+
+          const seg = segments[i];
           await window.capty.addSegment({
             sessionId: result.sessionId,
-            startTime: 0,
-            endTime: 0,
-            text,
+            startTime: seg.start,
+            endTime: seg.end,
+            text: seg.text,
             audioPath: "",
             isFinal: true,
           });
           if (useAppStore.getState().currentSessionId === result.sessionId) {
             store.addSegment({
-              id: Date.now(),
-              start_time: 0,
-              end_time: 0,
-              text,
+              id: Date.now() + i,
+              start_time: seg.start,
+              end_time: seg.end,
+              text: seg.text,
             });
           }
+          setRegenerationProgress(
+            Math.round(((i + 1) / segments.length) * 90) + 5,
+          );
+        }
+
+        // Update session duration
+        if (duration > 0) {
+          await window.capty.updateSession(result.sessionId, {
+            durationSeconds: duration,
+          });
+          await store.loadSessions();
         }
         setRegenerationProgress(100);
       } else {
