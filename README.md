@@ -307,6 +307,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (52)
+
+- **ControlBar ASR 指示灯** — 左上角状态指示灯改为与 TTS 统一风格：显示 "ASR" 标签 + 彩色圆点（Recording 红色 / Ready 橙色 / Offline 灰色 / 外部 Provider 蓝色），hover 显示 provider 名称和状态
+
 ### 2026-03-28 (51)
 
 - **CustomVoice 模型支持** — 修复切换到 CustomVoice 模型后报错 `requires 'voice' (speaker name)` 的问题：

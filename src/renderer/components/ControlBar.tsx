@@ -109,17 +109,21 @@ export function ControlBar({
         </span>
         <span
           style={{
-            width: "8px",
-            height: "8px",
+            width: "6px",
+            height: "6px",
             borderRadius: "50%",
             backgroundColor: statusColor,
             display: "inline-block",
             boxShadow: statusGlow,
             animation: statusAnimation,
           }}
+          title={`ASR: ${activeProviderName ?? "None"} - ${statusLabel}`}
         />
-        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-          {statusLabel}
+        <span
+          style={{ fontSize: "11px", color: "var(--text-muted)" }}
+          title={`ASR: ${activeProviderName ?? "None"} - ${statusLabel}`}
+        >
+          ASR
         </span>
         {ttsProviderName && (
           <>
