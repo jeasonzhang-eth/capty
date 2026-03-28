@@ -57,6 +57,7 @@ interface SummaryPanelProps {
   readonly selectedTtsVoice: string;
   readonly ttsVoices: readonly TtsVoiceInfo[];
   readonly ttsProviderReady: boolean;
+  readonly isSidecarTts: boolean;
   readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (providerId: string, promptType: string) => void;
   readonly onChangePromptType: (promptType: string) => void;
@@ -103,6 +104,7 @@ export function SummaryPanel({
   selectedTtsVoice,
   ttsVoices,
   ttsProviderReady,
+  isSidecarTts,
   onWidthChange,
   onSummarize,
   onChangePromptType,
@@ -541,6 +543,7 @@ export function SummaryPanel({
             selectedTtsVoice={selectedTtsVoice}
             ttsVoices={ttsVoices}
             ttsProviderReady={ttsProviderReady}
+            isSidecarTts={isSidecarTts}
             onChangeTtsModel={onChangeTtsModel}
             onChangeTtsVoice={onChangeTtsVoice}
           />
@@ -987,6 +990,9 @@ function StreamingCard({
 let globalAudioCtx: AudioContext | null = null;
 let globalSourceNode: AudioBufferSourceNode | null = null;
 let globalPlayingCardId: number | null = null;
+// Streaming: track scheduled source nodes for gapless playback
+let globalStreamSourceNodes: AudioBufferSourceNode[] = [];
+let globalStreamId: string | null = null;
 
 function stripMarkdown(md: string): string {
   return md
@@ -1065,6 +1071,51 @@ function VoiceSelect({
   );
 }
 
+/** Stop all streaming source nodes and reset streaming state. */
+function stopStreamPlayback(): void {
+  for (const node of globalStreamSourceNodes) {
+    try {
+      node.stop();
+      node.disconnect();
+    } catch {
+      // already stopped
+    }
+  }
+  globalStreamSourceNodes = [];
+  if (globalStreamId) {
+    window.capty.ttsCancelStream(globalStreamId).catch(() => {});
+    globalStreamId = null;
+  }
+}
+
+/** Stop any currently playing audio (streaming or non-streaming). */
+function stopAllPlayback(): void {
+  // Non-streaming
+  if (globalSourceNode) {
+    globalSourceNode.stop();
+    globalSourceNode.disconnect();
+    globalSourceNode = null;
+  }
+  // Streaming
+  stopStreamPlayback();
+  globalPlayingCardId = null;
+}
+
+/** Decode base64-encoded PCM int16 data to Float32Array. */
+function decodeBase64ToFloat32(b64: string): Float32Array {
+  const raw = atob(b64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  const int16 = new Int16Array(bytes.buffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) {
+    float32[i] = int16[i] / 32768;
+  }
+  return float32;
+}
+
 function SummaryCard({
   summary,
   providerName,
@@ -1073,6 +1124,7 @@ function SummaryCard({
   selectedTtsVoice,
   ttsVoices,
   ttsProviderReady,
+  isSidecarTts,
   onChangeTtsModel,
   onChangeTtsVoice,
 }: {
@@ -1083,6 +1135,7 @@ function SummaryCard({
   readonly selectedTtsVoice: string;
   readonly ttsVoices: readonly TtsVoiceInfo[];
   readonly ttsProviderReady: boolean;
+  readonly isSidecarTts: boolean;
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly onChangeTtsVoice: (voice: string) => void;
 }): React.ReactElement {
@@ -1094,6 +1147,9 @@ function SummaryCard({
   const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">(
     "idle",
   );
+  const currentStreamIdRef = useRef<string | null>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  const streamEndedRef = useRef<boolean>(false);
 
   // Sync state if another card started playing
   useEffect(() => {
@@ -1105,118 +1161,201 @@ function SummaryCard({
     return () => clearInterval(interval);
   }, [ttsState, summary.id]);
 
-  const handleTtsClick = useCallback(async () => {
-    if (ttsState === "playing" || ttsState === "loading") {
-      // Stop playback
-      if (globalSourceNode) {
-        globalSourceNode.stop();
-        globalSourceNode.disconnect();
-        globalSourceNode = null;
-      }
-      globalPlayingCardId = null;
-      setTtsState("idle");
-      return;
-    }
-
-    // Stop any other card's playback
-    if (globalSourceNode) {
-      globalSourceNode.stop();
-      globalSourceNode.disconnect();
-      globalSourceNode = null;
-      globalPlayingCardId = null;
-    }
-
+  /** Non-streaming TTS playback (for external providers). */
+  const handleTtsNonStreaming = useCallback(async () => {
     setTtsState("loading");
     try {
       const plainText = stripMarkdown(summary.content);
       const buffer = await window.capty.ttsSpeak(plainText, {
         voice: selectedTtsVoice,
       });
-      // Check if user clicked stop while loading
       if (globalPlayingCardId !== null && globalPlayingCardId !== summary.id) {
         setTtsState("idle");
         return;
       }
 
-      // Convert IPC buffer to ArrayBuffer for Web Audio API
       const bytes =
         buffer instanceof ArrayBuffer
           ? new Uint8Array(buffer)
           : new Uint8Array(buffer as unknown as ArrayBufferLike);
-      console.log("[TTS] Received audio buffer:", bytes.byteLength, "bytes");
 
-      // Use Web Audio API for reliable playback
       if (!globalAudioCtx) {
         globalAudioCtx = new AudioContext();
       }
-      // Resume AudioContext if suspended (autoplay policy)
       if (globalAudioCtx.state === "suspended") {
         await globalAudioCtx.resume();
       }
 
-      // decodeAudioData needs a standalone ArrayBuffer (not a view into a larger buffer)
       const arrayBuf = bytes.buffer.slice(
         bytes.byteOffset,
         bytes.byteOffset + bytes.byteLength,
       );
       const audioBuffer = await globalAudioCtx.decodeAudioData(arrayBuf);
-      // Check audio data amplitude
-      const channelData = audioBuffer.getChannelData(0);
-      let maxAmp = 0;
-      for (let i = 0; i < channelData.length; i++) {
-        const abs = Math.abs(channelData[i]);
-        if (abs > maxAmp) maxAmp = abs;
-      }
-      console.log(
-        "[TTS] Decoded audio:",
-        audioBuffer.duration.toFixed(1) + "s",
-        audioBuffer.sampleRate + "Hz",
-        audioBuffer.numberOfChannels + "ch",
-        "maxAmplitude:",
-        maxAmp.toFixed(6),
-      );
-      console.log(
-        "[TTS] AudioContext state:",
-        globalAudioCtx.state,
-        "sampleRate:",
-        globalAudioCtx.sampleRate,
-        "destination channels:",
-        globalAudioCtx.destination.maxChannelCount,
-      );
 
       const source = globalAudioCtx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(globalAudioCtx.destination);
       source.onended = () => {
-        console.log("[TTS] Playback ended");
         globalSourceNode = null;
         globalPlayingCardId = null;
         setTtsState("idle");
       };
 
       source.start();
-      console.log(
-        "[TTS] source.start() called, AudioContext state:",
-        globalAudioCtx.state,
-      );
       globalSourceNode = source;
       globalPlayingCardId = summary.id;
       setTtsState("playing");
     } catch (err) {
-      console.error("[TTS] TTS failed:", err);
+      console.error("[TTS] Non-streaming TTS failed:", err);
       globalPlayingCardId = null;
       setTtsState("idle");
     }
-  }, [ttsState, summary.content, summary.id, selectedTtsVoice]);
+  }, [summary.content, summary.id, selectedTtsVoice]);
+
+  /** Streaming TTS playback (for sidecar provider). */
+  const handleTtsStreaming = useCallback(async () => {
+    const streamId = `tts-${summary.id}-${Date.now()}`;
+    currentStreamIdRef.current = streamId;
+    globalStreamId = streamId;
+    globalPlayingCardId = summary.id;
+    streamEndedRef.current = false;
+    nextStartTimeRef.current = 0;
+    setTtsState("loading");
+
+    if (!globalAudioCtx) {
+      globalAudioCtx = new AudioContext();
+    }
+    if (globalAudioCtx.state === "suspended") {
+      await globalAudioCtx.resume();
+    }
+
+    const unsubs: Array<() => void> = [];
+
+    const cleanup = (): void => {
+      for (const unsub of unsubs) unsub();
+      unsubs.length = 0;
+      currentStreamIdRef.current = null;
+    };
+
+    // Header event
+    unsubs.push(
+      window.capty.onTtsStreamHeader(({ streamId: sid, sampleRate }) => {
+        if (sid !== streamId) return;
+        console.log("[TTS Stream] Header received, sampleRate:", sampleRate);
+      }),
+    );
+
+    // Audio data event
+    unsubs.push(
+      window.capty.onTtsStreamData(({ streamId: sid, data, sampleRate }) => {
+        if (sid !== streamId || !data) return;
+
+        const float32 = decodeBase64ToFloat32(data);
+        if (float32.length === 0) return;
+
+        const audioCtx = globalAudioCtx!;
+        const audioBuffer = audioCtx.createBuffer(
+          1,
+          float32.length,
+          sampleRate,
+        );
+        audioBuffer.getChannelData(0).set(float32);
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+
+        // Gapless scheduling
+        if (nextStartTimeRef.current < audioCtx.currentTime) {
+          nextStartTimeRef.current = audioCtx.currentTime + 0.02;
+        }
+        source.start(nextStartTimeRef.current);
+        nextStartTimeRef.current += audioBuffer.duration;
+        globalStreamSourceNodes.push(source);
+
+        // Transition to playing on first chunk
+        if (ttsState !== "playing") {
+          setTtsState("playing");
+        }
+
+        // Last node ended handler — check if stream already ended
+        source.onended = () => {
+          const idx = globalStreamSourceNodes.indexOf(source);
+          if (idx >= 0) globalStreamSourceNodes.splice(idx, 1);
+          // If stream has ended and this was the last scheduled node
+          if (
+            streamEndedRef.current &&
+            globalStreamSourceNodes.length === 0 &&
+            globalPlayingCardId === summary.id
+          ) {
+            globalPlayingCardId = null;
+            globalStreamId = null;
+            setTtsState("idle");
+            cleanup();
+          }
+        };
+      }),
+    );
+
+    // Stream end event
+    unsubs.push(
+      window.capty.onTtsStreamEnd(({ streamId: sid }) => {
+        if (sid !== streamId) return;
+        console.log("[TTS Stream] Stream ended");
+        streamEndedRef.current = true;
+        // If no nodes are playing, clean up immediately
+        if (globalStreamSourceNodes.length === 0) {
+          globalPlayingCardId = null;
+          globalStreamId = null;
+          setTtsState("idle");
+          cleanup();
+        }
+      }),
+    );
+
+    // Error event
+    unsubs.push(
+      window.capty.onTtsStreamError(({ streamId: sid, error }) => {
+        if (sid !== streamId) return;
+        console.error("[TTS Stream] Error:", error);
+        stopStreamPlayback();
+        globalPlayingCardId = null;
+        setTtsState("idle");
+        cleanup();
+      }),
+    );
+
+    // Start the stream
+    const plainText = stripMarkdown(summary.content);
+    window.capty.ttsSpeakStream(streamId, plainText, {
+      voice: selectedTtsVoice,
+    });
+  }, [summary.content, summary.id, selectedTtsVoice, ttsState]);
+
+  const handleTtsClick = useCallback(async () => {
+    if (ttsState === "playing" || ttsState === "loading") {
+      // Stop playback
+      stopAllPlayback();
+      globalPlayingCardId = null;
+      setTtsState("idle");
+      return;
+    }
+
+    // Stop any other card's playback
+    stopAllPlayback();
+
+    if (isSidecarTts) {
+      await handleTtsStreaming();
+    } else {
+      await handleTtsNonStreaming();
+    }
+  }, [ttsState, isSidecarTts, handleTtsStreaming, handleTtsNonStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (globalPlayingCardId === summary.id && globalSourceNode) {
-        globalSourceNode.stop();
-        globalSourceNode.disconnect();
-        globalSourceNode = null;
-        globalPlayingCardId = null;
+      if (globalPlayingCardId === summary.id) {
+        stopAllPlayback();
       }
     };
   }, [summary.id]);

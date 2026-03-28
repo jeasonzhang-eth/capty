@@ -31,7 +31,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
-- **TTS 朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；基于 mlx-audio 本地合成（推荐 Qwen3-TTS），支持中英文自动检测；同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型，选择持久化保存
+- **TTS 流式朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；Local Sidecar 模式下采用流式 TTS（NDJSON streaming），首块音频 ~2 秒内开始播放（无需等待整段生成完毕），通过 Web Audio API 无缝调度播放（gapless scheduled playback）；外部 TTS Provider 保留一次性播放路径；支持中英文自动检测，同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型，选择持久化保存
 - **TTS Provider 管理** — Settings 左侧栏独立 "TTS Providers" tab（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
 - **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
@@ -306,6 +306,19 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-28 (50)
+
+- **TTS 流式播放** — 本地 Sidecar TTS 从同步播放升级为流式播放，首块音频 ~2 秒内开始播放，无需等待整段语音生成完毕：
+  - Sidecar 新增 `POST /v1/audio/speech/stream` 端点，返回 NDJSON 流（header → audio chunks → final marker）
+  - `tts_runner.py` 新增 `synthesize_stream()` async generator，通过 `asyncio.Queue` 桥接 MLX 同步线程和异步 FastAPI 响应
+  - 支持 `stream=True` 的模型（如 Qwen3-TTS）逐块 yield 音频，不支持的模型自动回退到非流式单块输出
+  - Main process 新增 `tts:speak-stream` / `tts:cancel-stream` IPC handler，通过 `net.fetch` + NDJSON reader 中继音频事件到渲染进程
+  - Preload 新增 6 个流式 TTS API（`ttsSpeakStream`, `ttsCancelStream`, `onTtsStreamHeader/Data/End/Error`）
+  - SummaryPanel 使用 Web Audio API 无缝调度播放（gapless scheduled playback）：收到每个音频块时创建 `AudioBufferSourceNode` 并按时间精确调度，实现无间断播放
+  - 客户端断开连接时通过 `cancel_event` 通知 MLX 线程停止生成，释放 GPU 资源
+  - 外部 TTS Provider 保留原有一次性播放路径，根据 `isSidecar` 标志自动选择
+  - 提取 `_ensure_tts_loaded()` 共用辅助函数，供 `/v1/audio/speech` 和 `/v1/audio/speech/stream` 复用
 
 ### 2026-03-28 (49)
 

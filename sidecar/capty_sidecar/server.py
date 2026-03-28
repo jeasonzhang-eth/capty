@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
+import json
 import logging
+import threading
 import wave
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
@@ -402,6 +405,37 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
             "model": tts_runner._model_id,
         }
 
+    async def _ensure_tts_loaded(model: str = "") -> None:
+        """Ensure the TTS model is loaded, switching if needed.
+
+        Shared by both /v1/audio/speech and /v1/audio/speech/stream.
+        """
+        target_model = model.strip() if model else None
+        if target_model:
+            if not tts_runner.is_loaded() or tts_runner._model_id != target_model:
+                try:
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(
+                        _mlx_executor,
+                        lambda m=target_model: tts_runner.load(m),
+                    )
+                except Exception as exc:
+                    logger.exception("Failed to load TTS model %s", target_model)
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to load TTS model: {exc}",
+                    ) from exc
+        elif not tts_runner.is_loaded():
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(_mlx_executor, tts_runner.load)
+            except Exception as exc:
+                logger.exception("Failed to load TTS model")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to load TTS model: {exc}",
+                ) from exc
+
     @app.post("/v1/audio/speech")
     async def text_to_speech(
         input: str = Form(...),
@@ -419,33 +453,7 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
         if not input.strip():
             raise HTTPException(status_code=400, detail="Empty input text")
 
-        # Load or switch TTS model
-        target_model = model.strip() if model else None
-        if target_model:
-            if not tts_runner.is_loaded() or tts_runner._model_id != target_model:
-                try:
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(
-                        _mlx_executor,
-                        lambda m=target_model: tts_runner.load(m),
-                    )
-                except Exception as exc:
-                    logger.exception("Failed to load TTS model %s", target_model)
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to load TTS model: {exc}",
-                    ) from exc
-        elif not tts_runner.is_loaded():
-            # Lazy-load default TTS model on first request
-            try:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(_mlx_executor, tts_runner.load)
-            except Exception as exc:
-                logger.exception("Failed to load TTS model")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to load TTS model: {exc}",
-                ) from exc
+        await _ensure_tts_loaded(model)
 
         try:
             wav_bytes = await tts_runner.synthesize(
@@ -462,5 +470,73 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
             ) from exc
 
         return Response(content=wav_bytes, media_type="audio/wav")
+
+    @app.post("/v1/audio/speech/stream")
+    async def text_to_speech_stream(
+        input: str = Form(...),
+        model: str = Form(""),
+        voice: str = Form("auto"),
+        speed: float = Form(1.0),
+        lang_code: str = Form("auto"),
+    ):
+        """Streaming TTS endpoint returning NDJSON.
+
+        Each line is a JSON object:
+          - {"type":"header","sample_rate":24000}
+          - {"type":"audio","data":"<base64 PCM int16>","sample_rate":24000,"is_final":false}
+          - {"type":"audio","data":"...","sample_rate":24000,"is_final":true}
+          - {"type":"error","message":"..."}
+
+        Client disconnect triggers cancel_event to stop MLX generation.
+        """
+        if not input.strip():
+            raise HTTPException(status_code=400, detail="Empty input text")
+
+        await _ensure_tts_loaded(model)
+
+        cancel_event = threading.Event()
+
+        async def generate():
+            header_sent = False
+            try:
+                async for pcm_bytes, sample_rate, is_final in tts_runner.synthesize_stream(
+                    text=input,
+                    voice=voice,
+                    speed=speed,
+                    lang_code=lang_code,
+                    cancel_event=cancel_event,
+                ):
+                    if not header_sent:
+                        yield json.dumps({"type": "header", "sample_rate": sample_rate}) + "\n"
+                        header_sent = True
+
+                    b64_data = base64.b64encode(pcm_bytes).decode("ascii")
+                    yield json.dumps({
+                        "type": "audio",
+                        "data": b64_data,
+                        "sample_rate": sample_rate,
+                        "is_final": is_final,
+                    }) + "\n"
+
+                # Send a final marker if not already sent
+                if header_sent:
+                    yield json.dumps({
+                        "type": "audio",
+                        "data": "",
+                        "sample_rate": 0,
+                        "is_final": True,
+                    }) + "\n"
+
+            except asyncio.CancelledError:
+                logger.info("TTS stream cancelled by client disconnect")
+                cancel_event.set()
+            except Exception as exc:
+                logger.exception("TTS streaming error")
+                yield json.dumps({"type": "error", "message": str(exc)}) + "\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson",
+        )
 
     return app

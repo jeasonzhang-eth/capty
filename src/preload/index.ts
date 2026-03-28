@@ -219,6 +219,54 @@ const api = {
     opts?: { voice?: string; speed?: number; langCode?: string },
   ) => ipcRenderer.invoke("tts:speak", text, opts) as Promise<ArrayBuffer>,
 
+  // TTS Streaming
+  ttsSpeakStream: (
+    streamId: string,
+    text: string,
+    opts?: { voice?: string; speed?: number; langCode?: string },
+  ) => ipcRenderer.invoke("tts:speak-stream", streamId, text, opts),
+  ttsCancelStream: (streamId: string) =>
+    ipcRenderer.invoke("tts:cancel-stream", streamId),
+  onTtsStreamHeader: (
+    callback: (data: { streamId: string; sampleRate: number }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("tts:stream-header", handler);
+    return () => {
+      ipcRenderer.removeListener("tts:stream-header", handler);
+    };
+  },
+  onTtsStreamData: (
+    callback: (data: {
+      streamId: string;
+      data: string;
+      sampleRate: number;
+      isFinal: boolean;
+    }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("tts:stream-data", handler);
+    return () => {
+      ipcRenderer.removeListener("tts:stream-data", handler);
+    };
+  },
+  onTtsStreamEnd: (callback: (data: { streamId: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("tts:stream-end", handler);
+    return () => {
+      ipcRenderer.removeListener("tts:stream-end", handler);
+    };
+  },
+  onTtsStreamError: (
+    callback: (data: { streamId: string; error: string }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("tts:stream-error", handler);
+    return () => {
+      ipcRenderer.removeListener("tts:stream-error", handler);
+    };
+  },
+
   // TTS Models
   listTtsModels: () => ipcRenderer.invoke("tts-models:list"),
   searchTtsModels: (query: string) =>

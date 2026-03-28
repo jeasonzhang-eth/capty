@@ -1533,6 +1533,10 @@ function App(): React.JSX.Element {
           selectedTtsVoice={selectedTtsVoice}
           ttsVoices={ttsVoices}
           ttsProviderReady={store.ttsProviderReady}
+          isSidecarTts={
+            ttsProviders.find((p) => p.id === selectedTtsProviderId)
+              ?.isSidecar ?? false
+          }
           onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}

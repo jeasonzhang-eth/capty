@@ -11,9 +11,10 @@ import gc
 import io
 import logging
 import re
+import threading
 import wave
 from pathlib import Path
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 import mlx.core as mx
 import numpy as np
@@ -197,3 +198,113 @@ class TTSRunner:
             return wav_bytes
 
         return await loop.run_in_executor(_mlx_executor, _generate_all)
+
+    async def synthesize_stream(
+        self,
+        text: str,
+        voice: str = "auto",
+        speed: float = 1.0,
+        lang_code: str = "auto",
+        cancel_event: threading.Event | None = None,
+    ) -> AsyncGenerator[tuple[bytes, int, bool], None]:
+        """Yield (pcm_int16_bytes, sample_rate, is_final) tuples.
+
+        Bridges the synchronous MLX generate(stream=True) call running on the
+        MLX executor thread to an async generator via an asyncio.Queue.
+        Falls back to non-streaming generation if the model doesn't support it.
+        """
+        if not self.is_loaded():
+            raise RuntimeError("TTS model not loaded")
+
+        plain = _strip_markdown(text)
+        if not plain:
+            raise ValueError("Empty text after stripping markdown")
+
+        effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
+        effective_voice = None if voice == "auto" else voice
+
+        logger.info(
+            "TTS stream synthesize: lang=%s, voice=%s, text_len=%d",
+            effective_lang,
+            effective_voice,
+            len(plain),
+        )
+
+        model = self._model
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[tuple[bytes, int, bool] | Exception | None] = asyncio.Queue()
+
+        def _generate_streaming() -> None:
+            sample_rate = getattr(model, "sample_rate", 24000)
+            try:
+                # Try streaming generation first
+                try:
+                    results = model.generate(
+                        text=plain,
+                        voice=effective_voice,
+                        speed=speed,
+                        lang_code=effective_lang,
+                        stream=True,
+                    )
+                except TypeError:
+                    # Model doesn't support stream=True, fall back to non-streaming
+                    logger.info("TTS model doesn't support streaming, falling back to non-streaming")
+                    results = model.generate(
+                        text=plain,
+                        voice=effective_voice,
+                        speed=speed,
+                        lang_code=effective_lang,
+                    )
+
+                for i, result in enumerate(results):
+                    if cancel_event and cancel_event.is_set():
+                        logger.info("TTS stream cancelled at segment %d", i)
+                        break
+
+                    audio_np = np.array(result.audio)
+                    if hasattr(result, "sample_rate") and result.sample_rate:
+                        sample_rate = result.sample_rate
+
+                    # Clean and convert to int16 PCM bytes
+                    audio_np = np.nan_to_num(audio_np, nan=0.0, posinf=1.0, neginf=-1.0)
+                    audio_np = np.clip(audio_np, -1.0, 1.0)
+                    pcm_int16 = (audio_np * 32767).astype(np.int16)
+
+                    logger.info(
+                        "TTS stream segment %d: %d samples (%.1fs), sr=%d",
+                        i,
+                        pcm_int16.shape[0],
+                        pcm_int16.shape[0] / sample_rate,
+                        sample_rate,
+                    )
+
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        (pcm_int16.tobytes(), sample_rate, False),
+                    )
+
+                # Signal completion
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+            except Exception as exc:
+                logger.exception("TTS streaming generation failed")
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                mx.clear_cache()
+                gc.collect()
+
+        # Start generation on the MLX executor thread
+        loop.run_in_executor(_mlx_executor, _generate_streaming)
+
+        # Yield chunks from the queue
+        while True:
+            item = await queue.get()
+            if item is None:
+                # Stream complete
+                return
+            if isinstance(item, Exception):
+                raise RuntimeError(f"TTS streaming failed: {item}") from item
+            pcm_bytes, sr, _ = item
+            # Check if there are more items queued; if not, this is potentially the last
+            is_final = queue.empty()
+            yield (pcm_bytes, sr, is_final)

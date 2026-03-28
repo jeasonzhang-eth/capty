@@ -1903,6 +1903,148 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // TTS streaming — active stream abort controllers
+  const activeStreams = new Map<string, AbortController>();
+
+  ipcMain.handle(
+    "tts:speak-stream",
+    async (
+      _event,
+      streamId: string,
+      text: string,
+      opts?: { voice?: string; speed?: number; langCode?: string },
+    ) => {
+      const win = getMainWindow();
+      const config = readConfig(configDir);
+      const selectedId = config.selectedTtsProviderId ?? "sidecar";
+      const provider = (config.ttsProviders ?? []).find(
+        (p) => p.id === selectedId,
+      );
+      if (!provider) {
+        win?.webContents.send("tts:stream-error", {
+          streamId,
+          error: "No TTS provider configured",
+        });
+        return;
+      }
+      const url = provider.baseUrl ?? "http://localhost:8765";
+
+      // Resolve TTS model path
+      const ttsModelId = config.selectedTtsModelId;
+      let ttsModelPath = "";
+      if (ttsModelId) {
+        const dataDir = config.dataDir ?? join(configDir, "data");
+        ttsModelPath = join(dataDir, "models", "tts", ttsModelId);
+      }
+
+      const controller = new AbortController();
+      activeStreams.set(streamId, controller);
+
+      try {
+        const formData = new FormData();
+        formData.append("input", text);
+        if (ttsModelPath) formData.append("model", ttsModelPath);
+        formData.append("voice", opts?.voice ?? provider?.voice ?? "auto");
+        formData.append("speed", String(opts?.speed ?? 1.0));
+        formData.append("lang_code", opts?.langCode ?? "auto");
+
+        const resp = await net.fetch(`${url}/v1/audio/speech/stream`, {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          win?.webContents.send("tts:stream-error", {
+            streamId,
+            error: `TTS stream failed (${resp.status}): ${errBody}`,
+          });
+          return;
+        }
+
+        const reader = resp.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            try {
+              const parsed = JSON.parse(trimmed) as {
+                type: string;
+                data?: string;
+                sample_rate?: number;
+                is_final?: boolean;
+                message?: string;
+              };
+
+              if (parsed.type === "header") {
+                win?.webContents.send("tts:stream-header", {
+                  streamId,
+                  sampleRate: parsed.sample_rate,
+                });
+              } else if (parsed.type === "audio") {
+                if (parsed.data && parsed.data.length > 0) {
+                  win?.webContents.send("tts:stream-data", {
+                    streamId,
+                    data: parsed.data,
+                    sampleRate: parsed.sample_rate,
+                    isFinal: parsed.is_final,
+                  });
+                }
+                if (
+                  parsed.is_final &&
+                  (!parsed.data || parsed.data.length === 0)
+                ) {
+                  win?.webContents.send("tts:stream-end", { streamId });
+                }
+              } else if (parsed.type === "error") {
+                win?.webContents.send("tts:stream-error", {
+                  streamId,
+                  error: parsed.message ?? "Unknown TTS error",
+                });
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+
+        // If stream ended naturally without explicit final marker
+        win?.webContents.send("tts:stream-end", { streamId });
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          // Cancelled by user — no error event needed
+        } else {
+          win?.webContents.send("tts:stream-error", {
+            streamId,
+            error: err?.message ?? "TTS stream failed",
+          });
+        }
+      } finally {
+        activeStreams.delete(streamId);
+      }
+    },
+  );
+
+  ipcMain.handle("tts:cancel-stream", (_event, streamId: string) => {
+    const controller = activeStreams.get(streamId);
+    if (controller) {
+      controller.abort();
+      activeStreams.delete(streamId);
+    }
+  });
+
   // Export save file
   ipcMain.handle(
     "export:save-file",
