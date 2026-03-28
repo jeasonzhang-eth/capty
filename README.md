@@ -307,6 +307,14 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (47)
+
+- **修复模型下载失败** — HF mirror 重定向（307/302）时部分文件下载失败：
+  - 添加 `User-Agent` 请求头（CDN/mirror 可能拒绝无 UA 的请求）
+  - `WriteStream.end()` 现在等待 flush 完成再校验文件大小
+  - 显式设置 `redirect: 'follow'` 确保跟随重定向
+  - 改进错误日志，输出 HTTP 状态码和响应体
+
 ### 2026-03-28 (46)
 
 - **修复录音 WAV 文件 header 损坏** — `openAudioStream` 使用 `fs.writeSync(fd, header, 0, 44, 0)` 传入了显式 `position=0`，底层调用 `pwrite()` 不推进文件指针，导致后续 `appendAudioStream` 从偏移 0 写入 PCM 数据，完全覆盖了 RIFF/WAVE/fmt/data 标记；`finalizeAudioStream` 改为重写完整 header（非仅 patch 两个 size 字段）；`repairWavHeaders` 现在也能修复缺少 RIFF 标记的损坏文件（应用启动时自动修复）

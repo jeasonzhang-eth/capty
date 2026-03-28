@@ -3,13 +3,7 @@
  * Supports pause, resume, cancel, and concurrent file downloads.
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from "fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "fs";
 import { join } from "path";
 import type {
   DownloadCategory,
@@ -114,15 +108,11 @@ export class ModelDownloadTask {
         mkdirSync(this.destDir, { recursive: true });
       }
 
-      console.log(
-        `[model-download] Starting: ${this.repo} → ${this.destDir}`,
-      );
+      console.log(`[model-download] Starting: ${this.repo} → ${this.destDir}`);
 
       // Fetch file list
       const files = await this.fetchFileList();
-      console.log(
-        `[model-download] Files to download: ${files.join(", ")}`,
-      );
+      console.log(`[model-download] Files to download: ${files.join(", ")}`);
 
       // HEAD requests to get file sizes (parallel)
       await this.resolveFileSizes(files);
@@ -169,7 +159,8 @@ export class ModelDownloadTask {
       }
 
       // Check if any files were actually downloaded
-      const hasFiles = existsSync(this.destDir) && readdirSync(this.destDir).length > 0;
+      const hasFiles =
+        existsSync(this.destDir) && readdirSync(this.destDir).length > 0;
       if (!hasFiles) {
         // Clean up empty dir
         try {
@@ -192,8 +183,7 @@ export class ModelDownloadTask {
     } catch (err) {
       if (this.status !== "paused" && this.status !== "failed") {
         this.status = "failed";
-        this.error =
-          err instanceof Error ? err.message : "Download failed";
+        this.error = err instanceof Error ? err.message : "Download failed";
         this.persistState();
         this.emitProgress();
       }
@@ -242,7 +232,10 @@ export class ModelDownloadTask {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15_000);
-      const response = await fetch(apiUrl, { signal: controller.signal });
+      const response = await fetch(apiUrl, {
+        signal: controller.signal,
+        headers: { "User-Agent": "capty/1.0" },
+      });
       clearTimeout(timer);
       if (response.ok) {
         const info = (await response.json()) as HFModelInfo;
@@ -279,14 +272,13 @@ export class ModelDownloadTask {
         const existingSize = getLocalFileSize(filePath);
         try {
           const controller = new AbortController();
-          const timer = setTimeout(
-            () => controller.abort(),
-            REQUEST_TIMEOUT,
-          );
-          const resp = await fetch(
-            `${this.resolveUrl}/${file}`,
-            { method: "HEAD", signal: controller.signal },
-          );
+          const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+          const resp = await fetch(`${this.resolveUrl}/${file}`, {
+            method: "HEAD",
+            redirect: "follow",
+            signal: controller.signal,
+            headers: { "User-Agent": "capty/1.0" },
+          });
           clearTimeout(timer);
           if (resp.ok) {
             const contentLength = Number(
@@ -308,8 +300,7 @@ export class ModelDownloadTask {
     for (const result of headResults) {
       if (result.status !== "fulfilled") continue;
       const { file, contentLength, existingSize } = result.value;
-      const completed =
-        contentLength > 0 && existingSize >= contentLength;
+      const completed = contentLength > 0 && existingSize >= contentLength;
       this.fileStates.push({
         name: file,
         totalBytes: contentLength,
@@ -370,8 +361,7 @@ export class ModelDownloadTask {
       const actual = statSync(filePath).size;
       if (actual > 0) {
         this.totalBytes += actual;
-        this.downloadedBytes =
-          this.downloadedBytes - bytesWritten + actual;
+        this.downloadedBytes = this.downloadedBytes - bytesWritten + actual;
       }
     }
 
@@ -411,9 +401,7 @@ export class ModelDownloadTask {
   private maybePersistState(): void {
     const now = Date.now();
     const percent =
-      this.totalBytes > 0
-        ? (this.downloadedBytes / this.totalBytes) * 100
-        : 0;
+      this.totalBytes > 0 ? (this.downloadedBytes / this.totalBytes) * 100 : 0;
 
     // Save every STATE_SAVE_PERCENT_STEP percent or STATE_SAVE_INTERVAL ms
     if (

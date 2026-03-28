@@ -10,6 +10,10 @@ import {
   STALL_TIMEOUT,
 } from "./types";
 
+const DEFAULT_HEADERS: Record<string, string> = {
+  "User-Agent": "capty/1.0 (Electron; https://github.com/capty)",
+};
+
 /** Fetch with timeout via AbortController. */
 async function fetchWithTimeout(
   url: string,
@@ -17,7 +21,15 @@ async function fetchWithTimeout(
   timeoutMs = REQUEST_TIMEOUT,
 ): Promise<{ response: Response; controller: AbortController }> {
   const controller = new AbortController();
-  const mergedOpts = { ...opts, signal: controller.signal };
+  const mergedOpts: RequestInit = {
+    ...opts,
+    signal: controller.signal,
+    redirect: "follow",
+    headers: {
+      ...DEFAULT_HEADERS,
+      ...(opts.headers as Record<string, string>),
+    },
+  };
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, mergedOpts);
@@ -101,9 +113,7 @@ export async function downloadFile(opts: FileDownloadOptions): Promise<number> {
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAY_BASE * attempt;
-        console.log(
-          `[file-download] Retrying in ${delay / 1000}s...`,
-        );
+        console.log(`[file-download] Retrying in ${delay / 1000}s...`);
         await sleep(delay);
       } else {
         throw err;
@@ -159,7 +169,10 @@ async function downloadFileOnce(
   }
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    const errText = await response.text().catch(() => "");
+    throw new Error(
+      `HTTP ${response.status} ${response.statusText} for ${url}${errText ? `: ${errText.slice(0, 200)}` : ""}`,
+    );
   }
 
   const body = response.body;
@@ -197,7 +210,11 @@ async function downloadFileOnce(
     } catch {
       // ignore
     }
-    writer.end();
+    // Wait for writer to flush all data to disk before returning
+    await new Promise<void>((resolve, reject) => {
+      writer.end(() => resolve());
+      writer.on("error", reject);
+    });
   }
 
   return bytesWritten;
