@@ -1513,20 +1513,27 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 4. Create session
+    // 4. Deduplicate audio directory name
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    let finalTimestamp = dirTimestamp;
+    let sessionDir = join(dataDir, "audio", finalTimestamp);
+    let suffix = 1;
+    while (fs.existsSync(sessionDir)) {
+      finalTimestamp = `${dirTimestamp}-${suffix}`;
+      sessionDir = join(dataDir, "audio", finalTimestamp);
+      suffix++;
+    }
+
+    // 5. Create session with deduplicated path
     const sessionId = createSession(db, { modelName: "imported" });
     updateSession(db, sessionId, {
-      audioPath: dirTimestamp,
+      audioPath: finalTimestamp,
       title: readableTimestamp,
       startedAt: readableTimestamp,
     });
-
-    // 5. Create audio directory and convert to 16kHz mono WAV via ffmpeg
-    const config = readConfig(configDir);
-    const dataDir = config.dataDir ?? join(configDir, "data");
-    const sessionDir = join(dataDir, "audio", dirTimestamp);
     fs.mkdirSync(sessionDir, { recursive: true });
-    const destPath = join(sessionDir, `${dirTimestamp}.wav`);
+    const destPath = join(sessionDir, `${finalTimestamp}.wav`);
     await convertToWav(filePath, destPath);
 
     // 6. Calculate duration from WAV and update session
