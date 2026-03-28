@@ -310,6 +310,7 @@ pytest
 ### 2026-03-28 (53)
 
 - **Default Models 设置页** — Settings 新增 "Default Models" tab，集中管理默认模型配置：ASR 模型选择（显示已下载且支持的模型）、TTS 模型与声音选择（声音按语言分组显示含性别标识）、LLM Provider 选择（显示已配置的 provider 及模型名），所有选择持久化保存重启后保留
+- **修复** — 修复 DefaultModelsTab 中引用未定义 `descStyle` 变量导致白屏的问题
 
 ### 2026-03-28 (52)
 

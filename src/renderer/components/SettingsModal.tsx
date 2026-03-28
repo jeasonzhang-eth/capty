@@ -3344,7 +3344,7 @@ function DefaultModelsTab({
       {/* ASR Model */}
       <div style={cardStyle}>
         <div style={sectionTitleStyle}>ASR Model</div>
-        <div style={{ ...descStyle, marginBottom: "10px" }}>
+        <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Default speech recognition model for transcription
         </div>
         <select
@@ -3375,7 +3375,7 @@ function DefaultModelsTab({
       {/* TTS Model & Voice */}
       <div style={cardStyle}>
         <div style={sectionTitleStyle}>TTS Model</div>
-        <div style={{ ...descStyle, marginBottom: "10px" }}>
+        <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Default text-to-speech model and voice for reading summaries
         </div>
         <select
@@ -3449,7 +3449,7 @@ function DefaultModelsTab({
       {/* LLM Provider */}
       <div style={cardStyle}>
         <div style={sectionTitleStyle}>LLM Provider</div>
-        <div style={{ ...descStyle, marginBottom: "10px" }}>
+        <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Default language model provider for summaries and analysis
         </div>
         <select
