@@ -25,6 +25,7 @@ interface ModelInfo {
   readonly size_gb: number;
   readonly languages: readonly string[];
   readonly description: string;
+  readonly supported?: boolean;
 }
 
 export interface AsrProviderState {

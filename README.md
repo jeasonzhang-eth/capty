@@ -316,6 +316,11 @@ pytest
 - **修复下载失败的模型仍显示 "Downloaded" 标签** — `isModelDownloaded` 仅检查是否存在权重文件（`.safetensors`），忽略了未完成的下载状态：
   - 新增下载状态检查：若 `.downloads/<modelId>.json` 存在且状态为 `failed`/`downloading`/`paused`，返回 `false`
   - 部分下载的模型（有部分文件但下载未完成）不再被误判为已下载
+- **不兼容模型类型检测** — 从 HuggingFace 下载的部分模型（如 `funasr` 类型）不被 mlx-audio STT 支持，加载时 500 错误：
+  - 新增 `isModelSttSupported()` 检查：读取模型 `config.json` 的 `model_type`，与 `KNOWN_STT_TYPES`（mlx-audio MODEL_REMAPPING）比对
+  - 不兼容模型在 Model Market 中显示红色 "Unsupported" 标签（替代绿色 "Downloaded"），不可选择
+  - ControlBar 模型下拉列表自动过滤不兼容模型，防止误选
+  - 启动自动选择模型时跳过不兼容模型
 
 ### 2026-03-28 (47)
 

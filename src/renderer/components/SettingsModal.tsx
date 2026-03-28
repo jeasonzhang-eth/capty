@@ -9,6 +9,7 @@ interface ModelInfo {
   readonly size_gb: number;
   readonly languages: readonly string[];
   readonly description: string;
+  readonly supported?: boolean;
 }
 
 export interface LlmProvider {
@@ -297,7 +298,9 @@ function ModelCard({
   readonly onResume: ((modelId: string) => void) | null;
   readonly onCancel: ((modelId: string) => void) | null;
 }): React.ReactElement {
-  const canSelect = model.downloaded && !isSelected && !isRecording;
+  const isSupported = model.supported !== false;
+  const canSelect =
+    model.downloaded && isSupported && !isSelected && !isRecording;
 
   return (
     <div
@@ -373,7 +376,7 @@ function ModelCard({
               </span>
             )}
             <LanguageTags languages={model.languages} />
-            {model.downloaded && (
+            {model.downloaded && isSupported && (
               <span
                 style={{
                   ...tagStyle,
@@ -382,6 +385,18 @@ function ModelCard({
                 }}
               >
                 Downloaded
+              </span>
+            )}
+            {model.downloaded && !isSupported && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: "rgba(239, 68, 68, 0.12)",
+                  color: "#EF4444",
+                }}
+                title="This model type is not supported by mlx-audio STT"
+              >
+                Unsupported
               </span>
             )}
           </div>

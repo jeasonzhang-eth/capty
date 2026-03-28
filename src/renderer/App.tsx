@@ -413,22 +413,25 @@ function App(): React.JSX.Element {
           const modelsList = models as Array<{
             id: string;
             downloaded: boolean;
+            supported?: boolean;
           }>;
+          const isUsable = (m: { downloaded: boolean; supported?: boolean }) =>
+            m.downloaded && m.supported !== false;
           const savedModelId = config.selectedModelId as string | null;
           if (savedModelId) {
             const exists = modelsList.some(
-              (m) => m.id === savedModelId && m.downloaded,
+              (m) => m.id === savedModelId && isUsable(m),
             );
             if (exists) {
               store.setSelectedModelId(savedModelId);
             } else {
-              // Saved model no longer exists — auto-select first downloaded
-              const first = modelsList.find((m) => m.downloaded);
+              // Saved model no longer exists — auto-select first usable
+              const first = modelsList.find(isUsable);
               if (first) store.setSelectedModelId(first.id);
             }
           } else {
-            // No saved model — auto-select first downloaded
-            const first = modelsList.find((m) => m.downloaded);
+            // No saved model — auto-select first usable
+            const first = modelsList.find(isUsable);
             if (first) store.setSelectedModelId(first.id);
           }
         } catch {
@@ -962,13 +965,13 @@ function App(): React.JSX.Element {
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
 
-        // If deleted model was selected, switch to first downloaded model
+        // If deleted model was selected, switch to first usable model
         if (store.selectedModelId === modelId) {
-          const firstDownloaded = (
-            models as { id: string; downloaded: boolean }[]
-          ).find((m) => m.downloaded);
-          if (firstDownloaded) {
-            store.setSelectedModelId(firstDownloaded.id);
+          const firstUsable = (
+            models as { id: string; downloaded: boolean; supported?: boolean }[]
+          ).find((m) => m.downloaded && m.supported !== false);
+          if (firstUsable) {
+            store.setSelectedModelId(firstUsable.id);
           }
         }
       } catch (err) {

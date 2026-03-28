@@ -105,6 +105,7 @@ interface ModelEntry {
   readonly languages: readonly string[];
   readonly description: string;
   readonly downloaded?: boolean;
+  readonly supported?: boolean;
 }
 
 interface RecommendedModel {
@@ -177,6 +178,7 @@ export function migrateModelsDir(dataDir: string): void {
 function readModelMeta(dirPath: string, dirName: string): ModelEntry {
   // Always use actual disk size for downloaded models (meta.size_gb may be stale)
   const actualSizeGb = calcDirSizeGb(dirPath);
+  const supported = isModelSttSupported(dirPath);
 
   // Try model-meta.json first
   const metaPath = join(dirPath, "model-meta.json");
@@ -192,6 +194,7 @@ function readModelMeta(dirPath: string, dirName: string): ModelEntry {
         languages: meta.languages ?? ["multilingual"],
         description: meta.description ?? "",
         downloaded: true,
+        supported,
       };
     }
   } catch {
@@ -212,6 +215,7 @@ function readModelMeta(dirPath: string, dirName: string): ModelEntry {
     languages: ["multilingual"],
     description: repo,
     downloaded: true,
+    supported,
   };
 }
 
@@ -272,6 +276,47 @@ function inferModelTypeFromDir(dirPath: string): string {
     // Cannot read config.json
   }
   return "auto";
+}
+
+/**
+ * Check if a downloaded ASR model is supported by mlx-audio STT.
+ *
+ * Returns true if:
+ * - model_type is in KNOWN_STT_TYPES
+ * - model_type matches whisper/qwen/parakeet keywords
+ * - no config.json or no model_type (benefit of the doubt)
+ *
+ * Returns false if model_type is present but not recognized as STT-compatible.
+ */
+function isModelSttSupported(dirPath: string): boolean {
+  const configPath = join(dirPath, "config.json");
+  try {
+    if (!fs.existsSync(configPath)) return true; // No config → unknown, assume OK
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const modelType = (cfg.model_type ?? "").toLowerCase();
+    if (!modelType) return true; // No model_type → unknown, assume OK
+
+    // Check against known STT types
+    if (KNOWN_STT_TYPES.has(modelType)) return true;
+
+    // Check keyword-based patterns
+    const architectures = (cfg.architectures ?? [])
+      .map((a: string) => a.toLowerCase())
+      .join(" ");
+    const combined = `${modelType} ${architectures}`;
+    if (
+      combined.includes("whisper") ||
+      combined.includes("qwen") ||
+      combined.includes("parakeet")
+    ) {
+      return true;
+    }
+
+    // model_type is present but not recognized → unsupported
+    return false;
+  } catch {
+    return true; // Cannot read config → assume OK
+  }
 }
 
 /** Write model-meta.json into the model directory after download. */
@@ -354,6 +399,7 @@ async function loadAsrModels(configDir: string): Promise<ModelEntry[]> {
     languages: r.languages,
     description: r.description,
     downloaded: false,
+    supported: true, // Recommended models are known to be compatible
   }));
 
   const all = [...downloaded, ...notDownloaded];
@@ -416,6 +462,7 @@ async function loadTtsModels(configDir: string): Promise<ModelEntry[]> {
     languages: r.languages,
     description: r.description,
     downloaded: false,
+    supported: true,
   }));
 
   const all = [...downloaded, ...notDownloaded];

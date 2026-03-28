@@ -13,6 +13,7 @@ interface ControlBarProps {
     name: string;
     type: string;
     downloaded: boolean;
+    supported?: boolean;
     size_gb: number;
   }[];
   readonly selectedModelId: string;
@@ -212,13 +213,14 @@ export function ControlBar({
               e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
-            {models.filter((m) => m.downloaded).length === 0 && (
+            {models.filter((m) => m.downloaded && m.supported !== false)
+              .length === 0 && (
               <option value="" disabled>
                 No models
               </option>
             )}
             {models
-              .filter((m) => m.downloaded)
+              .filter((m) => m.downloaded && m.supported !== false)
               .map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
