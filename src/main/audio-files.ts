@@ -123,9 +123,11 @@ export function openAudioStream(sessionDir: string, fileName: string): void {
   streamFd = fs.openSync(filePath, "w+");
   streamDataBytes = 0;
 
-  // Write a 44-byte WAV header with placeholder sizes (will be fixed on close)
+  // Write a 44-byte WAV header with placeholder sizes (will be fixed on close).
+  // Do NOT pass explicit position — pwrite() would leave fd offset at 0,
+  // causing appendAudioStream to overwrite the header with PCM data.
   const header = buildWavHeader(0);
-  fs.writeSync(streamFd, header, 0, WAV_HEADER_SIZE, 0);
+  fs.writeSync(streamFd, header, 0, WAV_HEADER_SIZE);
 }
 
 /**
@@ -139,19 +141,14 @@ export function appendAudioStream(pcmBuffer: Buffer): void {
 }
 
 /**
- * Finalize the open stream: fix the WAV header sizes and close the file.
+ * Finalize the open stream: rewrite the complete WAV header and close the file.
  */
 export function finalizeAudioStream(): void {
   if (streamFd === null) return;
 
-  // Patch RIFF chunk size (offset 4) and data chunk size (offset 40)
-  const buf4 = Buffer.alloc(4);
-
-  buf4.writeUInt32LE(WAV_HEADER_SIZE - 8 + streamDataBytes, 0);
-  fs.writeSync(streamFd, buf4, 0, 4, 4);
-
-  buf4.writeUInt32LE(streamDataBytes, 0);
-  fs.writeSync(streamFd, buf4, 0, 4, 40);
+  // Rewrite the full 44-byte header with correct sizes (using pwrite at offset 0)
+  const header = buildWavHeader(streamDataBytes);
+  fs.writeSync(streamFd, header, 0, WAV_HEADER_SIZE, 0);
 
   fs.closeSync(streamFd);
   streamFd = null;
@@ -160,8 +157,8 @@ export function finalizeAudioStream(): void {
 
 /**
  * Scan an audio directory and repair any WAV files that have placeholder
- * headers (data size = 0 but file is larger than 44 bytes).
- * Called on startup to recover from abnormal exits.
+ * or missing headers (data size = 0, or header overwritten by PCM data).
+ * Called on startup to recover from abnormal exits or the pwrite bug.
  */
 export function repairWavHeaders(audioBaseDir: string): number {
   if (!fs.existsSync(audioBaseDir)) return 0;
@@ -180,33 +177,31 @@ export function repairWavHeaders(audioBaseDir: string): number {
       // Only repair files that have data beyond the header
       if (stat.size <= WAV_HEADER_SIZE) continue;
 
-      // Read current header
       const fd = fs.openSync(filePath, "r+");
-      const header = Buffer.alloc(WAV_HEADER_SIZE);
-      fs.readSync(fd, header, 0, WAV_HEADER_SIZE, 0);
+      const headerBuf = Buffer.alloc(WAV_HEADER_SIZE);
+      fs.readSync(fd, headerBuf, 0, WAV_HEADER_SIZE, 0);
 
-      // Check if it's a RIFF/WAVE file with wrong sizes
-      if (header.toString("ascii", 0, 4) !== "RIFF") {
-        fs.closeSync(fd);
-        continue;
-      }
-
-      const storedDataSize = header.readUInt32LE(40);
+      const hasRiff = headerBuf.toString("ascii", 0, 4) === "RIFF";
+      const storedDataSize = headerBuf.readUInt32LE(40);
       const actualDataSize = stat.size - WAV_HEADER_SIZE;
 
-      if (storedDataSize === 0 && actualDataSize > 0) {
-        // Fix the header
-        const buf4 = Buffer.alloc(4);
+      let needsRepair = false;
 
-        buf4.writeUInt32LE(WAV_HEADER_SIZE - 8 + actualDataSize, 0);
-        fs.writeSync(fd, buf4, 0, 4, 4);
+      if (!hasRiff) {
+        // Header completely missing (overwritten by PCM due to pwrite bug).
+        // Rewrite full header; the first 44 bytes of audio are lost (0.001s).
+        needsRepair = true;
+      } else if (storedDataSize === 0 && actualDataSize > 0) {
+        // Header exists but sizes are placeholders (abnormal exit)
+        needsRepair = true;
+      }
 
-        buf4.writeUInt32LE(actualDataSize, 0);
-        fs.writeSync(fd, buf4, 0, 4, 40);
-
+      if (needsRepair) {
+        const newHeader = buildWavHeader(actualDataSize);
+        fs.writeSync(fd, newHeader, 0, WAV_HEADER_SIZE, 0);
         repaired++;
         console.log(
-          `[audio] Repaired WAV header: ${filePath} (${actualDataSize} bytes)`,
+          `[audio] Repaired WAV header: ${filePath} (${actualDataSize} bytes, hadRIFF=${hasRiff})`,
         );
       }
 

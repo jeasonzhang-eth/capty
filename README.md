@@ -307,6 +307,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (46)
+
+- **修复录音 WAV 文件 header 损坏** — `openAudioStream` 使用 `fs.writeSync(fd, header, 0, 44, 0)` 传入了显式 `position=0`，底层调用 `pwrite()` 不推进文件指针，导致后续 `appendAudioStream` 从偏移 0 写入 PCM 数据，完全覆盖了 RIFF/WAVE/fmt/data 标记；`finalizeAudioStream` 改为重写完整 header（非仅 patch 两个 size 字段）；`repairWavHeaders` 现在也能修复缺少 RIFF 标记的损坏文件（应用启动时自动修复）
+
 ### 2026-03-28 (45)
 
 - **修复重复导入同一文件导致数据丢失** — 同一文件多次导入时 birthtime 相同，导致共用同一音频目录；删除其中一个 session 会连带删除音频文件，使其他 session 失效。现在导入时检测目录冲突，自动追加 `-1`, `-2` 后缀确保每个 session 独立
