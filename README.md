@@ -314,7 +314,7 @@ pytest
   - 新增 `TTSRunner.get_voices()` 方法：返回已加载模型的可用说话人列表（从 `talker_config.spk_id` 读取）
   - `/tts/voices` 端点改为返回真实说话人列表（不再固定返回空数组）；模型未加载时从磁盘 `config.json` 读取 `spk_id`，解决启动时 voice 列表为空的时序问题
   - `synthesize()` 和 `synthesize_stream()` 均使用 `_resolve_voice()` 替代原来的 `None if voice == "auto" else voice`
-  - Voice 选择器在 SummaryCard 底部紧邻 Model 选择器显示，支持切换说话人
+  - Voice 选择器按语言分组显示（Chinese / Chinese (Beijing Dialect) / English 等），包含性别标识（M/F），支持 Vivian、Serena、Uncle Fu、Dylan、Eric、Ryan、Aiden 等说话人
 
 ### 2026-03-28 (50)
 

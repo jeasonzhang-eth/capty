@@ -25,6 +25,20 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit"
 
+# Known speaker metadata for Qwen3-TTS models.
+# Entries that are not found in the model's spk_id are silently skipped.
+_KNOWN_SPEAKERS: dict[str, dict[str, str]] = {
+    "vivian":   {"name": "Vivian",   "lang": "Chinese",  "gender": "Female"},
+    "serena":   {"name": "Serena",   "lang": "Chinese",  "gender": "Female"},
+    "uncle_fu": {"name": "Uncle Fu", "lang": "Chinese",  "gender": "Male"},
+    "dylan":    {"name": "Dylan",    "lang": "Chinese (Beijing Dialect)", "gender": "Male"},
+    "eric":     {"name": "Eric",     "lang": "Chinese (Sichuan Dialect)", "gender": "Male"},
+    "chelsie":  {"name": "Chelsie",  "lang": "English",  "gender": "Female"},
+    "ryan":     {"name": "Ryan",     "lang": "English",  "gender": "Male"},
+    "aiden":    {"name": "Aiden",    "lang": "English",  "gender": "Male"},
+    "ethan":    {"name": "Ethan",    "lang": "English",  "gender": "Male"},
+}
+
 # CJK Unicode ranges for language auto-detection
 _CJK_RE = re.compile(
     r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
@@ -55,6 +69,51 @@ def _strip_markdown(text: str) -> str:
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)  # links
     text = re.sub(r"\n{3,}", "\n\n", text)  # collapse newlines
     return text.strip()
+
+
+def _build_voice_list(spk_id: dict) -> list[dict]:
+    """Build a structured voice list from a model's spk_id dict.
+
+    Uses ``_KNOWN_SPEAKERS`` for rich metadata (language, gender);
+    unknown speakers get minimal entries.
+    """
+    # Determine default voice for the "Auto" entry
+    default_key = None
+    for preferred in ("vivian", "chelsie", "ethan"):
+        if preferred in spk_id:
+            default_key = preferred
+            break
+    if not default_key:
+        default_key = next(iter(spk_id))
+
+    default_meta = _KNOWN_SPEAKERS.get(default_key, {})
+    default_label = default_meta.get("name", default_key.capitalize())
+
+    voices: list[dict] = [
+        {"id": "auto", "name": f"Auto ({default_label})", "lang": "Auto", "gender": ""},
+    ]
+
+    # Group by language for consistent ordering: Chinese first, then English, then others
+    lang_order = ["Chinese", "English"]
+
+    def sort_key(name: str) -> tuple:
+        meta = _KNOWN_SPEAKERS.get(name, {})
+        lang = meta.get("lang", "")
+        # Primary sort by language group, secondary alphabetical
+        base_lang = lang.split("(")[0].strip() if lang else "ZZZ"
+        idx = lang_order.index(base_lang) if base_lang in lang_order else 99
+        return (idx, name)
+
+    for name in sorted(spk_id.keys(), key=sort_key):
+        meta = _KNOWN_SPEAKERS.get(name, {})
+        voices.append({
+            "id": name,
+            "name": meta.get("name", name.capitalize()),
+            "lang": meta.get("lang", ""),
+            "gender": meta.get("gender", ""),
+        })
+
+    return voices
 
 
 def _audio_to_wav_bytes(audio_np: np.ndarray, sample_rate: int) -> bytes:
@@ -126,18 +185,7 @@ class TTSRunner:
         if not spk_id:
             return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
 
-        # Determine default voice name for display
-        default_name = None
-        for preferred in ("vivian", "chelsie", "ethan"):
-            if preferred in spk_id:
-                default_name = preferred
-                break
-        if not default_name:
-            default_name = next(iter(spk_id))
-        voices = [{"id": "auto", "name": f"Auto ({default_name.capitalize()})", "lang": "Auto", "gender": ""}]
-        for name in sorted(spk_id.keys()):
-            voices.append({"id": name, "name": name.capitalize(), "lang": "", "gender": ""})
-        return voices
+        return _build_voice_list(spk_id)
 
     def _resolve_voice(self, voice: str) -> str | None:
         """Resolve voice parameter for the loaded model.

@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from capty_sidecar.model_registry import ModelRegistry
 from capty_sidecar.model_runner import ModelRunner, _mlx_executor as _mlx_executor
-from capty_sidecar.tts_runner import TTSRunner
+from capty_sidecar.tts_runner import TTSRunner, _build_voice_list
 
 logger = logging.getLogger(__name__)
 
@@ -401,16 +401,7 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
                     if not spk_id:
                         spk_id = cfg.get("spk_id", {}) or {}
                     if spk_id:
-                        default_name = None
-                        for pref in ("vivian", "chelsie", "ethan"):
-                            if pref in spk_id:
-                                default_name = pref
-                                break
-                        if not default_name:
-                            default_name = next(iter(spk_id))
-                        voices.append({"id": "auto", "name": f"Auto ({default_name.capitalize()})", "lang": "Auto", "gender": ""})
-                        for name in sorted(spk_id.keys()):
-                            voices.append({"id": name, "name": name.capitalize(), "lang": "", "gender": ""})
+                        voices = _build_voice_list(spk_id)
                 except Exception:
                     pass
 
