@@ -585,7 +585,7 @@ export function HistoryPanel({
                             color: "var(--text-primary)",
                             marginBottom: "4px",
                             display: "flex",
-                            alignItems: "center",
+                            alignItems: "flex-start",
                             justifyContent: "space-between",
                             gap: "4px",
                           }}
@@ -593,10 +593,13 @@ export function HistoryPanel({
                           <span
                             style={{
                               overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              lineHeight: "1.4",
                               flex: 1,
                               minWidth: 0,
+                              wordBreak: "break-all",
                             }}
                           >
                             {session.title}
