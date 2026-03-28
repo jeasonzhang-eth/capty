@@ -126,7 +126,15 @@ class TTSRunner:
         if not spk_id:
             return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
 
-        voices = [{"id": "auto", "name": "Auto (random)", "lang": "Auto", "gender": ""}]
+        # Determine default voice name for display
+        default_name = None
+        for preferred in ("vivian", "chelsie", "ethan"):
+            if preferred in spk_id:
+                default_name = preferred
+                break
+        if not default_name:
+            default_name = next(iter(spk_id))
+        voices = [{"id": "auto", "name": f"Auto ({default_name.capitalize()})", "lang": "Auto", "gender": ""}]
         for name in sorted(spk_id.keys()):
             voices.append({"id": name, "name": name.capitalize(), "lang": "", "gender": ""})
         return voices

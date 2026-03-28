@@ -377,10 +377,45 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
 
     @app.get("/tts/voices")
     async def tts_voices(model_dir: str = ""):
-        """List available voices from the loaded TTS model."""
-        voices = tts_runner.get_voices() if tts_runner.is_loaded() else []
+        """List available voices from the loaded TTS model or model config on disk."""
+        # If model is loaded, read from it directly
+        if tts_runner.is_loaded():
+            voices = tts_runner.get_voices()
+            return {
+                "model": tts_runner._model_id or "",
+                "voices": voices,
+            }
+
+        # Model not loaded yet — read spk_id from config.json on disk
+        voices: list[dict] = []
+        if model_dir:
+            config_path = Path(model_dir) / "config.json"
+            if config_path.is_file():
+                try:
+                    import json as _json
+                    cfg = _json.loads(config_path.read_text())
+                    spk_id = {}
+                    talker_cfg = cfg.get("talker_config", {})
+                    if isinstance(talker_cfg, dict):
+                        spk_id = talker_cfg.get("spk_id", {}) or {}
+                    if not spk_id:
+                        spk_id = cfg.get("spk_id", {}) or {}
+                    if spk_id:
+                        default_name = None
+                        for pref in ("vivian", "chelsie", "ethan"):
+                            if pref in spk_id:
+                                default_name = pref
+                                break
+                        if not default_name:
+                            default_name = next(iter(spk_id))
+                        voices.append({"id": "auto", "name": f"Auto ({default_name.capitalize()})", "lang": "Auto", "gender": ""})
+                        for name in sorted(spk_id.keys()):
+                            voices.append({"id": name, "name": name.capitalize(), "lang": "", "gender": ""})
+                except Exception:
+                    pass
+
         return {
-            "model": tts_runner._model_id or (Path(model_dir).name if model_dir else ""),
+            "model": Path(model_dir).name if model_dir else "",
             "voices": voices,
         }
 
