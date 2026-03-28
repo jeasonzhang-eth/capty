@@ -220,7 +220,7 @@ const TABS: readonly {
   { id: "default-models", icon: "\ud83c\udfaf", label: "Default Models" },
   { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "ASR Providers" },
   { id: "tts", icon: "\ud83d\udd0a", label: "TTS Providers" },
-  { id: "language-models", icon: "\ud83e\udde0", label: "Language Models" },
+  { id: "language-models", icon: "\ud83e\udde0", label: "LLM Providers" },
 ];
 
 /* ─── Small reusable components ─── */
