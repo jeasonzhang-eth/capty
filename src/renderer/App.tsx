@@ -19,7 +19,7 @@ import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
 const DEFAULT_RAPID_RENAME_PROMPT =
-  "Based on the following meeting transcript, generate a concise and descriptive title (max 10 words). Return ONLY the title, no quotes or extra text.";
+  "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
 
 function App(): React.JSX.Element {
   const store = useAppStore();
@@ -1140,13 +1140,24 @@ function App(): React.JSX.Element {
       }
       setAiRenamingSessionId(sessionId);
       try {
-        const title = await window.capty.generateTitle(
+        const rawTitle = await window.capty.generateTitle(
           sessionId,
           providerId,
           rapidRenamePrompt,
         );
-        if (title) {
-          await window.capty.renameSession(sessionId, title);
+        if (rawTitle) {
+          // Prepend session timestamp: "2026-03-25T10-42-06：标题"
+          const sess = store.sessions.find(
+            (s: { id: number }) => s.id === sessionId,
+          );
+          let finalTitle = rawTitle;
+          if (sess?.started_at) {
+            const d = new Date(sess.started_at);
+            const pad = (n: number): string => String(n).padStart(2, "0");
+            const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+            finalTitle = `${ts}：${rawTitle}`;
+          }
+          await window.capty.renameSession(sessionId, finalTitle);
           await store.loadSessions();
         }
       } catch (err) {
