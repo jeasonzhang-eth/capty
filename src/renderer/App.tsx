@@ -177,6 +177,11 @@ function App(): React.JSX.Element {
   const [selectedLlmProviderId, setSelectedLlmProviderId] = useState<
     string | null
   >(null);
+  const [selectedRapidLlmProviderId, setSelectedRapidLlmProviderId] = useState<
+    string | null
+  >(null);
+  const [selectedTranslateLlmProviderId, setSelectedTranslateLlmProviderId] =
+    useState<string | null>(null);
 
   // Summary state
   const [summaries, setSummaries] = useState<Summary[]>([]);
@@ -335,6 +340,16 @@ function App(): React.JSX.Element {
         const savedLlmId = config.selectedLlmProviderId as string | null;
         if (savedLlmId) {
           setSelectedLlmProviderId(savedLlmId);
+        }
+        const savedRapidId = config.selectedRapidLlmProviderId as string | null;
+        if (savedRapidId) {
+          setSelectedRapidLlmProviderId(savedRapidId);
+        }
+        const savedTranslateId = config.selectedTranslateLlmProviderId as
+          | string
+          | null;
+        if (savedTranslateId) {
+          setSelectedTranslateLlmProviderId(savedTranslateId);
         }
 
         // Load prompt types
@@ -1064,6 +1079,30 @@ function App(): React.JSX.Element {
     });
   }, []);
 
+  const handleChangeRapidLlmProvider = useCallback(
+    async (providerId: string) => {
+      setSelectedRapidLlmProviderId(providerId);
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({
+        ...config,
+        selectedRapidLlmProviderId: providerId,
+      });
+    },
+    [],
+  );
+
+  const handleChangeTranslateLlmProvider = useCallback(
+    async (providerId: string) => {
+      setSelectedTranslateLlmProviderId(providerId);
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({
+        ...config,
+        selectedTranslateLlmProviderId: providerId,
+      });
+    },
+    [],
+  );
+
   const handleChangeTtsModelForPlay = useCallback(
     async (modelId: string) => {
       // Immediately reset voice to "auto" to avoid stale voice for new model
@@ -1631,6 +1670,10 @@ function App(): React.JSX.Element {
           onChangeTtsModel={handleChangeTtsModelForPlay}
           selectedLlmProviderId={selectedLlmProviderId}
           onChangeLlmProvider={handleChangeLlmProvider}
+          selectedRapidLlmProviderId={selectedRapidLlmProviderId}
+          onChangeRapidLlmProvider={handleChangeRapidLlmProvider}
+          selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
+          onChangeTranslateLlmProvider={handleChangeTranslateLlmProvider}
           onClose={() => setShowSettings(false)}
         />
       )}

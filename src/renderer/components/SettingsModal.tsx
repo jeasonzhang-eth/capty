@@ -107,6 +107,10 @@ interface SettingsModalProps {
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly selectedLlmProviderId: string | null;
   readonly onChangeLlmProvider: (providerId: string) => void;
+  readonly selectedRapidLlmProviderId: string | null;
+  readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly selectedTranslateLlmProviderId: string | null;
+  readonly onChangeTranslateLlmProvider: (providerId: string) => void;
   readonly onClose: () => void;
 }
 
@@ -154,6 +158,17 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
   transition: "border-color 0.2s",
   fontFamily: "'DM Sans', sans-serif",
+};
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: "6px",
+  border: "1px solid var(--border)",
+  backgroundColor: "var(--bg-primary)",
+  color: "var(--text-primary)",
+  fontSize: "13px",
+  outline: "none",
 };
 
 const primaryBtnStyle: React.CSSProperties = {
@@ -3294,6 +3309,10 @@ function DefaultModelsTab({
   llmProviders,
   selectedLlmProviderId,
   onChangeLlmProvider,
+  selectedRapidLlmProviderId,
+  onChangeRapidLlmProvider,
+  selectedTranslateLlmProviderId,
+  onChangeTranslateLlmProvider,
 }: {
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
@@ -3312,6 +3331,10 @@ function DefaultModelsTab({
   readonly llmProviders: readonly LlmProvider[];
   readonly selectedLlmProviderId: string | null;
   readonly onChangeLlmProvider: (providerId: string) => void;
+  readonly selectedRapidLlmProviderId: string | null;
+  readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly selectedTranslateLlmProviderId: string | null;
+  readonly onChangeTranslateLlmProvider: (providerId: string) => void;
 }): React.ReactElement {
   const downloadedAsrModels = models.filter(
     (m) => m.downloaded && m.supported !== false,
@@ -3446,25 +3469,60 @@ function DefaultModelsTab({
         )}
       </div>
 
-      {/* LLM Provider */}
+      {/* Summary Model */}
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>LLM Provider</div>
+        <div style={sectionTitleStyle}>Summary Model</div>
         <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
-          Default language model provider for summaries and analysis
+          Language model for generating summaries and analysis
         </div>
         <select
           value={selectedLlmProviderId ?? ""}
           onChange={(e) => onChangeLlmProvider(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "8px 10px",
-            borderRadius: "6px",
-            border: "1px solid var(--border)",
-            backgroundColor: "var(--bg-primary)",
-            color: "var(--text-primary)",
-            fontSize: "13px",
-            outline: "none",
-          }}
+          style={selectStyle}
+        >
+          {llmProviders.length === 0 && (
+            <option value="">No configured LLM providers</option>
+          )}
+          {llmProviders.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.model})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Rapid Model */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>Rapid Model</div>
+        <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
+          Fast language model for quick tasks like renaming sessions
+        </div>
+        <select
+          value={selectedRapidLlmProviderId ?? ""}
+          onChange={(e) => onChangeRapidLlmProvider(e.target.value)}
+          style={selectStyle}
+        >
+          {llmProviders.length === 0 && (
+            <option value="">No configured LLM providers</option>
+          )}
+          {llmProviders.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.model})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Translate Model */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>Translate Model</div>
+        <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
+          Language model for translating transcription text
+        </div>
+        <select
+          value={selectedTranslateLlmProviderId ?? ""}
+          onChange={(e) => onChangeTranslateLlmProvider(e.target.value)}
+          style={selectStyle}
         >
           {llmProviders.length === 0 && (
             <option value="">No configured LLM providers</option>
@@ -3529,6 +3587,10 @@ export function SettingsModal({
   onChangeTtsModel,
   selectedLlmProviderId,
   onChangeLlmProvider,
+  selectedRapidLlmProviderId,
+  onChangeRapidLlmProvider,
+  selectedTranslateLlmProviderId,
+  onChangeTranslateLlmProvider,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -3705,6 +3767,10 @@ export function SettingsModal({
                 llmProviders={llmProviders}
                 selectedLlmProviderId={selectedLlmProviderId}
                 onChangeLlmProvider={onChangeLlmProvider}
+                selectedRapidLlmProviderId={selectedRapidLlmProviderId}
+                onChangeRapidLlmProvider={onChangeRapidLlmProvider}
+                selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
+                onChangeTranslateLlmProvider={onChangeTranslateLlmProvider}
               />
             )}
             {activeTab === "speech" && (
