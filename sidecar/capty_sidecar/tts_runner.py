@@ -103,6 +103,70 @@ class TTSRunner:
     def is_loaded(self) -> bool:
         return self._model is not None
 
+    def get_voices(self) -> list[dict]:
+        """Return available voices from the loaded model's config.
+
+        For CustomVoice models this reads ``config.spk_id``; for other
+        model types an "auto" placeholder is returned.
+        """
+        if not self.is_loaded():
+            return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
+
+        model = self._model
+        spk_id: dict = {}
+        # Try model.config.spk_id (Qwen3-TTS CustomVoice)
+        cfg = getattr(model, "config", None)
+        if cfg is not None:
+            talker_cfg = getattr(cfg, "talker_config", None)
+            if talker_cfg is not None:
+                spk_id = getattr(talker_cfg, "spk_id", None) or {}
+            if not spk_id:
+                spk_id = getattr(cfg, "spk_id", None) or {}
+
+        if not spk_id:
+            return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
+
+        voices = [{"id": "auto", "name": "Auto (random)", "lang": "Auto", "gender": ""}]
+        for name in sorted(spk_id.keys()):
+            voices.append({"id": name, "name": name.capitalize(), "lang": "", "gender": ""})
+        return voices
+
+    def _resolve_voice(self, voice: str) -> str | None:
+        """Resolve voice parameter for the loaded model.
+
+        - ``"auto"`` on a CustomVoice model → pick the first available speaker
+        - ``"auto"`` on a Base model → ``None`` (model default)
+        - Explicit name → pass through as-is
+        """
+        if voice != "auto":
+            return voice
+
+        if not self.is_loaded():
+            return None
+
+        model = self._model
+        spk_id: dict = {}
+        cfg = getattr(model, "config", None)
+        if cfg is not None:
+            talker_cfg = getattr(cfg, "talker_config", None)
+            if talker_cfg is not None:
+                spk_id = getattr(talker_cfg, "spk_id", None) or {}
+            if not spk_id:
+                spk_id = getattr(cfg, "spk_id", None) or {}
+
+        if spk_id:
+            # CustomVoice model — pick a sensible default
+            for preferred in ("vivian", "chelsie", "ethan"):
+                if preferred in spk_id:
+                    logger.info("Auto-selected voice '%s' for CustomVoice model", preferred)
+                    return preferred
+            first = next(iter(spk_id))
+            logger.info("Auto-selected first voice '%s' for CustomVoice model", first)
+            return first
+
+        # Base / VoiceDesign model — None lets model use its default
+        return None
+
     def unload(self) -> None:
         self._model = None
         self._model_id = None
@@ -131,8 +195,8 @@ class TTSRunner:
 
         # Auto-detect language
         effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
-        # voice "auto" → None (let model use its default)
-        effective_voice = None if voice == "auto" else voice
+        # Resolve voice: CustomVoice model needs a speaker name, Base model uses None
+        effective_voice = self._resolve_voice(voice)
 
         logger.info(
             "TTS synthesize: lang=%s, voice=%s, text_len=%d",
@@ -221,7 +285,7 @@ class TTSRunner:
             raise ValueError("Empty text after stripping markdown")
 
         effective_lang = _detect_lang(plain) if lang_code == "auto" else lang_code
-        effective_voice = None if voice == "auto" else voice
+        effective_voice = self._resolve_voice(voice)
 
         logger.info(
             "TTS stream synthesize: lang=%s, voice=%s, text_len=%d",

@@ -377,8 +377,12 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
 
     @app.get("/tts/voices")
     async def tts_voices(model_dir: str = ""):
-        """List available voices. Returns empty list (Qwen3-TTS uses free-form voice)."""
-        return {"model": Path(model_dir).name if model_dir else "", "voices": []}
+        """List available voices from the loaded TTS model."""
+        voices = tts_runner.get_voices() if tts_runner.is_loaded() else []
+        return {
+            "model": tts_runner._model_id or (Path(model_dir).name if model_dir else ""),
+            "voices": voices,
+        }
 
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):

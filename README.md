@@ -307,6 +307,14 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (51)
+
+- **CustomVoice 模型支持** — 修复切换到 CustomVoice 模型后报错 `requires 'voice' (speaker name)` 的问题：
+  - 新增 `TTSRunner._resolve_voice()` 方法：自动检测模型 `config.spk_id`，CustomVoice 模型 voice=auto 时自动选择默认说话人（优先 vivian/chelsie/ethan），Base 模型仍返回 None
+  - 新增 `TTSRunner.get_voices()` 方法：返回已加载模型的可用说话人列表（从 `talker_config.spk_id` 读取）
+  - `/tts/voices` 端点改为返回真实说话人列表（不再固定返回空数组），前端 Voice 选择器可正常使用
+  - `synthesize()` 和 `synthesize_stream()` 均使用 `_resolve_voice()` 替代原来的 `None if voice == "auto" else voice`
+
 ### 2026-03-28 (50)
 
 - **TTS 流式播放** — 本地 Sidecar TTS 从同步播放升级为流式播放，首块音频 ~2 秒内开始播放，无需等待整段语音生成完毕：
