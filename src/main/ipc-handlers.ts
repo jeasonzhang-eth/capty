@@ -219,8 +219,9 @@ function readModelMeta(dirPath: string, dirName: string): ModelEntry {
   };
 }
 
-/** Known STT model types from mlx-audio MODEL_REMAPPING. */
+/** Known STT model types from mlx-audio MODEL_REMAPPING (keys + values). */
 const KNOWN_STT_TYPES = new Set([
+  // Keys (config.json model_type → remapping key)
   "fireredasr2",
   "glm",
   "sensevoice",
@@ -232,10 +233,14 @@ const KNOWN_STT_TYPES = new Set([
   "moonshine",
   "mms",
   "granite_speech",
+  // Values (module names that some models report as model_type)
+  "glmasr",
+  "vibevoice_asr",
 ]);
 
-/** Known TTS model types from mlx-audio MODEL_REMAPPING. */
+/** Known TTS model types from mlx-audio MODEL_REMAPPING (keys + values). */
 const KNOWN_TTS_TYPES = new Set([
+  // Keys
   "qwen3_tts",
   "outetts",
   "spark",
@@ -250,6 +255,10 @@ const KNOWN_TTS_TYPES = new Set([
   "kitten",
   "echo_tts",
   "fish_qwen3_omni",
+  // Values (module names that some models report as model_type)
+  "sesame",
+  "kitten_tts",
+  "vibevoice",
 ]);
 
 /** Infer model type from config.json's model_type / architectures fields. */
