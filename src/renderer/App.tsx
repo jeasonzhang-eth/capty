@@ -1129,12 +1129,20 @@ function App(): React.JSX.Element {
 
   const handleAiRename = useCallback(
     async (sessionId: number) => {
-      if (!selectedRapidLlmProviderId || aiRenamingSessionId) return;
+      if (aiRenamingSessionId) return;
+      // Use Rapid Model if set, otherwise fallback to first configured provider
+      const providerId =
+        selectedRapidLlmProviderId ||
+        llmProviders.find((p) => p.apiKey && p.model)?.id;
+      if (!providerId) {
+        console.warn("AI rename: no LLM provider configured");
+        return;
+      }
       setAiRenamingSessionId(sessionId);
       try {
         const title = await window.capty.generateTitle(
           sessionId,
-          selectedRapidLlmProviderId,
+          providerId,
           rapidRenamePrompt,
         );
         if (title) {
@@ -1147,7 +1155,13 @@ function App(): React.JSX.Element {
         setAiRenamingSessionId(null);
       }
     },
-    [selectedRapidLlmProviderId, rapidRenamePrompt, aiRenamingSessionId, store],
+    [
+      selectedRapidLlmProviderId,
+      llmProviders,
+      rapidRenamePrompt,
+      aiRenamingSessionId,
+      store,
+    ],
   );
 
   const handleChangeTtsModelForPlay = useCallback(
@@ -1595,7 +1609,11 @@ function App(): React.JSX.Element {
           onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
           onUploadAudio={handleUploadAudio}
-          onAiRename={selectedRapidLlmProviderId ? handleAiRename : undefined}
+          onAiRename={
+            llmProviders.some((p) => p.apiKey && p.model)
+              ? handleAiRename
+              : undefined
+          }
           aiRenamingSessionId={aiRenamingSessionId}
         />
         <TranscriptArea
