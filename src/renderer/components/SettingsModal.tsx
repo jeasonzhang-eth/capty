@@ -3686,7 +3686,7 @@ export function SettingsModal({
           {/* Left sidebar */}
           <div
             style={{
-              width: "160px",
+              width: "180px",
               flexShrink: 0,
               backgroundColor: "var(--bg-primary)",
               padding: "12px 8px",

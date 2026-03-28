@@ -309,7 +309,7 @@ pytest
 
 ### 2026-03-28 (53)
 
-- **Default Models 设置页** — Settings 新增 "Default Models" tab，集中管理默认模型配置：ASR 模型选择（显示已下载且支持的模型）、TTS 模型与声音选择（声音按语言分组显示含性别标识）、三个 LLM 用途分离选择：Summary Model（摘要分析）、Rapid Model（快速任务如重命名会话）、Translate Model（翻译转写文本），仅显示已配置（有 API Key 和 Model）的 provider，所有选择持久化保存重启后保留
+- **Default Models 设置页** — Settings 新增 "Default Models" tab，集中管理默认模型配置：ASR 模型选择（显示已下载且支持的模型）、TTS 模型与声音选择（声音按语言分组显示含性别标识）、三个 LLM 用途分离选择：Summary Model（摘要分析）、Rapid Model（快速任务如重命名会话）、Translate Model（翻译转写文本），仅显示已配置（有 API Key 和 Model）的 provider，所有选择持久化保存重启后保留；侧边栏加宽至 180px 避免 tab 文字换行
 
 ### 2026-03-28 (52)
 
