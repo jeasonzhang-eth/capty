@@ -309,7 +309,7 @@ pytest
 
 ### 2026-03-28 (54)
 
-- **AI Rename 会话标题** — 左侧历史列表每个已完成会话的标题行右侧新增 ✨ AI 重命名按钮（hover 时显示），点击后使用 Rapid Model 配置的 LLM 根据转录内容自动生成简洁标题（非流式调用，最多 10 词）；生成中显示旋转加载动画；Settings → Default Models → Rapid Model 卡片内新增 "Rename Prompt" 文本框，可自定义 AI 重命名提示词，重启后保留；未配置 Rapid Model 时按钮不显示
+- **AI Rename 会话标题** — 左侧历史列表每个已完成会话支持 AI 重命名：标题行右侧 hover 显示 ✨ 按钮，右键菜单也有 "AI Rename" 选项（含 sparkle 图标），点击后使用 Rapid Model 配置的 LLM 根据转录内容自动生成简洁标题（非流式调用，最多 10 词）；生成中显示旋转加载动画；Settings → Default Models → Rapid Model 卡片内新增 "Rename Prompt" 文本框，可自定义 AI 重命名提示词，重启后保留；未配置 Rapid Model 时按钮和菜单项不显示
 
 ### 2026-03-28 (53)
 

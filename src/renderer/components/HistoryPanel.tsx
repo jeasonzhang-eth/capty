@@ -321,6 +321,13 @@ export function HistoryPanel({
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, [contextMenu.sessionId, onOpenFolder]);
 
+  const handleAiRenameClick = useCallback(() => {
+    if (contextMenu.sessionId !== null && onAiRename) {
+      onAiRename(contextMenu.sessionId);
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, onAiRename]);
+
   const handleDeleteClick = useCallback(() => {
     setConfirmDeleteId(contextMenu.sessionId);
     setContextMenu((prev) => ({ ...prev, visible: false }));
@@ -905,6 +912,38 @@ export function HistoryPanel({
                       }
                     >
                       Open Folder
+                    </div>
+                  )}
+                  {isCompleted && onAiRename && (
+                    <div
+                      onClick={handleAiRenameClick}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "var(--accent-glow)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "transparent")
+                      }
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="currentColor"
+                        style={{ opacity: 0.7 }}
+                      >
+                        <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
+                      </svg>
+                      AI Rename
                     </div>
                   )}
                 </>
