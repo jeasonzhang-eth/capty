@@ -309,9 +309,10 @@ pytest
 
 ### 2026-03-28 (48)
 
-- **修复推荐模型大小显示不准确** — `recommended-models.json` 中硬编码的 `size_gb` 值严重偏低（如 Qwen3-ASR-0.6B-4bit 显示 256 MB，实际 712 MB）：
-  - 更新所有 Qwen3 推荐模型的硬编码大小为实际值（0.70/1.01/1.61/2.47 GB）
-  - `models:list` 和 `tts-models:list` 改为异步，启动时从 HuggingFace tree API 获取未下载推荐模型的精确大小，API 不可用时回退到硬编码值
+- **修复模型大小显示不准确** — 推荐模型和已下载模型的大小均可能显示错误：
+  - 已下载模型：`readModelMeta` 从 `model-meta.json` 读取下载时写入的旧 `size_gb`（来自错误的硬编码值），改为始终用 `calcDirSizeGb()` 计算实际磁盘大小
+  - 未下载推荐模型：更新 `recommended-models.json` 硬编码值（如 0.6B-4bit 从 0.25→0.70 GB），并从 HuggingFace tree API 获取精确大小
+  - `models:list` 和 `tts-models:list` 改为异步以支持 API 查询
 - **修复下载失败的模型仍显示 "Downloaded" 标签** — `isModelDownloaded` 仅检查是否存在权重文件（`.safetensors`），忽略了未完成的下载状态：
   - 新增下载状态检查：若 `.downloads/<modelId>.json` 存在且状态为 `failed`/`downloading`/`paused`，返回 `false`
   - 部分下载的模型（有部分文件但下载未完成）不再被误判为已下载

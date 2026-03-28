@@ -175,6 +175,9 @@ export function migrateModelsDir(dataDir: string): void {
 
 /** Read model-meta.json from a model directory, fallback to inference. */
 function readModelMeta(dirPath: string, dirName: string): ModelEntry {
+  // Always use actual disk size for downloaded models (meta.size_gb may be stale)
+  const actualSizeGb = calcDirSizeGb(dirPath);
+
   // Try model-meta.json first
   const metaPath = join(dirPath, "model-meta.json");
   try {
@@ -185,7 +188,7 @@ function readModelMeta(dirPath: string, dirName: string): ModelEntry {
         name: meta.name ?? dirName,
         type: meta.type ?? inferModelTypeFromDir(dirPath),
         repo: meta.repo ?? dirName.replace(/--/g, "/"),
-        size_gb: meta.size_gb ?? 0,
+        size_gb: actualSizeGb,
         languages: meta.languages ?? ["multilingual"],
         description: meta.description ?? "",
         downloaded: true,
