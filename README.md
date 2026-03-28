@@ -307,6 +307,13 @@ pytest
 
 ## 更新日志
 
+### 2026-03-28 (49)
+
+- **搜索结果标记兼容性** — HuggingFace 模型搜索结果现在标记 mlx-audio 兼容性：
+  - STT 搜索：匹配已知支持的架构关键词（whisper, qwen3-asr, sensevoice, glm-asr 等）显示蓝色 "Compatible" 标签；匹配已知不支持的架构（funasr, paraformer, conformer 等）显示红色 "Unsupported" 标签
+  - TTS 搜索：同样标记已知支持的 TTS 架构（qwen3-tts, outetts, spark, chatterbox 等）
+  - 未知架构不显示标签，允许用户自行判断
+
 ### 2026-03-28 (48)
 
 - **修复模型大小显示不准确** — 推荐模型和已下载模型的大小均可能显示错误：

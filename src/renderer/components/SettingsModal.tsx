@@ -387,14 +387,26 @@ function ModelCard({
                 Downloaded
               </span>
             )}
-            {model.downloaded && !isSupported && (
+            {model.supported === true && !model.downloaded && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: "rgba(59, 130, 246, 0.12)",
+                  color: "#60A5FA",
+                }}
+                title="This model type is supported by mlx-audio"
+              >
+                Compatible
+              </span>
+            )}
+            {model.supported === false && (
               <span
                 style={{
                   ...tagStyle,
                   backgroundColor: "rgba(239, 68, 68, 0.12)",
                   color: "#EF4444",
                 }}
-                title="This model type is not supported by mlx-audio STT"
+                title="This model type is not supported by mlx-audio"
               >
                 Unsupported
               </span>

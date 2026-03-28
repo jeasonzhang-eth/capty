@@ -512,6 +512,82 @@ function inferModelType(hfModel: HFSearchResult): string {
   return "auto";
 }
 
+/** Keywords in model ID / HF tags that indicate a supported STT architecture. */
+const STT_SUPPORTED_KEYWORDS = [
+  "whisper",
+  "qwen3-asr",
+  "qwen-asr",
+  "qwen3asr",
+  "sensevoice",
+  "glm-asr",
+  "glmasr",
+  "firered",
+  "voxtral",
+  "vibevoice",
+  "canary",
+  "moonshine",
+  "mms",
+  "granite-speech",
+  "granite_speech",
+  "parakeet",
+];
+
+/** Keywords that indicate an unsupported STT architecture. */
+const STT_UNSUPPORTED_KEYWORDS = [
+  "funasr",
+  "paraformer",
+  "conformer",
+  "wav2vec",
+  "hubert",
+  "data2vec",
+  "unispeech",
+  "wavlm",
+];
+
+/** Keywords in model ID / HF tags that indicate a supported TTS architecture. */
+const TTS_SUPPORTED_KEYWORDS = [
+  "qwen3-tts",
+  "qwen-tts",
+  "qwen3tts",
+  "outetts",
+  "spark-tts",
+  "sparktts",
+  "marvis",
+  "csm",
+  "sesame",
+  "voxcpm",
+  "vibevoice",
+  "chatterbox",
+  "soprano",
+  "bailing",
+  "kitten",
+  "echo-tts",
+  "echo_tts",
+  "fish-qwen3-omni",
+  "fish_qwen3_omni",
+];
+
+/**
+ * Infer STT support from HuggingFace metadata (model ID + tags).
+ * Returns true/false/undefined (unknown).
+ */
+function inferSttSupportFromHF(hfModel: HFSearchResult): boolean | undefined {
+  const combined = `${hfModel.id.toLowerCase()} ${hfModel.tags.map((t) => t.toLowerCase()).join(" ")}`;
+  if (STT_SUPPORTED_KEYWORDS.some((k) => combined.includes(k))) return true;
+  if (STT_UNSUPPORTED_KEYWORDS.some((k) => combined.includes(k))) return false;
+  return undefined;
+}
+
+/**
+ * Infer TTS support from HuggingFace metadata (model ID + tags).
+ * Returns true/false/undefined (unknown).
+ */
+function inferTtsSupportFromHF(hfModel: HFSearchResult): boolean | undefined {
+  const combined = `${hfModel.id.toLowerCase()} ${hfModel.tags.map((t) => t.toLowerCase()).join(" ")}`;
+  if (TTS_SUPPORTED_KEYWORDS.some((k) => combined.includes(k))) return true;
+  return undefined;
+}
+
 /** Fetch the total download size (in GB) for a repo via the tree API. */
 async function fetchRepoSizeGb(repo: string, baseUrl: string): Promise<number> {
   const controller = new AbortController();
@@ -594,7 +670,10 @@ async function searchHuggingFaceModels(
     mlxResults.map((r) => fetchRepoSizeGb(r.id, baseUrl)),
   );
 
-  return mlxResults.map((r, i) => hfModelToEntry(r, sizes[i]));
+  return mlxResults.map((r, i) => ({
+    ...hfModelToEntry(r, sizes[i]),
+    supported: inferSttSupportFromHF(r),
+  }));
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -1118,6 +1197,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         ...entry,
         type: "tts",
         downloaded: isModelDownloaded(ttsModelsDir, entry.id),
+        supported: inferTtsSupportFromHF(r),
       };
     });
   });
