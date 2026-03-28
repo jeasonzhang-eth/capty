@@ -1055,6 +1055,15 @@ function App(): React.JSX.Element {
     await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
   }, []);
 
+  const handleChangeLlmProvider = useCallback(async (providerId: string) => {
+    setSelectedLlmProviderId(providerId);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      selectedLlmProviderId: providerId,
+    });
+  }, []);
+
   const handleChangeTtsModelForPlay = useCallback(
     async (modelId: string) => {
       // Immediately reset voice to "auto" to avoid stale voice for new model
@@ -1616,6 +1625,12 @@ function App(): React.JSX.Element {
           onDownloadTtsModel={handleDownloadTtsModel}
           onDeleteTtsModel={handleDeleteTtsModel}
           onSearchTtsModels={handleSearchTtsModels}
+          selectedTtsVoice={selectedTtsVoice}
+          ttsVoices={ttsVoices}
+          onChangeTtsVoice={handleChangeTtsVoice}
+          onChangeTtsModel={handleChangeTtsModelForPlay}
+          selectedLlmProviderId={selectedLlmProviderId}
+          onChangeLlmProvider={handleChangeLlmProvider}
           onClose={() => setShowSettings(false)}
         />
       )}

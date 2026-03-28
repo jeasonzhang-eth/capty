@@ -96,6 +96,17 @@ interface SettingsModalProps {
   readonly onDownloadTtsModel: (model: ModelInfo) => void;
   readonly onDeleteTtsModel: (modelId: string) => void;
   readonly onSearchTtsModels: (query: string) => Promise<ModelInfo[]>;
+  readonly selectedTtsVoice: string;
+  readonly ttsVoices: readonly {
+    id: string;
+    name: string;
+    lang: string;
+    gender: string;
+  }[];
+  readonly onChangeTtsVoice: (voice: string) => void;
+  readonly onChangeTtsModel: (modelId: string) => void;
+  readonly selectedLlmProviderId: string | null;
+  readonly onChangeLlmProvider: (providerId: string) => void;
   readonly onClose: () => void;
 }
 
@@ -178,7 +189,12 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-type TabId = "general" | "speech" | "tts" | "language-models";
+type TabId =
+  | "general"
+  | "default-models"
+  | "speech"
+  | "tts"
+  | "language-models";
 
 const TABS: readonly {
   readonly id: TabId;
@@ -186,6 +202,7 @@ const TABS: readonly {
   readonly label: string;
 }[] = [
   { id: "general", icon: "\u2699\ufe0f", label: "General" },
+  { id: "default-models", icon: "\ud83c\udfaf", label: "Default Models" },
   { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "ASR Providers" },
   { id: "tts", icon: "\ud83d\udd0a", label: "TTS Providers" },
   { id: "language-models", icon: "\ud83e\udde0", label: "Language Models" },
@@ -3262,6 +3279,207 @@ function LanguageModelsTab({
   );
 }
 
+/* ─── Default Models Tab ─── */
+
+function DefaultModelsTab({
+  models,
+  selectedModelId,
+  onSelectModel,
+  ttsModels,
+  selectedTtsModelId,
+  selectedTtsVoice,
+  ttsVoices,
+  onChangeTtsModel,
+  onChangeTtsVoice,
+  llmProviders,
+  selectedLlmProviderId,
+  onChangeLlmProvider,
+}: {
+  readonly models: readonly ModelInfo[];
+  readonly selectedModelId: string;
+  readonly onSelectModel: (modelId: string) => void;
+  readonly ttsModels: readonly ModelInfo[];
+  readonly selectedTtsModelId: string;
+  readonly selectedTtsVoice: string;
+  readonly ttsVoices: readonly {
+    id: string;
+    name: string;
+    lang: string;
+    gender: string;
+  }[];
+  readonly onChangeTtsModel: (modelId: string) => void;
+  readonly onChangeTtsVoice: (voice: string) => void;
+  readonly llmProviders: readonly LlmProvider[];
+  readonly selectedLlmProviderId: string | null;
+  readonly onChangeLlmProvider: (providerId: string) => void;
+}): React.ReactElement {
+  const downloadedAsrModels = models.filter(
+    (m) => m.downloaded && m.supported !== false,
+  );
+  const downloadedTtsModels = ttsModels.filter((m) => m.downloaded);
+
+  // Group voices by language
+  const voicesByLang = ttsVoices.reduce<
+    Record<string, { id: string; name: string; gender: string }[]>
+  >((acc, v) => {
+    const lang = v.lang || "Unknown";
+    if (!acc[lang]) acc[lang] = [];
+    acc[lang].push({ id: v.id, name: v.name, gender: v.gender });
+    return acc;
+  }, {});
+
+  return (
+    <>
+      <h2
+        style={{
+          fontSize: "20px",
+          fontWeight: 700,
+          color: "var(--text-primary)",
+          marginBottom: "20px",
+        }}
+      >
+        Default Models
+      </h2>
+
+      {/* ASR Model */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>ASR Model</div>
+        <div style={{ ...descStyle, marginBottom: "10px" }}>
+          Default speech recognition model for transcription
+        </div>
+        <select
+          value={selectedModelId}
+          onChange={(e) => onSelectModel(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: "6px",
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--bg-primary)",
+            color: "var(--text-primary)",
+            fontSize: "13px",
+            outline: "none",
+          }}
+        >
+          {downloadedAsrModels.length === 0 && (
+            <option value="">No downloaded ASR models</option>
+          )}
+          {downloadedAsrModels.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* TTS Model & Voice */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>TTS Model</div>
+        <div style={{ ...descStyle, marginBottom: "10px" }}>
+          Default text-to-speech model and voice for reading summaries
+        </div>
+        <select
+          value={selectedTtsModelId}
+          onChange={(e) => onChangeTtsModel(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: "6px",
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--bg-primary)",
+            color: "var(--text-primary)",
+            fontSize: "13px",
+            outline: "none",
+            marginBottom: ttsVoices.length > 0 ? "12px" : "0",
+          }}
+        >
+          {downloadedTtsModels.length === 0 && (
+            <option value="">No downloaded TTS models</option>
+          )}
+          {downloadedTtsModels.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+
+        {ttsVoices.length > 0 && (
+          <>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-secondary)",
+                marginBottom: "6px",
+              }}
+            >
+              Voice
+            </div>
+            <select
+              value={selectedTtsVoice}
+              onChange={(e) => onChangeTtsVoice(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                fontSize: "13px",
+                outline: "none",
+              }}
+            >
+              <option value="auto">Auto</option>
+              {Object.entries(voicesByLang)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([lang, voices]) => (
+                  <optgroup key={lang} label={lang}>
+                    {voices.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.gender})
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+            </select>
+          </>
+        )}
+      </div>
+
+      {/* LLM Provider */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>LLM Provider</div>
+        <div style={{ ...descStyle, marginBottom: "10px" }}>
+          Default language model provider for summaries and analysis
+        </div>
+        <select
+          value={selectedLlmProviderId ?? ""}
+          onChange={(e) => onChangeLlmProvider(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: "6px",
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--bg-primary)",
+            color: "var(--text-primary)",
+            fontSize: "13px",
+            outline: "none",
+          }}
+        >
+          {llmProviders.length === 0 && (
+            <option value="">No configured LLM providers</option>
+          )}
+          {llmProviders.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.model})
+            </option>
+          ))}
+        </select>
+      </div>
+    </>
+  );
+}
+
 /* ─── Main Settings Modal ─── */
 
 export function SettingsModal({
@@ -3305,6 +3523,12 @@ export function SettingsModal({
   onDownloadTtsModel,
   onDeleteTtsModel,
   onSearchTtsModels,
+  selectedTtsVoice,
+  ttsVoices,
+  onChangeTtsVoice,
+  onChangeTtsModel,
+  selectedLlmProviderId,
+  onChangeLlmProvider,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -3465,6 +3689,22 @@ export function SettingsModal({
                 configDir={configDir}
                 isRecording={isRecording}
                 onChangeDataDir={onChangeDataDir}
+              />
+            )}
+            {activeTab === "default-models" && (
+              <DefaultModelsTab
+                models={models}
+                selectedModelId={selectedModelId}
+                onSelectModel={onSelectModel}
+                ttsModels={ttsModels}
+                selectedTtsModelId={selectedTtsModelId}
+                selectedTtsVoice={selectedTtsVoice}
+                ttsVoices={ttsVoices}
+                onChangeTtsModel={onChangeTtsModel}
+                onChangeTtsVoice={onChangeTtsVoice}
+                llmProviders={llmProviders}
+                selectedLlmProviderId={selectedLlmProviderId}
+                onChangeLlmProvider={onChangeLlmProvider}
               />
             )}
             {activeTab === "speech" && (
