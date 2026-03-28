@@ -304,10 +304,11 @@ function writeModelMeta(
 }
 
 /** Load ASR models: disk-scanned downloaded + recommended (not yet downloaded). */
-function loadAsrModels(configDir: string): ModelEntry[] {
+async function loadAsrModels(configDir: string): Promise<ModelEntry[]> {
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models", "asr");
+  const mirrorUrl = config.hfMirrorUrl ?? undefined;
 
   // 1. Scan disk for downloaded models
   const downloaded: ModelEntry[] = [];
@@ -330,21 +331,27 @@ function loadAsrModels(configDir: string): ModelEntry[] {
 
   // 2. Read recommended models, filter out already downloaded
   const recommended = readRecommendedModels();
-  const notDownloaded: ModelEntry[] = recommended
-    .filter((r) => {
-      const id = r.repo.replace(/\//g, "--");
-      return !downloadedIds.has(id);
-    })
-    .map((r) => ({
-      id: r.repo.replace(/\//g, "--"),
-      name: r.name,
-      type: r.type,
-      repo: r.repo,
-      size_gb: r.size_gb,
-      languages: r.languages,
-      description: r.description,
-      downloaded: false,
-    }));
+  const notDownloadedRec = recommended.filter((r) => {
+    const id = r.repo.replace(/\//g, "--");
+    return !downloadedIds.has(id);
+  });
+
+  // 3. Fetch actual sizes from HF tree API for non-downloaded recommended models
+  const baseUrl = mirrorUrl ?? "https://huggingface.co";
+  const sizes = await Promise.all(
+    notDownloadedRec.map((r) => fetchRepoSizeGb(r.repo, baseUrl)),
+  );
+
+  const notDownloaded: ModelEntry[] = notDownloadedRec.map((r, i) => ({
+    id: r.repo.replace(/\//g, "--"),
+    name: r.name,
+    type: r.type,
+    repo: r.repo,
+    size_gb: sizes[i] > 0 ? sizes[i] : r.size_gb, // API size, fallback to hardcoded
+    languages: r.languages,
+    description: r.description,
+    downloaded: false,
+  }));
 
   const all = [...downloaded, ...notDownloaded];
 
@@ -359,10 +366,11 @@ function loadAsrModels(configDir: string): ModelEntry[] {
 }
 
 /** Load TTS models: disk-scanned downloaded + recommended (not yet downloaded). */
-function loadTtsModels(configDir: string): ModelEntry[] {
+async function loadTtsModels(configDir: string): Promise<ModelEntry[]> {
   const config = readConfig(configDir);
   const dataDir = config.dataDir ?? join(configDir, "data");
   const modelsDir = join(dataDir, "models", "tts");
+  const mirrorUrl = config.hfMirrorUrl ?? undefined;
 
   // 1. Scan disk for downloaded TTS models
   const downloaded: ModelEntry[] = [];
@@ -385,21 +393,27 @@ function loadTtsModels(configDir: string): ModelEntry[] {
 
   // 2. Read recommended TTS models, filter out already downloaded
   const recommended = readRecommendedTtsModels();
-  const notDownloaded: ModelEntry[] = recommended
-    .filter((r) => {
-      const id = r.repo.replace(/\//g, "--");
-      return !downloadedIds.has(id);
-    })
-    .map((r) => ({
-      id: r.repo.replace(/\//g, "--"),
-      name: r.name,
-      type: r.type,
-      repo: r.repo,
-      size_gb: r.size_gb,
-      languages: r.languages,
-      description: r.description,
-      downloaded: false,
-    }));
+  const notDownloadedRec = recommended.filter((r) => {
+    const id = r.repo.replace(/\//g, "--");
+    return !downloadedIds.has(id);
+  });
+
+  // 3. Fetch actual sizes from HF tree API
+  const baseUrl = mirrorUrl ?? "https://huggingface.co";
+  const sizes = await Promise.all(
+    notDownloadedRec.map((r) => fetchRepoSizeGb(r.repo, baseUrl)),
+  );
+
+  const notDownloaded: ModelEntry[] = notDownloadedRec.map((r, i) => ({
+    id: r.repo.replace(/\//g, "--"),
+    name: r.name,
+    type: r.type,
+    repo: r.repo,
+    size_gb: sizes[i] > 0 ? sizes[i] : r.size_gb,
+    languages: r.languages,
+    description: r.description,
+    downloaded: false,
+  }));
 
   const all = [...downloaded, ...notDownloaded];
   all.sort((a, b) => {
@@ -913,7 +927,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   );
 
   // Models — builtin registry + user-downloaded models
-  ipcMain.handle("models:list", () => {
+  ipcMain.handle("models:list", async () => {
     return loadAsrModels(configDir);
   });
 
@@ -969,7 +983,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   });
 
   // TTS Models — builtin registry + user-downloaded TTS models
-  ipcMain.handle("tts-models:list", () => {
+  ipcMain.handle("tts-models:list", async () => {
     return loadTtsModels(configDir);
   });
 

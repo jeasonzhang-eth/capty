@@ -3,7 +3,7 @@
     "repo": "mlx-community/Qwen3-ASR-0.6B-4bit",
     "name": "Qwen3-ASR-0.6B-4bit",
     "type": "qwen-asr",
-    "size_gb": 0.25,
+    "size_gb": 0.7,
     "languages": ["zh", "en"],
     "description": "Smallest Qwen3, fast, bilingual Chinese-English"
   },
@@ -11,7 +11,7 @@
     "repo": "mlx-community/Qwen3-ASR-0.6B-8bit",
     "name": "Qwen3-ASR-0.6B-8bit",
     "type": "qwen-asr",
-    "size_gb": 0.35,
+    "size_gb": 1.01,
     "languages": ["zh", "en"],
     "description": "Lightweight Qwen3, bilingual Chinese-English, daily use"
   },
@@ -19,7 +19,7 @@
     "repo": "mlx-community/Qwen3-ASR-1.7B-4bit",
     "name": "Qwen3-ASR-1.7B-4bit",
     "type": "qwen-asr",
-    "size_gb": 0.6,
+    "size_gb": 1.61,
     "languages": ["zh", "en"],
     "description": "Better quality Qwen3, bilingual, compact"
   },
@@ -27,7 +27,7 @@
     "repo": "mlx-community/Qwen3-ASR-1.7B-8bit",
     "name": "Qwen3-ASR-1.7B-8bit",
     "type": "qwen-asr",
-    "size_gb": 1.0,
+    "size_gb": 2.47,
     "languages": ["zh", "en"],
     "description": "Best quality Qwen3, bilingual Chinese-English"
   },

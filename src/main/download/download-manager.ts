@@ -5,14 +5,8 @@
  * pause/resume/cancel, and crash recovery.
  */
 
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from "fs";
-import { join } from "path";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "fs";
+import { join, resolve } from "path";
 import type { DownloadCategory, DownloadProgress, TaskStatus } from "./types";
 import { MAX_CONCURRENT_MODELS, SKIP_FILES } from "./types";
 import { listIncompleteDownloads, removeState } from "./download-state";
@@ -112,9 +106,7 @@ export class DownloadManager {
     }
 
     // Check pending queue
-    const idx = this.pendingQueue.findIndex(
-      (q) => q.task.modelId === modelId,
-    );
+    const idx = this.pendingQueue.findIndex((q) => q.task.modelId === modelId);
     if (idx >= 0) {
       const [removed] = this.pendingQueue.splice(idx, 1);
       removed.task.cancel();
@@ -133,9 +125,7 @@ export class DownloadManager {
     if (task) return task.getStatus();
 
     // Check queue
-    const queued = this.pendingQueue.find(
-      (q) => q.task.modelId === modelId,
-    );
+    const queued = this.pendingQueue.find((q) => q.task.modelId === modelId);
     if (queued) return "pending";
 
     return null;
@@ -152,10 +142,7 @@ export class DownloadManager {
   }> {
     const states = listIncompleteDownloads(this.modelsDir);
     return states.map((s) => {
-      const totalBytes = s.files.reduce(
-        (sum, f) => sum + f.totalBytes,
-        0,
-      );
+      const totalBytes = s.files.reduce((sum, f) => sum + f.totalBytes, 0);
       const downloadedBytes = s.files.reduce(
         (sum, f) => sum + f.downloadedBytes,
         0,
@@ -218,13 +205,38 @@ export class DownloadManager {
 
 // ─── Utility functions (kept from old model-downloader.ts) ─────────────
 
-/** Check if a model has been downloaded (has model weight files). */
-export function isModelDownloaded(
-  modelsDir: string,
-  modelId: string,
-): boolean {
+/**
+ * Check if a model has been fully downloaded.
+ *
+ * Returns false if:
+ * - The model directory doesn't exist
+ * - No weight files (.safetensors/.npz/.bin/.gguf) are present
+ * - An incomplete download state file exists (failed/downloading/paused)
+ */
+export function isModelDownloaded(modelsDir: string, modelId: string): boolean {
   const modelPath = join(modelsDir, modelId);
   if (!existsSync(modelPath)) return false;
+
+  // Check for incomplete download state in parent's .downloads/ directory.
+  // modelsDir is e.g. models/asr or models/tts; state lives in models/.downloads/
+  const parentDir = resolve(modelsDir, "..");
+  const stateFile = join(parentDir, ".downloads", `${modelId}.json`);
+  if (existsSync(stateFile)) {
+    try {
+      const raw = readFileSync(stateFile, "utf-8");
+      const state = JSON.parse(raw) as { status?: string };
+      if (
+        state.status === "failed" ||
+        state.status === "downloading" ||
+        state.status === "paused"
+      ) {
+        return false;
+      }
+    } catch {
+      // Cannot read state file — fall through to weight file check
+    }
+  }
+
   try {
     const entries = readdirSync(modelPath);
     return entries.some(
