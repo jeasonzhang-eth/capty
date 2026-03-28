@@ -316,6 +316,17 @@ const api = {
     }>,
   summarize: (sessionId: number, providerId: string, promptType: string) =>
     ipcRenderer.invoke("llm:summarize", sessionId, providerId, promptType),
+  generateTitle: (
+    sessionId: number,
+    providerId: string,
+    systemPrompt: string,
+  ) =>
+    ipcRenderer.invoke(
+      "llm:generate-title",
+      sessionId,
+      providerId,
+      systemPrompt,
+    ) as Promise<string>,
   onSummaryChunk: (
     callback: (data: { content: string; done: boolean }) => void,
   ) => {

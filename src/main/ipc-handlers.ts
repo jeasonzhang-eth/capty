@@ -1567,6 +1567,70 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // LLM Generate Title (non-streaming, for AI rename)
+  ipcMain.handle(
+    "llm:generate-title",
+    async (
+      _event,
+      sessionId: number,
+      providerId: string,
+      systemPrompt: string,
+    ) => {
+      const config = readConfig(configDir);
+      if (!providerId) {
+        throw new Error("No LLM provider selected");
+      }
+      const provider = config.llmProviders.find(
+        (p: LlmProvider) => p.id === providerId,
+      );
+      if (!provider) {
+        throw new Error("Selected LLM provider not found");
+      }
+      if (!provider.apiKey) {
+        throw new Error("API key not configured for selected provider");
+      }
+
+      const segments = getSegments(db, sessionId);
+      if (segments.length === 0) {
+        throw new Error("No transcript segments found for this session");
+      }
+
+      const transcriptText = segments.map((s: any) => s.text).join("\n");
+
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const resp = await net.fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: transcriptText },
+          ],
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`LLM API error (${resp.status}): ${body}`);
+      }
+
+      const data = (await resp.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const title = data.choices?.[0]?.message?.content?.trim() ?? "";
+      if (!title) {
+        throw new Error("LLM returned empty title");
+      }
+      return title;
+    },
+  );
+
   // LLM Provider Test
   ipcMain.handle(
     "llm:test",

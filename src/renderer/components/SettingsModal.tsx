@@ -109,6 +109,8 @@ interface SettingsModalProps {
   readonly onChangeLlmProvider: (providerId: string) => void;
   readonly selectedRapidLlmProviderId: string | null;
   readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly rapidRenamePrompt: string;
+  readonly onChangeRapidRenamePrompt: (prompt: string) => void;
   readonly selectedTranslateLlmProviderId: string | null;
   readonly onChangeTranslateLlmProvider: (providerId: string) => void;
   readonly onClose: () => void;
@@ -3311,6 +3313,8 @@ function DefaultModelsTab({
   onChangeLlmProvider,
   selectedRapidLlmProviderId,
   onChangeRapidLlmProvider,
+  rapidRenamePrompt,
+  onChangeRapidRenamePrompt,
   selectedTranslateLlmProviderId,
   onChangeTranslateLlmProvider,
 }: {
@@ -3333,6 +3337,8 @@ function DefaultModelsTab({
   readonly onChangeLlmProvider: (providerId: string) => void;
   readonly selectedRapidLlmProviderId: string | null;
   readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly rapidRenamePrompt: string;
+  readonly onChangeRapidRenamePrompt: (prompt: string) => void;
   readonly selectedTranslateLlmProviderId: string | null;
   readonly onChangeTranslateLlmProvider: (providerId: string) => void;
 }): React.ReactElement {
@@ -3514,6 +3520,42 @@ function DefaultModelsTab({
             </option>
           ))}
         </select>
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "var(--text-secondary)",
+            marginTop: "12px",
+            marginBottom: "6px",
+          }}
+        >
+          Rename Prompt
+        </div>
+        <textarea
+          value={rapidRenamePrompt}
+          onChange={(e) => onChangeRapidRenamePrompt(e.target.value)}
+          rows={4}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            fontSize: "13px",
+            fontFamily: "'JetBrains Mono', monospace",
+            backgroundColor: "var(--bg-surface, rgba(255,255,255,0.04))",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            resize: "vertical",
+            outline: "none",
+            boxSizing: "border-box",
+            lineHeight: 1.5,
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
+        />
       </div>
 
       {/* Translate Model */}
@@ -3592,6 +3634,8 @@ export function SettingsModal({
   onChangeLlmProvider,
   selectedRapidLlmProviderId,
   onChangeRapidLlmProvider,
+  rapidRenamePrompt,
+  onChangeRapidRenamePrompt,
   selectedTranslateLlmProviderId,
   onChangeTranslateLlmProvider,
   onClose,
@@ -3772,6 +3816,8 @@ export function SettingsModal({
                 onChangeLlmProvider={onChangeLlmProvider}
                 selectedRapidLlmProviderId={selectedRapidLlmProviderId}
                 onChangeRapidLlmProvider={onChangeRapidLlmProvider}
+                rapidRenamePrompt={rapidRenamePrompt}
+                onChangeRapidRenamePrompt={onChangeRapidRenamePrompt}
                 selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
                 onChangeTranslateLlmProvider={onChangeTranslateLlmProvider}
               />

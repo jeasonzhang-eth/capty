@@ -18,6 +18,9 @@ import { useTranscription } from "./hooks/useTranscription";
 import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 
+const DEFAULT_RAPID_RENAME_PROMPT =
+  "Based on the following meeting transcript, generate a concise and descriptive title (max 10 words). Return ONLY the title, no quotes or extra text.";
+
 function App(): React.JSX.Element {
   const store = useAppStore();
   const audioCapture = useAudioCapture();
@@ -182,6 +185,12 @@ function App(): React.JSX.Element {
   >(null);
   const [selectedTranslateLlmProviderId, setSelectedTranslateLlmProviderId] =
     useState<string | null>(null);
+  const [rapidRenamePrompt, setRapidRenamePrompt] = useState(
+    DEFAULT_RAPID_RENAME_PROMPT,
+  );
+  const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
+    null,
+  );
 
   // Summary state
   const [summaries, setSummaries] = useState<Summary[]>([]);
@@ -350,6 +359,12 @@ function App(): React.JSX.Element {
           | null;
         if (savedTranslateId) {
           setSelectedTranslateLlmProviderId(savedTranslateId);
+        }
+        const savedRenamePrompt = config.rapidRenamePrompt as
+          | string
+          | undefined;
+        if (savedRenamePrompt) {
+          setRapidRenamePrompt(savedRenamePrompt);
         }
 
         // Load prompt types
@@ -1103,6 +1118,38 @@ function App(): React.JSX.Element {
     [],
   );
 
+  const handleChangeRapidRenamePrompt = useCallback(async (prompt: string) => {
+    setRapidRenamePrompt(prompt);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      rapidRenamePrompt: prompt,
+    });
+  }, []);
+
+  const handleAiRename = useCallback(
+    async (sessionId: number) => {
+      if (!selectedRapidLlmProviderId || aiRenamingSessionId) return;
+      setAiRenamingSessionId(sessionId);
+      try {
+        const title = await window.capty.generateTitle(
+          sessionId,
+          selectedRapidLlmProviderId,
+          rapidRenamePrompt,
+        );
+        if (title) {
+          await window.capty.renameSession(sessionId, title);
+          await store.loadSessions();
+        }
+      } catch (err) {
+        console.error("AI rename failed:", err);
+      } finally {
+        setAiRenamingSessionId(null);
+      }
+    },
+    [selectedRapidLlmProviderId, rapidRenamePrompt, aiRenamingSessionId, store],
+  );
+
   const handleChangeTtsModelForPlay = useCallback(
     async (modelId: string) => {
       // Immediately reset voice to "auto" to avoid stale voice for new model
@@ -1548,6 +1595,8 @@ function App(): React.JSX.Element {
           onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
           onUploadAudio={handleUploadAudio}
+          onAiRename={selectedRapidLlmProviderId ? handleAiRename : undefined}
+          aiRenamingSessionId={aiRenamingSessionId}
         />
         <TranscriptArea
           segments={store.segments}
@@ -1672,6 +1721,8 @@ function App(): React.JSX.Element {
           onChangeLlmProvider={handleChangeLlmProvider}
           selectedRapidLlmProviderId={selectedRapidLlmProviderId}
           onChangeRapidLlmProvider={handleChangeRapidLlmProvider}
+          rapidRenamePrompt={rapidRenamePrompt}
+          onChangeRapidRenamePrompt={handleChangeRapidRenamePrompt}
           selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
           onChangeTranslateLlmProvider={handleChangeTranslateLlmProvider}
           onClose={() => setShowSettings(false)}
