@@ -3340,6 +3340,9 @@ function DefaultModelsTab({
     (m) => m.downloaded && m.supported !== false,
   );
   const downloadedTtsModels = ttsModels.filter((m) => m.downloaded);
+  const configuredLlmProviders = llmProviders.filter(
+    (p) => p.apiKey && p.model,
+  );
 
   // Group voices by language
   const voicesByLang = ttsVoices.reduce<
@@ -3480,10 +3483,10 @@ function DefaultModelsTab({
           onChange={(e) => onChangeLlmProvider(e.target.value)}
           style={selectStyle}
         >
-          {llmProviders.length === 0 && (
+          {configuredLlmProviders.length === 0 && (
             <option value="">No configured LLM providers</option>
           )}
-          {llmProviders.map((p) => (
+          {configuredLlmProviders.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} ({p.model})
             </option>
@@ -3502,10 +3505,10 @@ function DefaultModelsTab({
           onChange={(e) => onChangeRapidLlmProvider(e.target.value)}
           style={selectStyle}
         >
-          {llmProviders.length === 0 && (
+          {configuredLlmProviders.length === 0 && (
             <option value="">No configured LLM providers</option>
           )}
-          {llmProviders.map((p) => (
+          {configuredLlmProviders.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} ({p.model})
             </option>
@@ -3524,10 +3527,10 @@ function DefaultModelsTab({
           onChange={(e) => onChangeTranslateLlmProvider(e.target.value)}
           style={selectStyle}
         >
-          {llmProviders.length === 0 && (
+          {configuredLlmProviders.length === 0 && (
             <option value="">No configured LLM providers</option>
           )}
-          {llmProviders.map((p) => (
+          {configuredLlmProviders.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} ({p.model})
             </option>
