@@ -28,6 +28,7 @@ export interface UpdateSessionFields {
   readonly audioPath?: string;
   readonly startedAt?: string;
   readonly endedAt?: string;
+  readonly playbackPosition?: number;
 }
 
 function initTables(db: Database.Database): void {
@@ -75,6 +76,13 @@ function initTables(db: Database.Database): void {
     db.exec(
       "ALTER TABLE summaries ADD COLUMN prompt_type TEXT NOT NULL DEFAULT 'summarize'",
     );
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migrate: add playback_position column for remembering playback progress
+  try {
+    db.exec("ALTER TABLE sessions ADD COLUMN playback_position REAL DEFAULT 0");
   } catch {
     // Column already exists — ignore
   }
@@ -214,6 +222,7 @@ export interface SessionRow {
   readonly audio_path: string | null;
   readonly model_name: string;
   readonly status: string;
+  readonly playback_position: number | null;
 }
 
 export interface SegmentRow {
@@ -322,6 +331,10 @@ export function updateSession(
   if (fields.endedAt !== undefined) {
     setClauses.push("ended_at = ?");
     values.push(fields.endedAt);
+  }
+  if (fields.playbackPosition !== undefined) {
+    setClauses.push("playback_position = ?");
+    values.push(fields.playbackPosition);
   }
 
   if (setClauses.length === 0) {

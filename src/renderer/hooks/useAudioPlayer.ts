@@ -20,6 +20,18 @@ export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const playbackRateRef = useRef(1.0);
+  const playingSessionIdRef = useRef<number | null>(null);
+
+  /** Save current playback position to database for the given session. */
+  const savePlaybackPosition = useCallback(
+    (sessionId: number | null, time?: number) => {
+      const id = sessionId ?? playingSessionIdRef.current;
+      if (!id) return;
+      const pos = time ?? audioRef.current?.currentTime ?? 0;
+      window.capty.updateSession(id, { playbackPosition: pos }).catch(() => {});
+    },
+    [],
+  );
 
   const cleanup = useCallback(() => {
     if (audioRef.current) {
@@ -35,7 +47,10 @@ export function useAudioPlayer() {
   }, []);
 
   const stop = useCallback(() => {
+    // Save position before stopping
+    savePlaybackPosition(playingSessionIdRef.current);
     cleanup();
+    playingSessionIdRef.current = null;
     setState((prev) => ({
       playingSessionId: null,
       isPlaying: false,
@@ -43,15 +58,27 @@ export function useAudioPlayer() {
       duration: 0,
       playbackRate: prev.playbackRate,
     }));
-  }, [cleanup]);
+  }, [cleanup, savePlaybackPosition]);
 
   const play = useCallback(
     async (sessionId: number) => {
+      // Save position of previous session before switching
+      if (
+        playingSessionIdRef.current &&
+        playingSessionIdRef.current !== sessionId
+      ) {
+        savePlaybackPosition(playingSessionIdRef.current);
+      }
+
       // Stop current playback first
       cleanup();
 
       const buffer = await window.capty.readAudioFile(sessionId);
       if (!buffer) return;
+
+      // Fetch saved playback position
+      const session = await window.capty.getSession(sessionId);
+      const savedPosition = (session as any)?.playback_position ?? 0;
 
       const blob = new Blob([buffer], { type: "audio/*" });
       const url = URL.createObjectURL(blob);
@@ -59,9 +86,21 @@ export function useAudioPlayer() {
 
       const audio = new Audio(url);
       audioRef.current = audio;
+      playingSessionIdRef.current = sessionId;
 
       audio.addEventListener("loadedmetadata", () => {
-        setState((prev) => ({ ...prev, duration: audio.duration }));
+        // Restore saved position
+        if (savedPosition > 0 && savedPosition < audio.duration) {
+          audio.currentTime = savedPosition;
+        }
+        setState((prev) => ({
+          ...prev,
+          duration: audio.duration,
+          currentTime:
+            savedPosition > 0 && savedPosition < audio.duration
+              ? savedPosition
+              : 0,
+        }));
       });
 
       audio.addEventListener("timeupdate", () => {
@@ -71,7 +110,19 @@ export function useAudioPlayer() {
       audio.addEventListener(
         "ended",
         () => {
-          stop();
+          // Reset position to 0 when playback completes
+          window.capty
+            .updateSession(sessionId, { playbackPosition: 0 })
+            .catch(() => {});
+          playingSessionIdRef.current = null;
+          cleanup();
+          setState((prev) => ({
+            playingSessionId: null,
+            isPlaying: false,
+            currentTime: 0,
+            duration: 0,
+            playbackRate: prev.playbackRate,
+          }));
         },
         { once: true },
       );
@@ -79,7 +130,7 @@ export function useAudioPlayer() {
       setState((prev) => ({
         playingSessionId: sessionId,
         isPlaying: true,
-        currentTime: 0,
+        currentTime: savedPosition,
         duration: 0,
         playbackRate: prev.playbackRate,
       }));
@@ -89,13 +140,14 @@ export function useAudioPlayer() {
 
       await audio.play();
     },
-    [cleanup, stop],
+    [cleanup, savePlaybackPosition],
   );
 
   const pause = useCallback(() => {
     audioRef.current?.pause();
+    savePlaybackPosition(playingSessionIdRef.current);
     setState((prev) => ({ ...prev, isPlaying: false }));
-  }, []);
+  }, [savePlaybackPosition]);
 
   const resume = useCallback(async () => {
     if (audioRef.current) {
@@ -138,12 +190,13 @@ export function useAudioPlayer() {
     }
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount — save position before exit
   useEffect(() => {
     return () => {
+      savePlaybackPosition(playingSessionIdRef.current);
       cleanup();
     };
-  }, [cleanup]);
+  }, [cleanup, savePlaybackPosition]);
 
   return {
     ...state,

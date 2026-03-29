@@ -1127,16 +1127,35 @@ function ExportMenu({
     onClose();
   }, [content, onClose]);
 
+  /** Clone the content div off-screen with a fixed width so the image is not truncated. */
+  const captureWithFixedWidth = useCallback(
+    async (mode: "blob" | "png"): Promise<Blob | string | null> => {
+      if (!contentRef.current) return null;
+      const clone = contentRef.current.cloneNode(true) as HTMLElement;
+      clone.style.width = "640px";
+      clone.style.padding = "20px";
+      clone.style.position = "fixed";
+      clone.style.left = "-9999px";
+      clone.style.top = "0";
+      clone.style.backgroundColor = "#1e1e20";
+      clone.style.color = "#e8e4df";
+      document.body.appendChild(clone);
+      try {
+        if (mode === "blob") {
+          return await toBlob(clone, { backgroundColor: "#1e1e20" });
+        }
+        return await toPng(clone, { backgroundColor: "#1e1e20" });
+      } finally {
+        document.body.removeChild(clone);
+      }
+    },
+    [contentRef],
+  );
+
   const handleCopyImage = useCallback(async () => {
-    if (!contentRef.current) return;
     try {
-      const blob = await toBlob(contentRef.current, {
-        backgroundColor: "#1e1e20",
-        style: { padding: "16px" },
-        filter: (node: HTMLElement) =>
-          !node.classList?.contains("export-menu-trigger"),
-      });
-      if (blob) {
+      const blob = await captureWithFixedWidth("blob");
+      if (blob && blob instanceof Blob) {
         await navigator.clipboard.write([
           new ClipboardItem({ "image/png": blob }),
         ]);
@@ -1145,31 +1164,27 @@ function ExportMenu({
       console.error("Copy image failed:", err);
     }
     onClose();
-  }, [contentRef, onClose]);
+  }, [captureWithFixedWidth, onClose]);
 
   const handleExportImage = useCallback(async () => {
-    if (!contentRef.current) return;
     try {
-      const dataUrl = await toPng(contentRef.current, {
-        backgroundColor: "#1e1e20",
-        style: { padding: "16px" },
-        filter: (node: HTMLElement) =>
-          !node.classList?.contains("export-menu-trigger"),
-      });
-      const byteString = atob(dataUrl.split(",")[1]);
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
+      const dataUrl = await captureWithFixedWidth("png");
+      if (dataUrl && typeof dataUrl === "string") {
+        const byteString = atob(dataUrl.split(",")[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        await window.capty.saveBuffer("summary.png", ia, [
+          { name: "PNG Image", extensions: ["png"] },
+        ]);
       }
-      await window.capty.saveBuffer("summary.png", ia, [
-        { name: "PNG Image", extensions: ["png"] },
-      ]);
     } catch (err) {
       console.error("Export image failed:", err);
     }
     onClose();
-  }, [contentRef, onClose]);
+  }, [captureWithFixedWidth, onClose]);
 
   const handleExportMarkdown = useCallback(async () => {
     const md = stripThinking(content);
@@ -1686,8 +1701,10 @@ function SummaryCard({
             alignItems: "center",
             gap: "6px",
             position: "relative",
+            flexShrink: 0,
           }}
         >
+          {formatTime(summary.created_at)}
           <button
             onClick={() => setShowExportMenu((v) => !v)}
             title="Export"
@@ -1718,7 +1735,6 @@ function SummaryCard({
               onClose={() => setShowExportMenu(false)}
             />
           )}
-          {formatTime(summary.created_at)}
         </span>
       </div>
     </div>
