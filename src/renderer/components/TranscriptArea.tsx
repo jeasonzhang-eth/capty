@@ -23,6 +23,8 @@ interface TranscriptAreaProps {
   readonly onSeekToTime: ((time: number) => void) | null;
   readonly sessionId: number | null;
   readonly canExport: boolean;
+  readonly onTranslate: ((targetLanguage: string) => Promise<void>) | null;
+  readonly isTranslating: boolean;
 }
 
 interface ExportMenuProps {
@@ -177,12 +179,17 @@ export function TranscriptArea({
   onSeekToTime,
   sessionId,
   canExport,
+  onTranslate,
+  isTranslating,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const prevSegmentCountRef = useRef(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState<"中文" | "English">(
+    "中文",
+  );
   const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const isPlayback = playbackTime !== null;
@@ -298,18 +305,112 @@ export function TranscriptArea({
         background: "transparent",
       }}
     >
-      {/* Header bar with Export button */}
+      {/* Header bar with Translate (left) and Export (right) */}
       {canExport && sessionId !== null && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "flex-end",
+            justifyContent: "space-between",
             padding: "8px 28px",
             borderBottom: "1px solid var(--border)",
             flexShrink: 0,
           }}
         >
+          {/* Left: Translate controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {onTranslate && (
+              <>
+                <select
+                  value={targetLanguage}
+                  onChange={(e) =>
+                    setTargetLanguage(e.target.value as "中文" | "English")
+                  }
+                  disabled={isTranslating}
+                  style={{
+                    backgroundColor:
+                      "var(--bg-surface, rgba(255,255,255,0.04))",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "4px 8px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    outline: "none",
+                  }}
+                >
+                  <option value="中文">中文</option>
+                  <option value="English">English</option>
+                </select>
+                <button
+                  onClick={() => onTranslate(targetLanguage)}
+                  disabled={isTranslating}
+                  style={{
+                    backgroundColor: "transparent",
+                    color: isTranslating
+                      ? "var(--text-muted)"
+                      : "var(--text-muted)",
+                    border: "none",
+                    padding: "4px 8px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: isTranslating ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    transition: "color 0.15s, opacity 0.15s",
+                    opacity: isTranslating ? 0.6 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isTranslating) {
+                      e.currentTarget.style.color = "var(--text-primary)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                >
+                  {isTranslating ? (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      style={{ animation: "spin 1s linear infinite" }}
+                    >
+                      <path
+                        d="M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41M7.05 16.95l-1.41 1.41m0-12.72l1.41 1.41m9.9 9.9l1.41 1.41"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m5 8 6 6" />
+                      <path d="m4 14 6-6 2-3" />
+                      <path d="M2 5h12" />
+                      <path d="M7 2h1" />
+                      <path d="m22 22-5-10-5 10" />
+                      <path d="M14 18h6" />
+                    </svg>
+                  )}
+                  Translate
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Right: Export button */}
           <div style={{ position: "relative" }}>
             {showExportMenu && (
               <ExportMenu

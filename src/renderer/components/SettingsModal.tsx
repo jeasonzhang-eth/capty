@@ -113,6 +113,8 @@ interface SettingsModalProps {
   readonly onChangeRapidRenamePrompt: (prompt: string) => void;
   readonly selectedTranslateLlmProviderId: string | null;
   readonly onChangeTranslateLlmProvider: (providerId: string) => void;
+  readonly translatePrompt: string;
+  readonly onChangeTranslatePrompt: (prompt: string) => void;
   readonly onClose: () => void;
 }
 
@@ -3317,6 +3319,8 @@ function DefaultModelsTab({
   onChangeRapidRenamePrompt,
   selectedTranslateLlmProviderId,
   onChangeTranslateLlmProvider,
+  translatePrompt,
+  onChangeTranslatePrompt,
 }: {
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
@@ -3341,6 +3345,8 @@ function DefaultModelsTab({
   readonly onChangeRapidRenamePrompt: (prompt: string) => void;
   readonly selectedTranslateLlmProviderId: string | null;
   readonly onChangeTranslateLlmProvider: (providerId: string) => void;
+  readonly translatePrompt: string;
+  readonly onChangeTranslatePrompt: (prompt: string) => void;
 }): React.ReactElement {
   const downloadedAsrModels = models.filter(
     (m) => m.downloaded && m.supported !== false,
@@ -3578,6 +3584,51 @@ function DefaultModelsTab({
             </option>
           ))}
         </select>
+        <div
+          style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "var(--text-secondary)",
+            marginTop: "12px",
+            marginBottom: "6px",
+          }}
+        >
+          Translate Prompt
+        </div>
+        <textarea
+          value={translatePrompt}
+          onChange={(e) => onChangeTranslatePrompt(e.target.value)}
+          rows={6}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            fontSize: "13px",
+            fontFamily: "'JetBrains Mono', monospace",
+            backgroundColor: "var(--bg-surface, rgba(255,255,255,0.04))",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            resize: "vertical",
+            outline: "none",
+            boxSizing: "border-box",
+            lineHeight: 1.5,
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
+        />
+        <div
+          style={{
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            marginTop: "4px",
+          }}
+        >
+          Use {"{{target_language}}"} and {"{{text}}"} as placeholders
+        </div>
       </div>
     </>
   );
@@ -3638,6 +3689,8 @@ export function SettingsModal({
   onChangeRapidRenamePrompt,
   selectedTranslateLlmProviderId,
   onChangeTranslateLlmProvider,
+  translatePrompt,
+  onChangeTranslatePrompt,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -3820,6 +3873,8 @@ export function SettingsModal({
                 onChangeRapidRenamePrompt={onChangeRapidRenamePrompt}
                 selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
                 onChangeTranslateLlmProvider={onChangeTranslateLlmProvider}
+                translatePrompt={translatePrompt}
+                onChangeTranslatePrompt={onChangeTranslatePrompt}
               />
             )}
             {activeTab === "speech" && (

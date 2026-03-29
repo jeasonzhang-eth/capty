@@ -1631,6 +1631,65 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
+  // LLM Translate (non-streaming)
+  ipcMain.handle(
+    "llm:translate",
+    async (
+      _event,
+      providerId: string,
+      text: string,
+      targetLanguage: string,
+      promptTemplate: string,
+    ) => {
+      const config = readConfig(configDir);
+      if (!providerId) {
+        throw new Error("No LLM provider selected for translation");
+      }
+      const provider = config.llmProviders.find(
+        (p: LlmProvider) => p.id === providerId,
+      );
+      if (!provider) {
+        throw new Error("Selected translate LLM provider not found");
+      }
+      if (!provider.apiKey) {
+        throw new Error("API key not configured for translate provider");
+      }
+
+      const prompt = promptTemplate
+        .replace("{{target_language}}", targetLanguage)
+        .replace("{{text}}", text);
+
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+      const resp = await net.fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [{ role: "user", content: prompt }],
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`Translate API error (${resp.status}): ${body}`);
+      }
+
+      const data = (await resp.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const result = data.choices?.[0]?.message?.content?.trim() ?? "";
+      if (!result) {
+        throw new Error("LLM returned empty translation");
+      }
+      return result;
+    },
+  );
+
   // LLM Provider Test
   ipcMain.handle(
     "llm:test",

@@ -25,6 +25,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - **HTTP Range 续传**：每个文件支持断点续传，网络中断后重新连接从已下载位置继续
   - **智能重试**：每个文件最多 3 次重试，指数退避（2s/4s/6s），30 秒无数据超时保护
   - **统一 UI**：ModelCard 实时显示下载进度 + 暂停/取消按钮，失败时显示错误信息 + 重试按钮
+- **转录翻译** — TranscriptArea 顶部左侧提供翻译控件（目标语言下拉 + Translate 按钮），支持中文/英文双向翻译；通过 Settings 中配置的 Translate Model LLM Provider 调用翻译 API；一次性翻译所有 segments 并覆盖显示（不修改数据库原始数据）；翻译中按钮 loading + disabled；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复

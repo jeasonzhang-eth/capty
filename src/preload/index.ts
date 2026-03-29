@@ -332,6 +332,19 @@ const api = {
       providerId,
       systemPrompt,
     ) as Promise<string>,
+  translate: (
+    providerId: string,
+    text: string,
+    targetLanguage: string,
+    promptTemplate: string,
+  ) =>
+    ipcRenderer.invoke(
+      "llm:translate",
+      providerId,
+      text,
+      targetLanguage,
+      promptTemplate,
+    ) as Promise<string>,
   onSummaryChunk: (
     callback: (data: { content: string; done: boolean }) => void,
   ) => {

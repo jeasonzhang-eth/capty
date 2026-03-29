@@ -21,6 +21,9 @@ import { useAudioPlayer } from "./hooks/useAudioPlayer";
 const DEFAULT_RAPID_RENAME_PROMPT =
   "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
 
+const DEFAULT_TRANSLATE_PROMPT =
+  "You are a professional translator. Translate the following text to {{target_language}}. Rules:\n1. Translate ONLY the text content, preserving the exact number of lines\n2. Each line in the output corresponds to the same line in the input\n3. Do NOT add, remove, or merge lines\n4. Do NOT add any explanations, notes, or extra text\n5. Maintain the original tone and meaning\n\n{{text}}";
+
 function App(): React.JSX.Element {
   const store = useAppStore();
   const audioCapture = useAudioCapture();
@@ -188,6 +191,10 @@ function App(): React.JSX.Element {
   const [rapidRenamePrompt, setRapidRenamePrompt] = useState(
     DEFAULT_RAPID_RENAME_PROMPT,
   );
+  const [translatePrompt, setTranslatePrompt] = useState(
+    DEFAULT_TRANSLATE_PROMPT,
+  );
+  const [isTranslating, setIsTranslating] = useState(false);
   const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
     null,
   );
@@ -365,6 +372,12 @@ function App(): React.JSX.Element {
           | undefined;
         if (savedRenamePrompt) {
           setRapidRenamePrompt(savedRenamePrompt);
+        }
+        const savedTranslatePrompt = config.translatePrompt as
+          | string
+          | undefined;
+        if (savedTranslatePrompt) {
+          setTranslatePrompt(savedTranslatePrompt);
         }
 
         // Load prompt types
@@ -1127,6 +1140,57 @@ function App(): React.JSX.Element {
     });
   }, []);
 
+  const handleChangeTranslatePrompt = useCallback(async (prompt: string) => {
+    setTranslatePrompt(prompt);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      translatePrompt: prompt,
+    });
+  }, []);
+
+  const handleTranslate = useCallback(
+    async (targetLanguage: string) => {
+      if (isTranslating || store.segments.length === 0) return;
+
+      const providerId =
+        selectedTranslateLlmProviderId ||
+        llmProviders.find((p) => p.apiKey && p.model)?.id;
+      if (!providerId) {
+        console.warn("Translate: no LLM provider configured");
+        return;
+      }
+
+      setIsTranslating(true);
+      try {
+        const text = store.segments.map((s) => s.text).join("\n");
+        const result = await window.capty.translate(
+          providerId,
+          text,
+          targetLanguage,
+          translatePrompt,
+        );
+        const translatedLines = result.split("\n");
+        const translatedSegments = store.segments.map((seg, i) => ({
+          ...seg,
+          text: translatedLines[i] ?? seg.text,
+        }));
+        store.setSegments(translatedSegments);
+      } catch (err) {
+        console.error("Translation failed:", err);
+      } finally {
+        setIsTranslating(false);
+      }
+    },
+    [
+      isTranslating,
+      store,
+      selectedTranslateLlmProviderId,
+      llmProviders,
+      translatePrompt,
+    ],
+  );
+
   const handleAiRename = useCallback(
     async (sessionId: number) => {
       if (aiRenamingSessionId) return;
@@ -1641,6 +1705,15 @@ function App(): React.JSX.Element {
           }
           sessionId={store.currentSessionId}
           canExport={!store.isRecording && store.segments.length > 0}
+          onTranslate={
+            !store.isRecording &&
+            store.segments.length > 0 &&
+            (selectedTranslateLlmProviderId ||
+              llmProviders.some((p) => p.apiKey && p.model))
+              ? handleTranslate
+              : null
+          }
+          isTranslating={isTranslating}
         />
         <SummaryPanel
           summaries={summaries}
@@ -1787,6 +1860,8 @@ function App(): React.JSX.Element {
           onChangeRapidRenamePrompt={handleChangeRapidRenamePrompt}
           selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
           onChangeTranslateLlmProvider={handleChangeTranslateLlmProvider}
+          translatePrompt={translatePrompt}
+          onChangeTranslatePrompt={handleChangeTranslatePrompt}
           onClose={() => setShowSettings(false)}
         />
       )}

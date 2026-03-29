@@ -86,6 +86,7 @@ export interface AppConfig {
   readonly selectedTtsProviderId: string | null;
   readonly selectedTtsModelId: string | null;
   readonly selectedTtsVoice: string;
+  readonly translatePrompt: string;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -146,6 +147,8 @@ const DEFAULT_CONFIG: AppConfig = {
   selectedTtsProviderId: "sidecar",
   selectedTtsModelId: null,
   selectedTtsVoice: "auto",
+  translatePrompt:
+    "You are a professional translator. Translate the following text to {{target_language}}. Rules:\n1. Translate ONLY the text content, preserving the exact number of lines\n2. Each line in the output corresponds to the same line in the input\n3. Do NOT add, remove, or merge lines\n4. Do NOT add any explanations, notes, or extra text\n5. Maintain the original tone and meaning\n\n{{text}}",
 };
 
 export function readConfig(configDir: string): AppConfig {
