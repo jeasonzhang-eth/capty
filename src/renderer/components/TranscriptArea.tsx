@@ -182,6 +182,8 @@ export function TranscriptArea({
   const isNearBottomRef = useRef(true);
   const prevSegmentCountRef = useRef(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const isPlayback = playbackTime !== null;
 
@@ -250,17 +252,32 @@ export function TranscriptArea({
     }
   }, []);
 
-  // Auto-scroll to bottom when new segments arrive AND user is near bottom.
-  // Works for both live recording and regeneration.
+  // Detect active transcription (segments growing) and debounce 3s after last growth.
+  // During transcription, avoid react-lrc auto-scroll which conflicts with bottom-follow.
   useEffect(() => {
     const newCount = segments.length;
     const grew = newCount > prevSegmentCountRef.current;
     prevSegmentCountRef.current = newCount;
 
-    if (grew && isNearBottomRef.current && scrollContainerRef.current) {
-      const el = scrollContainerRef.current;
-      el.scrollTop = el.scrollHeight;
+    if (grew) {
+      setIsTranscribing(true);
+      if (transcribingTimerRef.current)
+        clearTimeout(transcribingTimerRef.current);
+      transcribingTimerRef.current = setTimeout(
+        () => setIsTranscribing(false),
+        3000,
+      );
+
+      if (isNearBottomRef.current && scrollContainerRef.current) {
+        const el = scrollContainerRef.current;
+        el.scrollTop = el.scrollHeight;
+      }
     }
+
+    return () => {
+      if (transcribingTimerRef.current)
+        clearTimeout(transcribingTimerRef.current);
+    };
   }, [segments]);
 
   // Also scroll on partial text updates during recording
@@ -349,7 +366,7 @@ export function TranscriptArea({
         </div>
       )}
 
-      {isPlayback && !isRecording && segments.length > 0 ? (
+      {isPlayback && !isRecording && !isTranscribing && segments.length > 0 ? (
         <Lrc
           lrc={lrcString}
           currentMillisecond={currentMillisecond}
