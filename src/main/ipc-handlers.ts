@@ -63,6 +63,8 @@ import {
   addSummary,
   getSummaries,
   deleteSummary,
+  saveTranslation,
+  getTranslations,
 } from "./database";
 import {
   saveSegmentAudio,
@@ -1631,7 +1633,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
-  // LLM Translate (non-streaming)
+  // LLM Translate single segment (non-streaming)
   ipcMain.handle(
     "llm:translate",
     async (
@@ -1671,7 +1673,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           messages: [{ role: "user", content: prompt }],
           stream: false,
         }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(60000),
       });
 
       if (!resp.ok) {
@@ -1687,6 +1689,32 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         throw new Error("LLM returned empty translation");
       }
       return result;
+    },
+  );
+
+  // Translation persistence
+  ipcMain.handle(
+    "translation:save",
+    (
+      _event,
+      segmentId: number,
+      sessionId: number,
+      targetLanguage: string,
+      translatedText: string,
+    ) => {
+      return saveTranslation(db, {
+        segmentId,
+        sessionId,
+        targetLanguage,
+        translatedText,
+      });
+    },
+  );
+
+  ipcMain.handle(
+    "translation:list",
+    (_event, sessionId: number, targetLanguage: string) => {
+      return getTranslations(db, sessionId, targetLanguage);
     },
   );
 

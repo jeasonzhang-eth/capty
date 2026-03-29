@@ -195,6 +195,12 @@ function App(): React.JSX.Element {
     DEFAULT_TRANSLATE_PROMPT,
   );
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState(0);
+  // Map: segmentId → translated text (for current session + language)
+  const [translations, setTranslations] = useState<Record<number, string>>({});
+  const [activeTranslationLang, setActiveTranslationLang] = useState<
+    string | null
+  >(null);
   const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
     null,
   );
@@ -680,6 +686,9 @@ function App(): React.JSX.Element {
             text: s.text,
           })),
         );
+        // Clear translations (will be loaded if user picks a language)
+        setTranslations({});
+        setActiveTranslationLang(null);
         // Load summaries for this session filtered by active prompt type
         const sessionSummaries = await window.capty.listSummaries(
           sessionId,
@@ -1152,6 +1161,8 @@ function App(): React.JSX.Element {
   const handleTranslate = useCallback(
     async (targetLanguage: string) => {
       if (isTranslating || store.segments.length === 0) return;
+      const sessionId = store.currentSessionId;
+      if (!sessionId) return;
 
       const providerId =
         selectedTranslateLlmProviderId ||
@@ -1162,24 +1173,47 @@ function App(): React.JSX.Element {
       }
 
       setIsTranslating(true);
+      setTranslationProgress(0);
+      setActiveTranslationLang(targetLanguage);
+
+      const segments = store.segments;
+      const total = segments.length;
+      const newTranslations: Record<number, string> = { ...translations };
+
       try {
-        const text = store.segments.map((s) => s.text).join("\n");
-        const result = await window.capty.translate(
-          providerId,
-          text,
-          targetLanguage,
-          translatePrompt,
-        );
-        const translatedLines = result.split("\n");
-        const translatedSegments = store.segments.map((seg, i) => ({
-          ...seg,
-          text: translatedLines[i] ?? seg.text,
-        }));
-        store.setSegments(translatedSegments);
+        for (let i = 0; i < total; i++) {
+          const seg = segments[i];
+          // Skip if already translated for this language
+          if (newTranslations[seg.id]) {
+            setTranslationProgress(Math.round(((i + 1) / total) * 100));
+            continue;
+          }
+
+          const result = await window.capty.translate(
+            providerId,
+            seg.text,
+            targetLanguage,
+            translatePrompt,
+          );
+
+          newTranslations[seg.id] = result;
+          setTranslations({ ...newTranslations });
+
+          // Persist to database
+          await window.capty.saveTranslation(
+            seg.id,
+            sessionId,
+            targetLanguage,
+            result,
+          );
+
+          setTranslationProgress(Math.round(((i + 1) / total) * 100));
+        }
       } catch (err) {
         console.error("Translation failed:", err);
       } finally {
         setIsTranslating(false);
+        setTranslationProgress(0);
       }
     },
     [
@@ -1188,7 +1222,29 @@ function App(): React.JSX.Element {
       selectedTranslateLlmProviderId,
       llmProviders,
       translatePrompt,
+      translations,
     ],
+  );
+
+  // Load saved translations when switching language or session
+  const handleLoadTranslations = useCallback(
+    async (sessionId: number, targetLanguage: string) => {
+      try {
+        const rows = await window.capty.listTranslations(
+          sessionId,
+          targetLanguage,
+        );
+        const map: Record<number, string> = {};
+        for (const row of rows) {
+          map[row.segment_id] = row.translated_text;
+        }
+        setTranslations(map);
+        setActiveTranslationLang(targetLanguage);
+      } catch {
+        setTranslations({});
+      }
+    },
+    [],
   );
 
   const handleAiRename = useCallback(
@@ -1714,6 +1770,15 @@ function App(): React.JSX.Element {
               : null
           }
           isTranslating={isTranslating}
+          translationProgress={translationProgress}
+          translations={translations}
+          activeTranslationLang={activeTranslationLang}
+          onLoadTranslations={
+            store.currentSessionId
+              ? (lang: string) =>
+                  handleLoadTranslations(store.currentSessionId!, lang)
+              : undefined
+          }
         />
         <SummaryPanel
           summaries={summaries}

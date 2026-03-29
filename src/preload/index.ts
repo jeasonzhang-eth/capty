@@ -345,6 +345,33 @@ const api = {
       targetLanguage,
       promptTemplate,
     ) as Promise<string>,
+  saveTranslation: (
+    segmentId: number,
+    sessionId: number,
+    targetLanguage: string,
+    translatedText: string,
+  ) =>
+    ipcRenderer.invoke(
+      "translation:save",
+      segmentId,
+      sessionId,
+      targetLanguage,
+      translatedText,
+    ) as Promise<number>,
+  listTranslations: (sessionId: number, targetLanguage: string) =>
+    ipcRenderer.invoke(
+      "translation:list",
+      sessionId,
+      targetLanguage,
+    ) as Promise<
+      Array<{
+        id: number;
+        segment_id: number;
+        session_id: number;
+        target_language: string;
+        translated_text: string;
+      }>
+    >,
   onSummaryChunk: (
     callback: (data: { content: string; done: boolean }) => void,
   ) => {

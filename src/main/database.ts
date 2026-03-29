@@ -86,6 +86,20 @@ function initTables(db: Database.Database): void {
   } catch {
     // Column already exists — ignore
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS segment_translations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      segment_id INTEGER NOT NULL,
+      session_id INTEGER NOT NULL,
+      target_language TEXT NOT NULL,
+      translated_text TEXT NOT NULL,
+      created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (segment_id) REFERENCES segments(id),
+      FOREIGN KEY (session_id) REFERENCES sessions(id),
+      UNIQUE(segment_id, target_language)
+    )
+  `);
 }
 
 export function createDatabase(dbPath: string): Database.Database {
@@ -293,6 +307,7 @@ export function deleteSegmentsBySession(
 
 export function deleteSession(db: Database.Database, id: number): void {
   const del = db.transaction(() => {
+    deleteTranslationsBySession(db, id);
     deleteSummariesBySession(db, id);
     deleteSegmentsBySession(db, id);
     db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
@@ -389,4 +404,58 @@ export function deleteSummariesBySession(
   sessionId: number,
 ): void {
   db.prepare("DELETE FROM summaries WHERE session_id = ?").run(sessionId);
+}
+
+// ─── Segment Translations ───
+
+export interface TranslationRow {
+  readonly id: number;
+  readonly segment_id: number;
+  readonly session_id: number;
+  readonly target_language: string;
+  readonly translated_text: string;
+  readonly created_at: string;
+}
+
+export function saveTranslation(
+  db: Database.Database,
+  opts: {
+    segmentId: number;
+    sessionId: number;
+    targetLanguage: string;
+    translatedText: string;
+  },
+): number {
+  const stmt = db.prepare(
+    `INSERT INTO segment_translations (segment_id, session_id, target_language, translated_text)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(segment_id, target_language) DO UPDATE SET translated_text = excluded.translated_text`,
+  );
+  const result = stmt.run(
+    opts.segmentId,
+    opts.sessionId,
+    opts.targetLanguage,
+    opts.translatedText,
+  );
+  return result.lastInsertRowid as number;
+}
+
+export function getTranslations(
+  db: Database.Database,
+  sessionId: number,
+  targetLanguage: string,
+): TranslationRow[] {
+  const stmt = db.prepare(
+    "SELECT * FROM segment_translations WHERE session_id = ? AND target_language = ? ORDER BY segment_id ASC",
+  );
+  return stmt.all(sessionId, targetLanguage) as TranslationRow[];
+}
+
+export function deleteTranslationsBySession(
+  db: Database.Database,
+  sessionId: number,
+): void {
+  db.prepare("DELETE FROM segment_translations WHERE session_id = ?").run(
+    sessionId,
+  );
 }

@@ -25,6 +25,10 @@ interface TranscriptAreaProps {
   readonly canExport: boolean;
   readonly onTranslate: ((targetLanguage: string) => Promise<void>) | null;
   readonly isTranslating: boolean;
+  readonly translationProgress: number;
+  readonly translations: Record<number, string>;
+  readonly activeTranslationLang: string | null;
+  readonly onLoadTranslations?: (targetLanguage: string) => void;
 }
 
 interface ExportMenuProps {
@@ -181,6 +185,10 @@ export function TranscriptArea({
   canExport,
   onTranslate,
   isTranslating,
+  translationProgress,
+  translations,
+  activeTranslationLang,
+  onLoadTranslations,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -243,10 +251,24 @@ export function TranscriptArea({
           >
             {segment.text}
           </span>
+          {translations[segment.id] && (
+            <div
+              style={{
+                marginTop: "4px",
+                fontSize: "14px",
+                lineHeight: 1.6,
+                fontFamily: "'DM Sans', sans-serif",
+                color: "var(--accent)",
+                opacity: 0.85,
+              }}
+            >
+              {translations[segment.id]}
+            </div>
+          )}
         </div>
       );
     },
-    [segments, onSeekToTime],
+    [segments, onSeekToTime, translations],
   );
 
   // Track whether user is near the bottom of the scroll container
@@ -323,9 +345,14 @@ export function TranscriptArea({
               <>
                 <select
                   value={targetLanguage}
-                  onChange={(e) =>
-                    setTargetLanguage(e.target.value as "中文" | "English")
-                  }
+                  onChange={(e) => {
+                    const lang = e.target.value as "中文" | "English";
+                    setTargetLanguage(lang);
+                    // Load saved translations for the new language
+                    if (onLoadTranslations) {
+                      onLoadTranslations(lang);
+                    }
+                  }}
                   disabled={isTranslating}
                   style={{
                     backgroundColor:
@@ -404,7 +431,9 @@ export function TranscriptArea({
                       <path d="M14 18h6" />
                     </svg>
                   )}
-                  Translate
+                  {isTranslating
+                    ? `Translating ${translationProgress}%`
+                    : "Translate"}
                 </button>
               </>
             )}
@@ -535,6 +564,21 @@ export function TranscriptArea({
                 >
                   {seg.text}
                 </span>
+                {translations[seg.id] && (
+                  <div
+                    style={{
+                      marginTop: "4px",
+                      paddingLeft: "0px",
+                      fontSize: "14px",
+                      lineHeight: 1.6,
+                      fontFamily: "'DM Sans', sans-serif",
+                      color: "var(--accent)",
+                      opacity: 0.85,
+                    }}
+                  >
+                    {translations[seg.id]}
+                  </div>
+                )}
               </div>
             );
           })}
