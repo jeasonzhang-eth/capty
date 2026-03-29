@@ -196,6 +196,7 @@ function App(): React.JSX.Element {
   );
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
+  const translateAbortRef = useRef(false);
   // Map: segmentId → translated text (for current session + language)
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [activeTranslationLang, setActiveTranslationLang] = useState<
@@ -1172,6 +1173,7 @@ function App(): React.JSX.Element {
         return;
       }
 
+      translateAbortRef.current = false;
       setIsTranslating(true);
       setTranslationProgress(0);
       setActiveTranslationLang(targetLanguage);
@@ -1187,39 +1189,41 @@ function App(): React.JSX.Element {
       const translateOne = async (
         seg: (typeof segments)[number],
       ): Promise<void> => {
-        const result = await window.capty.translate(
-          providerId,
-          seg.text,
-          targetLanguage,
-          translatePrompt,
-        );
+        if (translateAbortRef.current) return;
+        try {
+          const result = await window.capty.translate(
+            providerId,
+            seg.text,
+            targetLanguage,
+            translatePrompt,
+          );
+          if (translateAbortRef.current) return;
 
-        newTranslations[seg.id] = result;
-        setTranslations({ ...newTranslations });
+          newTranslations[seg.id] = result;
+          setTranslations({ ...newTranslations });
 
-        await window.capty.saveTranslation(
-          seg.id,
-          sessionId,
-          targetLanguage,
-          result,
-        );
-
+          await window.capty.saveTranslation(
+            seg.id,
+            sessionId,
+            targetLanguage,
+            result,
+          );
+        } catch (err) {
+          console.warn(`Translation skipped for segment ${seg.id}:`, err);
+        }
         completed++;
         setTranslationProgress(Math.round((completed / total) * 100));
       };
 
-      try {
-        // Process segments in batches of CONCURRENCY
-        for (let i = 0; i < total; i += CONCURRENCY) {
-          const batch = segments.slice(i, i + CONCURRENCY);
-          await Promise.all(batch.map(translateOne));
-        }
-      } catch (err) {
-        console.error("Translation failed:", err);
-      } finally {
-        setIsTranslating(false);
-        setTranslationProgress(0);
+      // Process segments in batches of CONCURRENCY
+      for (let i = 0; i < total; i += CONCURRENCY) {
+        if (translateAbortRef.current) break;
+        const batch = segments.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(translateOne));
       }
+
+      setIsTranslating(false);
+      setTranslationProgress(0);
     },
     [
       isTranslating,
@@ -1229,6 +1233,10 @@ function App(): React.JSX.Element {
       translatePrompt,
     ],
   );
+
+  const handleStopTranslation = useCallback(() => {
+    translateAbortRef.current = true;
+  }, []);
 
   // Load saved translations when switching language or session
   const handleLoadTranslations = useCallback(
@@ -1775,6 +1783,7 @@ function App(): React.JSX.Element {
           }
           isTranslating={isTranslating}
           translationProgress={translationProgress}
+          onStopTranslation={isTranslating ? handleStopTranslation : null}
           translations={translations}
           activeTranslationLang={activeTranslationLang}
           onLoadTranslations={

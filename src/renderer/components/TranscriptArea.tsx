@@ -26,6 +26,7 @@ interface TranscriptAreaProps {
   readonly onTranslate: ((targetLanguage: string) => Promise<void>) | null;
   readonly isTranslating: boolean;
   readonly translationProgress: number;
+  readonly onStopTranslation: (() => void) | null;
   readonly translations: Readonly<Record<number, string>>;
   readonly activeTranslationLang: string | null;
   readonly onLoadTranslations?: (targetLanguage: string) => void;
@@ -44,6 +45,7 @@ interface TranslateMenuProps {
   readonly showTranslations: boolean;
   readonly onToggleShow: () => void;
   readonly onTranslate: () => void;
+  readonly onStopTranslation: (() => void) | null;
   readonly onClose: () => void;
 }
 
@@ -56,6 +58,7 @@ function TranslateMenu({
   showTranslations,
   onToggleShow,
   onTranslate,
+  onStopTranslation,
   onClose,
 }: TranslateMenuProps): React.ReactElement {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -211,45 +214,41 @@ function TranslateMenu({
         }}
       />
 
-      {/* 2. Translate / Re-translate */}
-      <button
-        onClick={() => {
-          onTranslate();
-          onClose();
-        }}
-        disabled={isTranslating}
-        style={{
-          ...itemStyle,
-          opacity: isTranslating ? 0.5 : 1,
-          cursor: isTranslating ? "not-allowed" : "pointer",
-        }}
-        onMouseEnter={handleItemHover}
-        onMouseLeave={handleItemLeave}
-      >
-        <span>
-          {isTranslating
-            ? `Translating ${translationProgress}%`
-            : hasTranslations
-              ? "Re-translate"
-              : "Translate"}
-        </span>
-        {isTranslating && (
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            style={{ animation: "spin 1s linear infinite" }}
-          >
-            <path
-              d="M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41M7.05 16.95l-1.41 1.41m0-12.72l1.41 1.41m9.9 9.9l1.41 1.41"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+      {/* 2. Translate / Re-translate / Stop */}
+      {isTranslating ? (
+        <button
+          onClick={() => {
+            onStopTranslation?.();
+          }}
+          style={{
+            ...itemStyle,
+            color: "#ff453a",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(255, 69, 58, 0.12)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+        >
+          <span>{`Stop Translation (${translationProgress}%)`}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <rect x="6" y="6" width="12" height="12" rx="2" fill="#ff453a" />
           </svg>
-        )}
-      </button>
+        </button>
+      ) : (
+        <button
+          onClick={() => {
+            onTranslate();
+            onClose();
+          }}
+          style={itemStyle}
+          onMouseEnter={handleItemHover}
+          onMouseLeave={handleItemLeave}
+        >
+          <span>{hasTranslations ? "Re-translate" : "Translate"}</span>
+        </button>
+      )}
 
       {/* 3. Show / Hide Translation (only when translations exist) */}
       {hasTranslations && (
@@ -435,6 +434,7 @@ export function TranscriptArea({
   onTranslate,
   isTranslating,
   translationProgress,
+  onStopTranslation,
   translations,
   activeTranslationLang,
   onLoadTranslations,
@@ -610,6 +610,7 @@ export function TranscriptArea({
                     showTranslations={showTranslations}
                     onToggleShow={() => setShowTranslations((v) => !v)}
                     onTranslate={() => onTranslate(targetLanguage)}
+                    onStopTranslation={onStopTranslation}
                     onClose={() => setShowTranslateMenu(false)}
                   />
                 )}

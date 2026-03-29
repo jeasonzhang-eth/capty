@@ -1663,98 +1663,32 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 
-      // Use AbortController with manual idle-timeout (reset on each chunk)
-      const ac = new AbortController();
-      const IDLE_TIMEOUT = 60000; // 60s without any data = abort
-      let idleTimer: ReturnType<typeof setTimeout> | null = setTimeout(
-        () => ac.abort(),
-        IDLE_TIMEOUT,
-      );
-      const resetIdle = (): void => {
-        if (idleTimer) clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => ac.abort(), IDLE_TIMEOUT);
-      };
-      const clearIdle = (): void => {
-        if (idleTimer) {
-          clearTimeout(idleTimer);
-          idleTimer = null;
-        }
-      };
-
-      let resp: Response;
-      try {
-        resp = await net.fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${provider.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: provider.model,
-            messages: [{ role: "user", content: prompt }],
-            stream: true,
-          }),
-          signal: ac.signal,
-        });
-      } catch (err) {
-        clearIdle();
-        throw err;
-      }
+      const resp = await net.fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [{ role: "user", content: prompt }],
+          stream: false,
+        }),
+      });
 
       if (!resp.ok) {
-        clearIdle();
         const body = await resp.text();
         throw new Error(`Translate API error (${resp.status}): ${body}`);
       }
 
-      // Read SSE stream — accumulate content tokens
-      const reader = resp.body?.getReader();
-      if (!reader) {
-        clearIdle();
-        throw new Error("No response body from translate API");
-      }
-      const decoder = new TextDecoder();
-      let result = "";
-      let buffer = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          resetIdle(); // got data — reset idle timer
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || !trimmedLine.startsWith("data: ")) continue;
-            const payload = trimmedLine.slice(6);
-            if (payload === "[DONE]") continue;
-
-            try {
-              const json = JSON.parse(payload) as {
-                choices?: { delta?: { content?: string } }[];
-              };
-              const token = json.choices?.[0]?.delta?.content;
-              if (token) result += token;
-            } catch {
-              // Skip malformed JSON chunks
-            }
-          }
-        }
-      } finally {
-        clearIdle();
-        reader.releaseLock();
-      }
-
-      const trimmed = result.trim();
-      if (!trimmed) {
+      const json = (await resp.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const content = json.choices?.[0]?.message?.content?.trim();
+      if (!content) {
         throw new Error("LLM returned empty translation");
       }
-      return trimmed;
+      return content;
     },
   );
 
