@@ -1127,24 +1127,30 @@ function ExportMenu({
     onClose();
   }, [content, onClose]);
 
-  /** Capture the content div as image with a wider width to prevent truncation.
-   *  html-to-image's `style` option is applied only during capture — no visual flash. */
+  /** Temporarily widen the element before capture so html-to-image reads correct
+   *  dimensions for the SVG viewport, then restore original styles. */
   const captureWithFixedWidth = useCallback(
     async (mode: "blob" | "png"): Promise<Blob | string | null> => {
       if (!contentRef.current) return null;
-      const opts = {
-        backgroundColor: "#1e1e20",
-        style: {
-          padding: "20px",
-          width: "640px",
-          maxWidth: "none",
-          overflow: "visible",
-        },
-      };
-      if (mode === "blob") {
-        return await toBlob(contentRef.current, opts);
+      const el = contentRef.current;
+      // Save original inline styles
+      const origCss = el.style.cssText;
+      // Expand element for capture
+      el.style.width = "640px";
+      el.style.maxWidth = "none";
+      el.style.padding = "20px";
+      // Force synchronous reflow so html-to-image reads the new layout
+      void el.offsetHeight;
+      try {
+        const opts = { backgroundColor: "#1e1e20" };
+        if (mode === "blob") {
+          return await toBlob(el, opts);
+        }
+        return await toPng(el, opts);
+      } finally {
+        // Restore original styles
+        el.style.cssText = origCss;
       }
-      return await toPng(contentRef.current, opts);
     },
     [contentRef],
   );
