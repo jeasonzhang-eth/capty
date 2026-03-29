@@ -1180,30 +1180,39 @@ function App(): React.JSX.Element {
       const total = segments.length;
       const newTranslations: Record<number, string> = {};
       setTranslations(newTranslations);
+      let completed = 0;
+
+      const CONCURRENCY = 3;
+
+      const translateOne = async (
+        seg: (typeof segments)[number],
+      ): Promise<void> => {
+        const result = await window.capty.translate(
+          providerId,
+          seg.text,
+          targetLanguage,
+          translatePrompt,
+        );
+
+        newTranslations[seg.id] = result;
+        setTranslations({ ...newTranslations });
+
+        await window.capty.saveTranslation(
+          seg.id,
+          sessionId,
+          targetLanguage,
+          result,
+        );
+
+        completed++;
+        setTranslationProgress(Math.round((completed / total) * 100));
+      };
 
       try {
-        for (let i = 0; i < total; i++) {
-          const seg = segments[i];
-
-          const result = await window.capty.translate(
-            providerId,
-            seg.text,
-            targetLanguage,
-            translatePrompt,
-          );
-
-          newTranslations[seg.id] = result;
-          setTranslations({ ...newTranslations });
-
-          // Persist to database
-          await window.capty.saveTranslation(
-            seg.id,
-            sessionId,
-            targetLanguage,
-            result,
-          );
-
-          setTranslationProgress(Math.round(((i + 1) / total) * 100));
+        // Process segments in batches of CONCURRENCY
+        for (let i = 0; i < total; i += CONCURRENCY) {
+          const batch = segments.slice(i, i + CONCURRENCY);
+          await Promise.all(batch.map(translateOne));
         }
       } catch (err) {
         console.error("Translation failed:", err);
