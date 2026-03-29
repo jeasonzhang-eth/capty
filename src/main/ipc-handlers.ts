@@ -1671,9 +1671,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         body: JSON.stringify({
           model: provider.model,
           messages: [{ role: "user", content: prompt }],
-          stream: false,
+          stream: true,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(30000), // 30s for initial connection
       });
 
       if (!resp.ok) {
@@ -1681,14 +1681,50 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         throw new Error(`Translate API error (${resp.status}): ${body}`);
       }
 
-      const data = (await resp.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      const result = data.choices?.[0]?.message?.content?.trim() ?? "";
-      if (!result) {
+      // Read SSE stream — accumulate content tokens
+      const reader = resp.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body from translate API");
+      }
+      const decoder = new TextDecoder();
+      let result = "";
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const payload = trimmed.slice(6);
+            if (payload === "[DONE]") continue;
+
+            try {
+              const json = JSON.parse(payload) as {
+                choices?: { delta?: { content?: string } }[];
+              };
+              const token = json.choices?.[0]?.delta?.content;
+              if (token) result += token;
+            } catch {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      const trimmed = result.trim();
+      if (!trimmed) {
         throw new Error("LLM returned empty translation");
       }
-      return result;
+      return trimmed;
     },
   );
 

@@ -25,7 +25,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - **HTTP Range 续传**：每个文件支持断点续传，网络中断后重新连接从已下载位置继续
   - **智能重试**：每个文件最多 3 次重试，指数退避（2s/4s/6s），30 秒无数据超时保护
   - **统一 UI**：ModelCard 实时显示下载进度 + 暂停/取消按钮，失败时显示错误信息 + 重试按钮
-- **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）
+- **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）；翻译 API 采用 SSE 流式模式，避免慢模型超时
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
