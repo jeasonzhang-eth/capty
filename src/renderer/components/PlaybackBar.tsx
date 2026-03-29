@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
+import { Play, Pause, RotateCcw, RotateCw, X } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { type Region } from "wavesurfer.js/dist/plugins/regions";
 
@@ -43,19 +44,24 @@ const topBtnStyle: React.CSSProperties = {
   flexShrink: 0,
   borderRadius: "6px",
   transition: "color 0.2s ease",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
-const transportBtnStyle: React.CSSProperties = {
+const skipBtnStyle: React.CSSProperties = {
   background: "none",
   border: "none",
   color: "var(--text-secondary)",
   cursor: "pointer",
-  padding: "4px 8px",
+  padding: "6px 10px",
   borderRadius: "8px",
   transition: "color 0.15s ease, background-color 0.15s ease",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  gap: "3px",
+  position: "relative",
 };
 
 export function PlaybackBar({
@@ -244,7 +250,8 @@ export function PlaybackBar({
             padding: "2px 8px",
             background:
               playbackRate !== 1.0 ? "var(--accent-glow)" : "transparent",
-            color: playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
+            color:
+              playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
             border:
               playbackRate !== 1.0
                 ? "1px solid var(--border-accent)"
@@ -258,10 +265,7 @@ export function PlaybackBar({
         {/* Close */}
         <button
           onClick={onStop}
-          style={{
-            ...topBtnStyle,
-            fontSize: "13px",
-          }}
+          style={topBtnStyle}
           title="Stop"
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--danger)";
@@ -270,7 +274,7 @@ export function PlaybackBar({
             e.currentTarget.style.color = "var(--text-muted)";
           }}
         >
-          ✕
+          <X size={14} />
         </button>
       </div>
 
@@ -280,19 +284,13 @@ export function PlaybackBar({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: "16px",
+          gap: "12px",
         }}
       >
         {/* Skip backward 15s */}
         <button
           onClick={onSkipBackward}
-          style={{
-            ...transportBtnStyle,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: "12px",
-            fontWeight: 500,
-            gap: "2px",
-          }}
+          style={skipBtnStyle}
           title="Backward 15s (←)"
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--text-primary)";
@@ -303,20 +301,40 @@ export function PlaybackBar({
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          <span style={{ fontSize: "11px" }}>{"\u25C0\u25C0"}</span>
-          <span>15</span>
+          <RotateCcw size={18} strokeWidth={1.8} />
+          <span
+            style={{
+              position: "absolute",
+              fontSize: "7px",
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-42%, -36%)",
+              pointerEvents: "none",
+            }}
+          >
+            15
+          </span>
         </button>
 
         {/* Play / Pause */}
         <button
           onClick={isPlaying ? onPause : onResume}
           style={{
-            ...transportBtnStyle,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
             width: "36px",
             height: "36px",
             borderRadius: "50%",
             backgroundColor: "var(--accent)",
             color: "#000",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "background-color 0.15s ease",
+            flexShrink: 0,
           }}
           title={isPlaying ? "Pause (Space)" : "Resume (Space)"}
           onMouseEnter={(e) => {
@@ -327,27 +345,16 @@ export function PlaybackBar({
           }}
         >
           {isPlaying ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
+            <Pause size={16} fill="currentColor" strokeWidth={0} />
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play size={16} fill="currentColor" strokeWidth={0} style={{ marginLeft: "2px" }} />
           )}
         </button>
 
         {/* Skip forward 15s */}
         <button
           onClick={onSkipForward}
-          style={{
-            ...transportBtnStyle,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: "12px",
-            fontWeight: 500,
-            gap: "2px",
-          }}
+          style={skipBtnStyle}
           title="Forward 15s (→)"
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--text-primary)";
@@ -358,8 +365,21 @@ export function PlaybackBar({
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          <span>15</span>
-          <span style={{ fontSize: "11px" }}>{"\u25B6\u25B6"}</span>
+          <RotateCw size={18} strokeWidth={1.8} />
+          <span
+            style={{
+              position: "absolute",
+              fontSize: "7px",
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-38%, -36%)",
+              pointerEvents: "none",
+            }}
+          >
+            15
+          </span>
         </button>
       </div>
     </div>
