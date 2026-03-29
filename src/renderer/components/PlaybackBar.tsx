@@ -244,8 +244,7 @@ export function PlaybackBar({
             padding: "2px 8px",
             background:
               playbackRate !== 1.0 ? "var(--accent-glow)" : "transparent",
-            color:
-              playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
+            color: playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
             border:
               playbackRate !== 1.0
                 ? "1px solid var(--border-accent)"
@@ -287,41 +286,25 @@ export function PlaybackBar({
         {/* Skip backward 15s */}
         <button
           onClick={onSkipBackward}
-          style={{ ...transportBtnStyle, fontSize: "13px" }}
+          style={{
+            ...transportBtnStyle,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: "12px",
+            fontWeight: 500,
+            gap: "2px",
+          }}
           title="Backward 15s (←)"
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--text-primary)";
-            e.currentTarget.style.backgroundColor =
-              "rgba(255, 255, 255, 0.06)";
+            e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = "var(--text-secondary)";
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5V1L7 6l5 5V7a6 6 0 0 1 0 12 6 6 0 0 1-6-6" />
-            <text
-              x="11"
-              y="16.5"
-              fill="currentColor"
-              stroke="none"
-              fontSize="7"
-              fontFamily="JetBrains Mono, monospace"
-              textAnchor="middle"
-            >
-              15
-            </text>
-          </svg>
+          <span style={{ fontSize: "11px" }}>{"\u25C0\u25C0"}</span>
+          <span>15</span>
         </button>
 
         {/* Play / Pause */}
@@ -349,12 +332,7 @@ export function PlaybackBar({
               <rect x="14" y="4" width="4" height="16" rx="1" />
             </svg>
           ) : (
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
@@ -363,41 +341,25 @@ export function PlaybackBar({
         {/* Skip forward 15s */}
         <button
           onClick={onSkipForward}
-          style={{ ...transportBtnStyle, fontSize: "13px" }}
+          style={{
+            ...transportBtnStyle,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: "12px",
+            fontWeight: 500,
+            gap: "2px",
+          }}
           title="Forward 15s (→)"
           onMouseEnter={(e) => {
             e.currentTarget.style.color = "var(--text-primary)";
-            e.currentTarget.style.backgroundColor =
-              "rgba(255, 255, 255, 0.06)";
+            e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.06)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = "var(--text-secondary)";
             e.currentTarget.style.backgroundColor = "transparent";
           }}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5V1l5 5-5 5V7a6 6 0 0 1 0 12 6 6 0 0 0 6-6" />
-            <text
-              x="13"
-              y="16.5"
-              fill="currentColor"
-              stroke="none"
-              fontSize="7"
-              fontFamily="JetBrains Mono, monospace"
-              textAnchor="middle"
-            >
-              15
-            </text>
-          </svg>
+          <span>15</span>
+          <span style={{ fontSize: "11px" }}>{"\u25B6\u25B6"}</span>
         </button>
       </div>
     </div>
