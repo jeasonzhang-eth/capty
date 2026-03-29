@@ -1671,35 +1671,73 @@ function App(): React.JSX.Element {
           onChangeTtsVoice={handleChangeTtsVoice}
         />
       </div>
-      {audioPlayer.playingSessionId !== null && (
-        <PlaybackBar
-          sessionTitle={
-            store.sessions.find(
-              (s: { id: number }) => s.id === audioPlayer.playingSessionId,
-            )?.title ?? "Unknown"
-          }
-          isPlaying={audioPlayer.isPlaying}
-          currentTime={audioPlayer.currentTime}
-          duration={audioPlayer.duration}
-          playbackRate={audioPlayer.playbackRate}
-          audioRef={audioPlayer.audioRef}
-          segments={store.segments}
-          onPause={audioPlayer.pause}
-          onResume={audioPlayer.resume}
-          onSeek={audioPlayer.seek}
-          onStop={audioPlayer.stop}
-          onSkipBackward={() => audioPlayer.skipBackward(10)}
-          onSkipForward={() => audioPlayer.skipForward(10)}
-          onPlaybackRateChange={audioPlayer.setPlaybackRate}
-        />
-      )}
-      <RecordingControls
-        isRecording={store.isRecording}
-        elapsedSeconds={store.elapsedSeconds}
-        audioLevel={audioLevel}
-        onStart={handleStart}
-        onStop={handleStop}
-      />
+      {/* ── Bottom bar: crossfade between RecordingControls and PlaybackBar ── */}
+      <div
+        style={{
+          position: "relative",
+          height: "100px",
+          flexShrink: 0,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            transition: "opacity 0.3s ease, transform 0.3s ease",
+            opacity: audioPlayer.playingSessionId !== null ? 0 : 1,
+            transform:
+              audioPlayer.playingSessionId !== null
+                ? "translateY(20px)"
+                : "translateY(0)",
+            pointerEvents:
+              audioPlayer.playingSessionId !== null ? "none" : "auto",
+          }}
+        >
+          <RecordingControls
+            isRecording={store.isRecording}
+            elapsedSeconds={store.elapsedSeconds}
+            audioLevel={audioLevel}
+            onStart={handleStart}
+            onStop={handleStop}
+          />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            transition: "opacity 0.3s ease, transform 0.3s ease",
+            opacity: audioPlayer.playingSessionId !== null ? 1 : 0,
+            transform:
+              audioPlayer.playingSessionId !== null
+                ? "translateY(0)"
+                : "translateY(20px)",
+            pointerEvents:
+              audioPlayer.playingSessionId !== null ? "auto" : "none",
+          }}
+        >
+          <PlaybackBar
+            sessionTitle={
+              store.sessions.find(
+                (s: { id: number }) => s.id === audioPlayer.playingSessionId,
+              )?.title ?? "Unknown"
+            }
+            isPlaying={audioPlayer.isPlaying}
+            currentTime={audioPlayer.currentTime}
+            duration={audioPlayer.duration}
+            playbackRate={audioPlayer.playbackRate}
+            audioRef={audioPlayer.audioRef}
+            segments={store.segments}
+            onPause={audioPlayer.pause}
+            onResume={audioPlayer.resume}
+            onSeek={audioPlayer.seek}
+            onStop={audioPlayer.stop}
+            onSkipBackward={() => audioPlayer.skipBackward(10)}
+            onSkipForward={() => audioPlayer.skipForward(10)}
+            onPlaybackRateChange={audioPlayer.setPlaybackRate}
+          />
+        </div>
+      </div>
       {showSettings && (
         <SettingsModal
           dataDir={store.dataDir}

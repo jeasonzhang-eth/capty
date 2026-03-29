@@ -307,6 +307,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-29 (58)
+
+- **播放栏 Crossfade 过渡** — 点击播放时，底部录制按钮区域与播放栏平滑切换：录制按钮 0.3s 淡出下移，播放栏 0.3s 淡入上浮；两者共享同一 100px 高度容器（`position: absolute` 重叠 + `opacity/transform` CSS transition），底部区域高度始终固定，无跳动；PlaybackBar 始终渲染（不再条件移除 DOM），隐藏时 `pointer-events: none` 禁止交互
+
 ### 2026-03-29 (57)
 
 - **SummaryCard 导出菜单优化** — 修复导出/复制图片右侧截断问题（`html-to-image` 的 SVG viewport 基于原始元素宽度，`style` 选项只影响克隆节点但不改变 viewport；改为截图前临时扩展原始元素至 640px 并强制 reflow，截图后恢复，确保 viewport 与内容宽度一致）；导出按钮移至卡片 footer 最右侧（时间戳之后）

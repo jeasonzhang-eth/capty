@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import WaveSurfer from "wavesurfer.js";
-import RegionsPlugin, {
-  type Region,
-} from "wavesurfer.js/dist/plugins/regions";
+import RegionsPlugin, { type Region } from "wavesurfer.js/dist/plugins/regions";
 
 const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as const;
 
@@ -169,7 +167,8 @@ export function PlaybackBar({
         display: "flex",
         alignItems: "center",
         gap: "6px",
-        padding: "8px 16px",
+        padding: "0 16px",
+        height: "100px",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         backgroundColor: "rgba(28, 28, 31, 0.92)",
@@ -230,8 +229,7 @@ export function PlaybackBar({
           overflow: "hidden",
           whiteSpace: "nowrap",
           color: "var(--text-secondary)",
-          maskImage:
-            "linear-gradient(to right, black 70%, transparent 100%)",
+          maskImage: "linear-gradient(to right, black 70%, transparent 100%)",
           WebkitMaskImage:
             "linear-gradient(to right, black 70%, transparent 100%)",
         }}
@@ -289,8 +287,7 @@ export function PlaybackBar({
           padding: "2px 10px",
           background:
             playbackRate !== 1.0 ? "var(--accent-glow)" : "transparent",
-          color:
-            playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
+          color: playbackRate !== 1.0 ? "var(--accent)" : "var(--text-muted)",
           border:
             playbackRate !== 1.0
               ? "1px solid var(--border-accent)"
