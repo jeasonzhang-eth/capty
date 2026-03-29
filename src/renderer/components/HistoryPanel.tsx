@@ -518,6 +518,16 @@ export function HistoryPanel({
                       key={session.id}
                       className="session-row"
                       onClick={() => onSelectSession(session.id)}
+                      onDoubleClick={() => {
+                        if (playingSessionId === session.id) {
+                          onStopPlayback();
+                        } else if (
+                          !isRecording &&
+                          session.status === "completed"
+                        ) {
+                          onPlaySession(session.id);
+                        }
+                      }}
                       onContextMenu={(e) => handleContextMenu(e, session.id)}
                       onMouseEnter={(e) => {
                         if (!isSelected) {
