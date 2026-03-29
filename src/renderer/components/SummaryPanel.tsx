@@ -1127,27 +1127,24 @@ function ExportMenu({
     onClose();
   }, [content, onClose]);
 
-  /** Clone the content div off-screen with a fixed width so the image is not truncated. */
+  /** Capture the content div as image with a wider width to prevent truncation.
+   *  html-to-image's `style` option is applied only during capture — no visual flash. */
   const captureWithFixedWidth = useCallback(
     async (mode: "blob" | "png"): Promise<Blob | string | null> => {
       if (!contentRef.current) return null;
-      const clone = contentRef.current.cloneNode(true) as HTMLElement;
-      clone.style.width = "640px";
-      clone.style.padding = "20px";
-      clone.style.position = "fixed";
-      clone.style.left = "-9999px";
-      clone.style.top = "0";
-      clone.style.backgroundColor = "#1e1e20";
-      clone.style.color = "#e8e4df";
-      document.body.appendChild(clone);
-      try {
-        if (mode === "blob") {
-          return await toBlob(clone, { backgroundColor: "#1e1e20" });
-        }
-        return await toPng(clone, { backgroundColor: "#1e1e20" });
-      } finally {
-        document.body.removeChild(clone);
+      const opts = {
+        backgroundColor: "#1e1e20",
+        style: {
+          padding: "20px",
+          width: "640px",
+          maxWidth: "none",
+          overflow: "visible",
+        },
+      };
+      if (mode === "blob") {
+        return await toBlob(contentRef.current, opts);
       }
+      return await toPng(contentRef.current, opts);
     },
     [contentRef],
   );
