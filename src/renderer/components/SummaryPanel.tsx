@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { toPng, toBlob } from "html-to-image";
 import type { LlmProvider } from "./SettingsModal";
 
 export interface PromptType {
@@ -85,6 +86,26 @@ function formatTime(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function stripThinking(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+}
+
+function hasThinking(content: string): boolean {
+  return /<think>[\s\S]*?<\/think>/.test(content);
+}
+
+function generateWordHtml(htmlContent: string): string {
+  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset="utf-8"><style>
+body { font-family: 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6; color: #333; }
+h1,h2,h3,h4 { margin: 16px 0 8px; } ul,ol { padding-left: 24px; }
+blockquote { border-left: 3px solid #ccc; padding-left: 12px; color: #666; }
+code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-size: 13px; }
+pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; }
+table { border-collapse: collapse; } th,td { border: 1px solid #ddd; padding: 8px; }
+</style></head><body>${htmlContent}</body></html>`;
 }
 
 export function SummaryPanel({
@@ -857,6 +878,13 @@ export function SummaryPanel({
         .modal-input:focus {
           border-color: var(--accent) !important;
         }
+        .export-menu-trigger:hover {
+          opacity: 1 !important;
+          color: var(--accent) !important;
+        }
+        .export-menu-item:hover {
+          background-color: var(--bg-tertiary) !important;
+        }
         .streaming-cursor {
           display: inline-block;
           width: 6px;
@@ -1071,6 +1099,166 @@ function VoiceSelect({
   );
 }
 
+function ExportMenu({
+  content,
+  contentRef,
+  onClose,
+}: {
+  readonly content: string;
+  readonly contentRef: React.RefObject<HTMLDivElement>;
+  readonly onClose: () => void;
+}): React.ReactElement {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  const handleCopyText = useCallback(async () => {
+    const plain = stripMarkdown(stripThinking(content));
+    await navigator.clipboard.writeText(plain);
+    onClose();
+  }, [content, onClose]);
+
+  const handleCopyImage = useCallback(async () => {
+    if (!contentRef.current) return;
+    try {
+      const blob = await toBlob(contentRef.current, {
+        backgroundColor: "#1e1e20",
+        style: { padding: "16px" },
+        filter: (node: HTMLElement) =>
+          !node.classList?.contains("export-menu-trigger"),
+      });
+      if (blob) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+      }
+    } catch (err) {
+      console.error("Copy image failed:", err);
+    }
+    onClose();
+  }, [contentRef, onClose]);
+
+  const handleExportImage = useCallback(async () => {
+    if (!contentRef.current) return;
+    try {
+      const dataUrl = await toPng(contentRef.current, {
+        backgroundColor: "#1e1e20",
+        style: { padding: "16px" },
+        filter: (node: HTMLElement) =>
+          !node.classList?.contains("export-menu-trigger"),
+      });
+      const byteString = atob(dataUrl.split(",")[1]);
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      await window.capty.saveBuffer("summary.png", ia, [
+        { name: "PNG Image", extensions: ["png"] },
+      ]);
+    } catch (err) {
+      console.error("Export image failed:", err);
+    }
+    onClose();
+  }, [contentRef, onClose]);
+
+  const handleExportMarkdown = useCallback(async () => {
+    const md = stripThinking(content);
+    await window.capty.saveFile("summary.md", md);
+    onClose();
+  }, [content, onClose]);
+
+  const handleExportMarkdownWithThinking = useCallback(async () => {
+    await window.capty.saveFile("summary.md", content);
+    onClose();
+  }, [content, onClose]);
+
+  const handleExportWord = useCallback(async () => {
+    const cleanMd = stripThinking(content);
+    const html = renderMarkdown(cleanMd);
+    const wordHtml = generateWordHtml(html);
+    const encoder = new TextEncoder();
+    const data = encoder.encode(wordHtml);
+    await window.capty.saveBuffer("summary.doc", data, [
+      { name: "Word Document", extensions: ["doc"] },
+    ]);
+    onClose();
+  }, [content, onClose]);
+
+  const showThinking = hasThinking(content);
+
+  const menuItems = [
+    { label: "Copy as Plain Text", icon: "📋", onClick: handleCopyText },
+    { label: "Copy as Image", icon: "🖼", onClick: handleCopyImage },
+    { label: "Export as Image", icon: "💾", onClick: handleExportImage },
+    { label: "Export as Markdown", icon: "📝", onClick: handleExportMarkdown },
+    ...(showThinking
+      ? [
+          {
+            label: "Export as Markdown (with thinking)",
+            icon: "🧠",
+            onClick: handleExportMarkdownWithThinking,
+          },
+        ]
+      : []),
+    { label: "Export as Word", icon: "📄", onClick: handleExportWord },
+  ];
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        right: 0,
+        marginBottom: "4px",
+        backgroundColor: "var(--bg-secondary)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        padding: "4px 0",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+        zIndex: 50,
+        minWidth: "220px",
+        backdropFilter: "blur(12px)",
+      }}
+    >
+      {menuItems.map((item) => (
+        <button
+          key={item.label}
+          onClick={item.onClick}
+          className="export-menu-item"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            width: "100%",
+            padding: "6px 12px",
+            fontSize: "12px",
+            color: "var(--text-primary)",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            textAlign: "left",
+            transition: "background-color 0.1s ease",
+          }}
+        >
+          <span style={{ fontSize: "13px", flexShrink: 0 }}>{item.icon}</span>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Stop all streaming source nodes and reset streaming state. */
 function stopStreamPlayback(): void {
   for (const node of globalStreamSourceNodes) {
@@ -1143,6 +1331,9 @@ function SummaryCard({
     () => renderMarkdown(summary.content),
     [summary.content],
   );
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">(
     "idle",
@@ -1371,6 +1562,7 @@ function SummaryCard({
       }}
     >
       <div
+        ref={contentRef}
         className="summary-md"
         style={{
           fontSize: "13px",
@@ -1488,7 +1680,46 @@ function SummaryCard({
           {providerName ? `${providerName} · ` : ""}
           {summary.model_name}
         </span>
-        <span>{formatTime(summary.created_at)}</span>
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            position: "relative",
+          }}
+        >
+          <button
+            onClick={() => setShowExportMenu((v) => !v)}
+            title="Export"
+            className="export-menu-trigger"
+            style={{
+              padding: "2px 4px",
+              fontSize: "12px",
+              backgroundColor: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: showExportMenu ? "var(--accent)" : "var(--text-muted)",
+              opacity: showExportMenu ? 1 : 0.5,
+              transition: "opacity 0.15s ease, color 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "18px",
+              height: "18px",
+              flexShrink: 0,
+            }}
+          >
+            ⬇
+          </button>
+          {showExportMenu && (
+            <ExportMenu
+              content={summary.content}
+              contentRef={contentRef as React.RefObject<HTMLDivElement>}
+              onClose={() => setShowExportMenu(false)}
+            />
+          )}
+          {formatTime(summary.created_at)}
+        </span>
       </div>
     </div>
   );

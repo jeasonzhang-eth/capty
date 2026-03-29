@@ -2127,4 +2127,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       return result.filePath;
     },
   );
+
+  // Export save buffer (binary data: images, Word docs)
+  ipcMain.handle(
+    "export:save-buffer",
+    async (
+      _event,
+      defaultName: string,
+      data: Uint8Array,
+      filters: { name: string; extensions: string[] }[],
+    ) => {
+      const win = getMainWindow();
+      if (!win) return null;
+      const result = await dialog.showSaveDialog(win, {
+        defaultPath: defaultName,
+        filters,
+      });
+      if (result.canceled || !result.filePath) return null;
+      fs.writeFileSync(result.filePath, Buffer.from(data));
+      return result.filePath;
+    },
+  );
 }

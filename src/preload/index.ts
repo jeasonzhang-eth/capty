@@ -197,6 +197,11 @@ const api = {
   // Export save file
   saveFile: (defaultName: string, content: string) =>
     ipcRenderer.invoke("export:save-file", defaultName, content),
+  saveBuffer: (
+    defaultName: string,
+    data: Uint8Array,
+    filters: { name: string; extensions: string[] }[],
+  ) => ipcRenderer.invoke("export:save-buffer", defaultName, data, filters),
 
   // TTS
   checkTtsProvider: () =>
