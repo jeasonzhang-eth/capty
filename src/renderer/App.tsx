@@ -1717,11 +1717,6 @@ function App(): React.JSX.Element {
           }}
         >
           <PlaybackBar
-            sessionTitle={
-              store.sessions.find(
-                (s: { id: number }) => s.id === audioPlayer.playingSessionId,
-              )?.title ?? "Unknown"
-            }
             isPlaying={audioPlayer.isPlaying}
             currentTime={audioPlayer.currentTime}
             duration={audioPlayer.duration}
@@ -1732,8 +1727,8 @@ function App(): React.JSX.Element {
             onResume={audioPlayer.resume}
             onSeek={audioPlayer.seek}
             onStop={audioPlayer.stop}
-            onSkipBackward={() => audioPlayer.skipBackward(10)}
-            onSkipForward={() => audioPlayer.skipForward(10)}
+            onSkipBackward={() => audioPlayer.skipBackward(15)}
+            onSkipForward={() => audioPlayer.skipForward(15)}
             onPlaybackRateChange={audioPlayer.setPlaybackRate}
           />
         </div>
