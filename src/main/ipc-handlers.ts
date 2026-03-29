@@ -1662,21 +1662,47 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         .replace("{{text}}", text);
 
       const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-      const resp = await net.fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${provider.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: provider.model,
-          messages: [{ role: "user", content: prompt }],
-          stream: true,
-        }),
-        signal: AbortSignal.timeout(30000), // 30s for initial connection
-      });
+
+      // Use AbortController with manual idle-timeout (reset on each chunk)
+      const ac = new AbortController();
+      const IDLE_TIMEOUT = 60000; // 60s without any data = abort
+      let idleTimer: ReturnType<typeof setTimeout> | null = setTimeout(
+        () => ac.abort(),
+        IDLE_TIMEOUT,
+      );
+      const resetIdle = (): void => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => ac.abort(), IDLE_TIMEOUT);
+      };
+      const clearIdle = (): void => {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+      };
+
+      let resp: Response;
+      try {
+        resp = await net.fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${provider.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: provider.model,
+            messages: [{ role: "user", content: prompt }],
+            stream: true,
+          }),
+          signal: ac.signal,
+        });
+      } catch (err) {
+        clearIdle();
+        throw err;
+      }
 
       if (!resp.ok) {
+        clearIdle();
         const body = await resp.text();
         throw new Error(`Translate API error (${resp.status}): ${body}`);
       }
@@ -1684,6 +1710,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       // Read SSE stream — accumulate content tokens
       const reader = resp.body?.getReader();
       if (!reader) {
+        clearIdle();
         throw new Error("No response body from translate API");
       }
       const decoder = new TextDecoder();
@@ -1695,14 +1722,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           const { done, value } = await reader.read();
           if (done) break;
 
+          resetIdle(); // got data — reset idle timer
+
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-            const payload = trimmed.slice(6);
+            const trimmedLine = line.trim();
+            if (!trimmedLine || !trimmedLine.startsWith("data: ")) continue;
+            const payload = trimmedLine.slice(6);
             if (payload === "[DONE]") continue;
 
             try {
@@ -1717,6 +1746,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           }
         }
       } finally {
+        clearIdle();
         reader.releaseLock();
       }
 
