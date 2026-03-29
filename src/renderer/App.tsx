@@ -1178,16 +1178,12 @@ function App(): React.JSX.Element {
 
       const segments = store.segments;
       const total = segments.length;
-      const newTranslations: Record<number, string> = { ...translations };
+      const newTranslations: Record<number, string> = {};
+      setTranslations(newTranslations);
 
       try {
         for (let i = 0; i < total; i++) {
           const seg = segments[i];
-          // Skip if already translated for this language
-          if (newTranslations[seg.id]) {
-            setTranslationProgress(Math.round(((i + 1) / total) * 100));
-            continue;
-          }
 
           const result = await window.capty.translate(
             providerId,
@@ -1222,7 +1218,6 @@ function App(): React.JSX.Element {
       selectedTranslateLlmProviderId,
       llmProviders,
       translatePrompt,
-      translations,
     ],
   );
 
