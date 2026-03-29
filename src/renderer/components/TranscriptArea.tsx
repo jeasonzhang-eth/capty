@@ -349,7 +349,7 @@ export function TranscriptArea({
         </div>
       )}
 
-      {isPlayback && segments.length > 0 ? (
+      {isPlayback && !isRecording && segments.length > 0 ? (
         <Lrc
           lrc={lrcString}
           currentMillisecond={currentMillisecond}
@@ -368,41 +368,58 @@ export function TranscriptArea({
             padding: "20px 28px",
           }}
         >
-          {segments.map((seg) => (
-            <div
-              key={seg.id}
-              className="fade-in-up"
-              style={{
-                marginBottom: "2px",
-                padding: "10px 16px",
-                borderRadius: "8px",
-                borderBottom: "1px solid var(--border)",
-                borderLeft: "3px solid transparent",
-                opacity: 0.7,
-              }}
-            >
-              <span
+          {segments.map((seg) => {
+            const isActive =
+              playbackTime !== null &&
+              playbackTime >= seg.start_time &&
+              playbackTime < seg.end_time;
+            return (
+              <div
+                key={seg.id}
+                className="fade-in-up"
+                onClick={
+                  onSeekToTime ? () => onSeekToTime(seg.start_time) : undefined
+                }
                 style={{
-                  fontSize: "11px",
-                  color: "var(--accent)",
-                  marginRight: "8px",
-                  fontFamily: "'JetBrains Mono', monospace",
+                  marginBottom: "2px",
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  borderBottom: "1px solid var(--border)",
+                  borderLeft: isActive
+                    ? "3px solid var(--accent)"
+                    : "3px solid transparent",
+                  backgroundColor: isActive
+                    ? "rgba(245, 166, 35, 0.06)"
+                    : "transparent",
+                  cursor: onSeekToTime ? "pointer" : "default",
+                  transition:
+                    "background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease",
+                  opacity: isActive ? 1 : 0.7,
                 }}
               >
-                {formatTime(seg.start_time)}
-              </span>
-              <span
-                style={{
-                  fontSize: "15px",
-                  lineHeight: 1.7,
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {seg.text}
-              </span>
-            </div>
-          ))}
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--accent)",
+                    marginRight: "8px",
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                >
+                  {formatTime(seg.start_time)}
+                </span>
+                <span
+                  style={{
+                    fontSize: "15px",
+                    lineHeight: 1.7,
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {seg.text}
+                </span>
+              </div>
+            );
+          })}
 
           {isRecording && partialText && (
             <div
