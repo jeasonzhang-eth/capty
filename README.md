@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (66)
+
+- **音频下载管理器集成（App 层）** — 在 `App.tsx` 中集成完整的音频下载管理功能：全局状态管理（下载列表、对话框显隐、badge 指示器）；实时进度监听（`onAudioDownloadProgress` 事件驱动状态更新）；崩溃恢复（启动时检测中断的下载并自动弹出管理器）；重试触发监听（`onAudioDownloadRetryTrigger`）；下载/取消/重试/删除/跳转会话等完整回调链；HistoryPanel 传递 `onDownloadAudio` 和 `downloadBadge` 属性；DownloadManagerDialog 作为模态窗口渲染
+
 ### 2026-03-31 (65)
 
 - **音频下载管理器对话框** — 新增 `DownloadManagerDialog` React 组件：URL 输入框支持粘贴 YouTube/Bilibili 链接一键下载；下载列表按状态排序（活跃任务置顶）；实时显示各阶段状态（获取信息 → 下载中含进度条/速度/ETA → 转换 WAV → 完成/失败/已取消）；失败/取消项支持重试和删除；已完成项可点击跳转对应会话；Portal 渲染模态窗口，毛玻璃暗色风格
