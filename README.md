@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-30 (60)
+
+- **LLM 多模型数据模型** — LlmProvider 新增 `models[]` 字段支持每个 Provider 存储多个模型；AppConfig 新增 `selectedSummaryModel` / `selectedTranslateModel` / `selectedRapidModel` 三个独立模型选择字段（替代单一 `selectedLlmProviderId`）；readConfig 自动迁移旧配置（从 `model` 填充 `models[]`，从 `selectedLlmProviderId` 迁移到 `selectedSummaryModel`）
+
 ### 2026-03-30 (59)
 
 - **翻译鲁棒性增强** — 翻译 API 从 SSE 流式改为非流式模式（`stream: false`），简化逻辑，提高与各类模型的兼容性；单段翻译失败时自动跳过（控制台 warn），不中断整个翻译流程；新增停止翻译功能，翻译中打开 Translate 菜单显示红色 "Stop Translation (xx%)" 按钮，点击即刻终止翻译循环，已翻译段落保留

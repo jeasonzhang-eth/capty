@@ -13,7 +13,8 @@ export interface LlmProvider {
   readonly name: string;
   readonly baseUrl: string;
   readonly apiKey: string;
-  readonly model: string;
+  readonly model: string; // kept for migration compat
+  readonly models: string[]; // full model list
   readonly isPreset: boolean;
 }
 
@@ -76,6 +77,9 @@ export interface AppConfig {
   readonly windowBounds: WindowBounds | null;
   readonly llmProviders: LlmProvider[];
   readonly selectedLlmProviderId: string | null;
+  readonly selectedSummaryModel: { providerId: string; model: string } | null;
+  readonly selectedTranslateModel: { providerId: string; model: string } | null;
+  readonly selectedRapidModel: { providerId: string; model: string } | null;
   readonly promptTypes: PromptType[];
   readonly zoomFactor: number | null;
   readonly historyPanelWidth: number | null;
@@ -118,6 +122,9 @@ const DEFAULT_CONFIG: AppConfig = {
   windowBounds: null,
   llmProviders: [],
   selectedLlmProviderId: null,
+  selectedSummaryModel: null,
+  selectedTranslateModel: null,
+  selectedRapidModel: null,
   promptTypes: [],
   zoomFactor: null,
   historyPanelWidth: null,
@@ -210,10 +217,70 @@ export function readConfig(configDir: string): AppConfig {
       return migrated;
     }
 
-    return {
+    // Migrate LLM providers: add models[] from model
+    const migratedConfig = {
       ...DEFAULT_CONFIG,
       ...(parsed as Partial<AppConfig>),
     };
+    if (migratedConfig.llmProviders) {
+      let needsMigration = false;
+      const migratedProviders = migratedConfig.llmProviders.map((p: any) => {
+        if (!p.models || p.models.length === 0) {
+          if (p.model) {
+            needsMigration = true;
+            return { ...p, models: [p.model] };
+          }
+          return { ...p, models: [] };
+        }
+        return p;
+      });
+      if (needsMigration) {
+        migratedConfig.llmProviders = migratedProviders;
+      }
+    }
+
+    // Migrate selectedLlmProviderId → selectedSummaryModel
+    if (
+      (parsed as any).selectedLlmProviderId &&
+      !migratedConfig.selectedSummaryModel
+    ) {
+      const pid = (parsed as any).selectedLlmProviderId as string;
+      const prov = migratedConfig.llmProviders.find((p: any) => p.id === pid);
+      if (prov) {
+        migratedConfig.selectedSummaryModel = {
+          providerId: prov.id,
+          model: prov.model || prov.models?.[0] || "",
+        };
+      }
+    }
+    if (
+      (parsed as any).selectedTranslateLlmProviderId &&
+      !migratedConfig.selectedTranslateModel
+    ) {
+      const pid = (parsed as any).selectedTranslateLlmProviderId as string;
+      const prov = migratedConfig.llmProviders.find((p: any) => p.id === pid);
+      if (prov) {
+        migratedConfig.selectedTranslateModel = {
+          providerId: prov.id,
+          model: prov.model || prov.models?.[0] || "",
+        };
+      }
+    }
+    if (
+      (parsed as any).selectedRapidLlmProviderId &&
+      !migratedConfig.selectedRapidModel
+    ) {
+      const pid = (parsed as any).selectedRapidLlmProviderId as string;
+      const prov = migratedConfig.llmProviders.find((p: any) => p.id === pid);
+      if (prov) {
+        migratedConfig.selectedRapidModel = {
+          providerId: prov.id,
+          model: prov.model || prov.models?.[0] || "",
+        };
+      }
+    }
+
+    return migratedConfig;
   } catch {
     return { ...DEFAULT_CONFIG };
   }
