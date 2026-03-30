@@ -1855,6 +1855,9 @@ function App(): React.JSX.Element {
                   handleLoadTranslations(store.currentSessionId!, lang)
               : undefined
           }
+          llmProviders={llmProviders}
+          selectedTranslateProviderId={selectedTranslateLlmProviderId}
+          onChangeTranslateProvider={handleChangeTranslateLlmProvider}
         />
         <SummaryPanel
           summaries={summaries}

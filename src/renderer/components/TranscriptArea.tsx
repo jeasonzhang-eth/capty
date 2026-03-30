@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { Lrc, type LrcLine } from "react-lrc";
 import { segmentsToLrc } from "../utils/lrcConverter";
+import type { LlmProvider } from "./SettingsModal";
 
 interface Segment {
   readonly id: number;
@@ -30,6 +31,9 @@ interface TranscriptAreaProps {
   readonly translations: Readonly<Record<number, string>>;
   readonly activeTranslationLang: string | null;
   readonly onLoadTranslations?: (targetLanguage: string) => void;
+  readonly llmProviders: readonly LlmProvider[];
+  readonly selectedTranslateProviderId: string | null;
+  readonly onChangeTranslateProvider: (providerId: string) => void;
 }
 
 /* ─── Translate Dropdown Menu ─── */
@@ -47,6 +51,9 @@ interface TranslateMenuProps {
   readonly onTranslate: () => void;
   readonly onStopTranslation: (() => void) | null;
   readonly onClose: () => void;
+  readonly providers: readonly LlmProvider[];
+  readonly selectedProviderId: string;
+  readonly onChangeProvider: (providerId: string) => void;
 }
 
 function TranslateMenu({
@@ -60,9 +67,13 @@ function TranslateMenu({
   onTranslate,
   onStopTranslation,
   onClose,
+  providers,
+  selectedProviderId,
+  onChangeProvider,
 }: TranslateMenuProps): React.ReactElement {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showLangSub, setShowLangSub] = useState(false);
+  const [showModelSub, setShowModelSub] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
@@ -204,6 +215,107 @@ function TranslateMenu({
           </div>
         )}
       </div>
+
+      {/* 1b. Translate Model — with submenu */}
+      {providers.length > 0 && (
+        <div
+          style={{ position: "relative" }}
+          onMouseEnter={() => setShowModelSub(true)}
+          onMouseLeave={() => setShowModelSub(false)}
+        >
+          <button
+            style={itemStyle}
+            onMouseEnter={handleItemHover}
+            onMouseLeave={handleItemLeave}
+          >
+            <span>Translate Model</span>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                maxWidth: "120px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {providers.find((p) => p.id === selectedProviderId)?.model ??
+                "Select"}
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                <path
+                  d="M3 1.5L5.5 4L3 6.5"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          {showModelSub && (
+            <div
+              style={{
+                position: "absolute",
+                left: "100%",
+                top: "-1px",
+                marginLeft: "2px",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                background: "rgba(28, 28, 31, 0.88)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                boxShadow:
+                  "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04)",
+                overflow: "hidden",
+                minWidth: "180px",
+                maxWidth: "280px",
+                zIndex: 101,
+              }}
+            >
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    onChangeProvider(p.id);
+                    setShowModelSub(false);
+                  }}
+                  style={itemStyle}
+                  onMouseEnter={handleItemHover}
+                  onMouseLeave={handleItemLeave}
+                >
+                  <span
+                    style={{
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {p.name} ({p.model})
+                  </span>
+                  {selectedProviderId === p.id && (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--accent)"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* separator */}
       <div
@@ -438,6 +550,9 @@ export function TranscriptArea({
   translations,
   activeTranslationLang,
   onLoadTranslations,
+  llmProviders,
+  selectedTranslateProviderId,
+  onChangeTranslateProvider,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -478,6 +593,14 @@ export function TranscriptArea({
     setTargetLanguageRaw(lang);
     localStorage.setItem("capty:targetLanguage", lang);
   }, []);
+
+  // Configured LLM providers (have apiKey + model)
+  const configuredProviders = useMemo(
+    () => llmProviders.filter((p) => p.apiKey && p.model),
+    [llmProviders],
+  );
+  const effectiveProviderId =
+    selectedTranslateProviderId ?? configuredProviders[0]?.id ?? "";
 
   const hasTranslations = Object.keys(translations).length > 0;
   const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -694,6 +817,9 @@ export function TranscriptArea({
                     onTranslate={() => onTranslate(targetLanguage)}
                     onStopTranslation={onStopTranslation}
                     onClose={() => setShowTranslateMenu(false)}
+                    providers={configuredProviders}
+                    selectedProviderId={effectiveProviderId}
+                    onChangeProvider={onChangeTranslateProvider}
                   />
                 )}
                 <button
