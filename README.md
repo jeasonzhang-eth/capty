@@ -28,6 +28,12 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）；翻译 API 采用非流式模式（稳定兼容各类模型）；3 路并发翻译，大幅提升多段落翻译速度；单段翻译失败自动跳过不影响后续；支持翻译中途停止（Stop Translation 按钮，已翻译段落保留）；支持多会话并发翻译，各 session 翻译进度独立，切换会话不中断后台翻译
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
+- **音频下载** — 通过 yt-dlp 从 YouTube / Bilibili 下载音频，支持：
+  - **Download Manager 弹窗** — 输入 URL 一键下载，实时进度条（百分比/速度/ETA）
+  - **完整下载历史** — 所有下载记录持久化，支持重试、取消、删除
+  - **崩溃恢复** — 应用异常退出后重启自动检测未完成下载，提示用户继续或放弃
+  - **后台下载** — 关闭弹窗不中断下载，侧边栏按钮角标显示下载状态（橙色=进行中，红色=失败）
+  - **自动转换** — 下载完成后自动通过 ffmpeg 转换为 16kHz mono WAV，与录音格式一致
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
@@ -128,6 +134,7 @@ src/
 │   │   ├── PlaybackBar.tsx
 │   │   ├── SettingsModal.tsx
 │   │   ├── SummaryPanel.tsx
+│   │   ├── DownloadManagerDialog.tsx
 │   │   └── SetupWizard.tsx
 │   ├── hooks/           # 自定义 Hooks
 │   │   ├── useAudioCapture.ts
@@ -308,29 +315,16 @@ pytest
 
 ## 更新日志
 
-### 2026-03-31 (66)
+### 2026-03-31 (61)
 
-- **音频下载管理器集成（App 层）** — 在 `App.tsx` 中集成完整的音频下载管理功能：全局状态管理（下载列表、对话框显隐、badge 指示器）；实时进度监听（`onAudioDownloadProgress` 事件驱动状态更新）；崩溃恢复（启动时检测中断的下载并自动弹出管理器）；重试触发监听（`onAudioDownloadRetryTrigger`）；下载/取消/重试/删除/跳转会话等完整回调链；HistoryPanel 传递 `onDownloadAudio` 和 `downloadBadge` 属性；DownloadManagerDialog 作为模态窗口渲染
-
-### 2026-03-31 (65)
-
-- **音频下载管理器对话框** — 新增 `DownloadManagerDialog` React 组件：URL 输入框支持粘贴 YouTube/Bilibili 链接一键下载；下载列表按状态排序（活跃任务置顶）；实时显示各阶段状态（获取信息 → 下载中含进度条/速度/ETA → 转换 WAV → 完成/失败/已取消）；失败/取消项支持重试和删除；已完成项可点击跳转对应会话；Portal 渲染模态窗口，毛玻璃暗色风格
-
-### 2026-03-31 (64)
-
-- **音频下载按钮（HistoryPanel）** — HistoryPanel 侧边栏新增 "Download Audio" 按钮（位于 Upload Audio 按钮下方），支持 badge 圆点指示器（橙色=下载中，红色=下载失败），点击打开下载管理器对话框；新增 `onDownloadAudio` 回调和 `downloadBadge` 属性
-
-### 2026-03-31 (63)
-
-- **音频下载功能（Preload API）** — 在 preload 层暴露 yt-dlp 音频下载 IPC 桥接方法：`downloadAudio`（启动下载）、`cancelAudioDownload`（取消下载）、`retryAudioDownload`（重试下载）、`getAudioDownloads`（列出下载记录）、`removeAudioDownload`（删除记录）、`onAudioDownloadProgress`（实时进度回调，含阶段/标题/百分比/速度/ETA）、`onAudioDownloadRetryTrigger`（重试触发事件），所有事件监听器返回清理函数
-
-### 2026-03-30 (62)
-
-- **音频下载功能（IPC 层）** — 新增 yt-dlp 音频下载 IPC handlers：`audio:download-start`（异步启动下载，自动获取标题、下载音频、转换 WAV、创建会话）、`audio:download-cancel`（终止进程并清理临时文件）、`audio:download-retry`（删除旧记录并触发重新下载）、`audio:download-list`（列出所有下载记录）、`audio:download-remove`（删除记录及临时文件）；下载过程通过 `audio:download-progress` 事件实时推送进度（fetching-info → downloading → converting → completed/error）
-
-### 2026-03-30 (61)
-
-- **音频下载功能（数据层）** — 新增 `downloads` 数据库表及 CRUD 辅助函数（`createDownload`、`getDownload`、`listDownloads`、`updateDownload`、`deleteDownload`、`listInterruptedDownloads`），用于跟踪 yt-dlp 音频下载状态（URL、进度、速度、ETA、错误信息等），支持异常中断后恢复查询
+- **音频下载 (yt-dlp)** — 新增 Download Audio 按钮 + Download Manager 弹窗，从 YouTube/Bilibili 下载音频
+  - 输入 URL → 获取视频标题 → 下载最佳音频 → 转换 WAV → 创建 session
+  - 实时进度条（百分比、速度、ETA），解析 yt-dlp stdout
+  - 完整下载历史（downloads 表），支持重试/取消/删除
+  - 崩溃恢复：应用重启后自动检测中断下载，提示继续或放弃
+  - 后台下载：关闭弹窗不中断，按钮角标指示状态（橙色=进行中，红色=失败）
+  - 已完成下载可点击跳转到对应 session
+  - 依赖 yt-dlp（用户自行安装），未找到时提示 `brew install yt-dlp`
 
 ### 2026-03-30 (60)
 
