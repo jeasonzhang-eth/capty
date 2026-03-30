@@ -471,7 +471,13 @@ export function TranscriptArea({
     setShowTranslationsRaw(stored !== null ? stored === "true" : true);
   }, [sessionId]);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [targetLanguage, setTargetLanguage] = useState<string>("中文");
+  const [targetLanguage, setTargetLanguageRaw] = useState<string>(
+    () => localStorage.getItem("capty:targetLanguage") ?? "中文",
+  );
+  const setTargetLanguage = useCallback((lang: string) => {
+    setTargetLanguageRaw(lang);
+    localStorage.setItem("capty:targetLanguage", lang);
+  }, []);
 
   const hasTranslations = Object.keys(translations).length > 0;
   const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();

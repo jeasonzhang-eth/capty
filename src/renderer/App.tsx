@@ -209,9 +209,17 @@ function App(): React.JSX.Element {
       : 0;
   // Map: segmentId → translated text (for current session + language)
   const [translations, setTranslations] = useState<Record<number, string>>({});
-  const [activeTranslationLang, setActiveTranslationLang] = useState<
+  const [activeTranslationLang, setActiveTranslationLangRaw] = useState<
     string | null
-  >(null);
+  >(() => localStorage.getItem("capty:activeTranslationLang"));
+  const setActiveTranslationLang = useCallback((lang: string | null) => {
+    setActiveTranslationLangRaw(lang);
+    if (lang) {
+      localStorage.setItem("capty:activeTranslationLang", lang);
+    } else {
+      localStorage.removeItem("capty:activeTranslationLang");
+    }
+  }, []);
   const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
     null,
   );
