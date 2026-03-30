@@ -14,8 +14,8 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - 每个 Tab 的生成结果独立存储和展示，支持 Markdown 渲染
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
-  - SummaryPanel 可选择 provider、拖拽调整宽度
-- **设置页面** — macOS 系统设置风格左侧边栏导航，固定高度（85vh）弹窗，5 个页面：General（数据目录、配置目录）、Default Models（集中管理默认 ASR 模型、TTS 模型/声音、LLM Provider，选择重启后保留）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、LLM Providers（LLM provider 配置与测试）
+  - SummaryPanel 可选择 provider + model、拖拽调整宽度
+- **设置页面** — macOS 系统设置风格左侧边栏导航，固定高度（85vh）弹窗，5 个页面：General（数据目录、配置目录）、Default Models（统一模型选择器，Summary / Translate / Rapid Rename 各自独立选择 Provider + Model）、ASR Providers（Cherry Studio 风格展开/收起 Provider 卡片，Sidecar 卡片含 Model Market 入口）、TTS Providers（TTS 服务配置与模型管理）、LLM Providers（每个 Provider 支持多模型，Fetch Models 从 API 获取 + 手动添加，API Key 可选）
 - **麦克风记忆** — 自动记住上次选择的麦克风，重启后恢复；外接设备拔出时自动回退默认
 - **模型市场** — Obsidian 社区插件风格独立全屏模态框：Settings 中 Sidecar 卡片仅显示 "Model Market" 入口 + 已安装数量 + "Browse" 按钮；点击 Browse 弹出 720px 宽模态框，分三组显示（Installed / Recommended / Search Results）；推荐 4 个 Qwen3-ASR（0.6B/1.7B × 4bit/8bit）+ 2 个 Whisper Large V3 Turbo（4bit/8bit），全部 safetensors 格式；支持 HuggingFace 搜索、下载、切换、删除；可配置 HuggingFace 镜像地址
 - **下载管理器** — 模块化下载架构（DownloadManager → ModelDownloadTask → FileDownloadTask）支持：
@@ -308,17 +308,14 @@ pytest
 
 ## 更新日志
 
-### 2026-03-30 (62)
-
-- **App.tsx 状态管理升级为 Provider+Model 选择** — 三个功能维度的 LLM 选择从单一 `selectedXxxProviderId`（仅存 provider ID）升级为 `{ providerId, model }` 对象（`selectedSummaryModel` / `selectedTranslateModel` / `selectedRapidModel`）；所有 handler（`handleSummarize`、`handleTranslate`、`handleAiRename`）均更新为向 IPC 传递显式 model 参数；provider 查找逻辑从检查 `apiKey && model` 改为检查 `models.length > 0`（兼容无 API Key 的本地服务）；新增 `useEffect` 在 provider 列表变化时自动校验已选模型（provider 被删除则清空，model 被移除则回退到首个可用模型）
-
-### 2026-03-30 (61)
-
-- **LLM 模型列表获取与显式模型参数** — 新增 `llm:fetch-models` IPC 接口，支持从 Provider 的 `/v1/models` 和 `/models` 端点获取可用模型列表（兼容 OpenAI 和数组两种响应格式）；`llm:summarize`、`llm:generate-title`、`llm:translate` 三个 IPC handler 均改为接受显式 `model` 参数（不再从 provider config 读取），为多模型独立选择做准备；Authorization header 改为条件式（支持无 API Key 的 Provider）
-
 ### 2026-03-30 (60)
 
-- **LLM 多模型数据模型** — LlmProvider 新增 `models[]` 字段支持每个 Provider 存储多个模型；AppConfig 新增 `selectedSummaryModel` / `selectedTranslateModel` / `selectedRapidModel` 三个独立模型选择字段（替代单一 `selectedLlmProviderId`）；readConfig 自动迁移旧配置（从 `model` 填充 `models[]`，从 `selectedLlmProviderId` 迁移到 `selectedSummaryModel`）
+- **LLM 多模型 Provider 支持** — 每个 LLM Provider 现支持多个模型，新增 `models[]` 字段存储模型列表
+  - **Fetch Models 对话框** — 从 Provider 的 `/models` API 端点获取可用模型，ChatBox 风格分组浏览（>20 个按供应商分组折叠），搜索过滤，点击 "+" 即时添加
+  - **手动添加模型** — 对无 `/models` 端点的 Provider 支持手动输入模型名称
+  - **统一模型选择器** — Summary、Translate、Rapid Rename 三个功能独立选择 Provider + Model 组合（`UnifiedModelSelector` 下拉），按 Provider 分组显示所有模型
+  - **API Key 可选** — 支持 Ollama 等无需密钥的本地服务，Authorization header 仅在 apiKey 非空时发送
+  - **自动配置迁移** — 旧单模型配置自动迁移至 `models[]`，旧 `selectedLlmProviderId` 迁移至 `selectedSummaryModel` 等 `{ providerId, model }` 对象
 
 ### 2026-03-30 (59)
 
