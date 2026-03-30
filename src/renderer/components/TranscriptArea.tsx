@@ -450,6 +450,57 @@ export function TranscriptArea({
 
   const hasTranslations = Object.keys(translations).length > 0;
   const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  // Wrapper ref for floating scroll buttons (covers both Lrc and manual modes)
+  const scrollAreaWrapperRef = useRef<HTMLDivElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  // Find the actual scrollable element (scrollContainerRef for manual, or Lrc's inner div)
+  const getScrollEl = useCallback((): HTMLElement | null => {
+    if (scrollContainerRef.current) return scrollContainerRef.current;
+    // Lrc mode: find the scrollable child inside wrapper
+    return scrollAreaWrapperRef.current?.querySelector(
+      "[style*='overflow']",
+    ) as HTMLElement | null;
+  }, []);
+
+  const updateScrollButtons = useCallback(() => {
+    const el = getScrollEl();
+    if (!el) {
+      setShowScrollTop(false);
+      setShowScrollBottom(false);
+      return;
+    }
+    const threshold = 80;
+    setShowScrollTop(el.scrollTop > threshold);
+    setShowScrollBottom(
+      el.scrollHeight - el.scrollTop - el.clientHeight > threshold,
+    );
+  }, [getScrollEl]);
+
+  const handleScrollToTop = useCallback(() => {
+    getScrollEl()?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [getScrollEl]);
+
+  const handleScrollToBottom = useCallback(() => {
+    const el = getScrollEl();
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [getScrollEl]);
+
+  // Observe scroll position to show/hide buttons
+  useEffect(() => {
+    const el = getScrollEl();
+    if (!el) return;
+    const onScroll = (): void => updateScrollButtons();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    updateScrollButtons();
+    return () => el.removeEventListener("scroll", onScroll);
+  });
+
+  // Update buttons when segments change
+  useEffect(() => {
+    updateScrollButtons();
+  }, [segments.length, updateScrollButtons]);
 
   const isPlayback = playbackTime !== null;
 
@@ -741,64 +792,115 @@ export function TranscriptArea({
         </div>
       )}
 
-      {isPlayback && !isRecording && !isTranscribing && segments.length > 0 ? (
-        <Lrc
-          lrc={lrcString}
-          currentMillisecond={currentMillisecond}
-          lineRenderer={lineRenderer}
-          verticalSpace
-          recoverAutoScrollInterval={5000}
-          style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}
-        />
-      ) : (
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "20px 28px",
-          }}
-        >
-          {segments.map((seg) => {
-            const isActive =
-              playbackTime !== null &&
-              playbackTime >= seg.start_time &&
-              playbackTime < seg.end_time;
-            return (
-              <div
-                key={seg.id}
-                className="fade-in-up"
-                onClick={
-                  onSeekToTime ? () => onSeekToTime(seg.start_time) : undefined
-                }
-                style={{
-                  marginBottom: "2px",
-                  padding: "10px 16px",
-                  borderRadius: "8px",
-                  borderBottom: "1px solid var(--border)",
-                  borderLeft: isActive
-                    ? "3px solid var(--accent)"
-                    : "3px solid transparent",
-                  backgroundColor: isActive
-                    ? "rgba(245, 166, 35, 0.06)"
-                    : "transparent",
-                  cursor: onSeekToTime ? "pointer" : "default",
-                  transition:
-                    "background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease",
-                  opacity: isActive ? 1 : 0.7,
-                }}
-              >
-                <span
+      <div
+        ref={scrollAreaWrapperRef}
+        style={{
+          position: "relative",
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {isPlayback &&
+        !isRecording &&
+        !isTranscribing &&
+        segments.length > 0 ? (
+          <Lrc
+            lrc={lrcString}
+            currentMillisecond={currentMillisecond}
+            lineRenderer={lineRenderer}
+            verticalSpace
+            recoverAutoScrollInterval={5000}
+            style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}
+          />
+        ) : (
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "20px 28px",
+            }}
+          >
+            {segments.map((seg) => {
+              const isActive =
+                playbackTime !== null &&
+                playbackTime >= seg.start_time &&
+                playbackTime < seg.end_time;
+              return (
+                <div
+                  key={seg.id}
+                  className="fade-in-up"
+                  onClick={
+                    onSeekToTime
+                      ? () => onSeekToTime(seg.start_time)
+                      : undefined
+                  }
                   style={{
-                    fontSize: "11px",
-                    color: "var(--accent)",
-                    marginRight: "8px",
-                    fontFamily: "'JetBrains Mono', monospace",
+                    marginBottom: "2px",
+                    padding: "10px 16px",
+                    borderRadius: "8px",
+                    borderBottom: "1px solid var(--border)",
+                    borderLeft: isActive
+                      ? "3px solid var(--accent)"
+                      : "3px solid transparent",
+                    backgroundColor: isActive
+                      ? "rgba(245, 166, 35, 0.06)"
+                      : "transparent",
+                    cursor: onSeekToTime ? "pointer" : "default",
+                    transition:
+                      "background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease",
+                    opacity: isActive ? 1 : 0.7,
                   }}
                 >
-                  {formatTime(seg.start_time)}
-                </span>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--accent)",
+                      marginRight: "8px",
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                  >
+                    {formatTime(seg.start_time)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "15px",
+                      lineHeight: 1.7,
+                      fontFamily: "'DM Sans', sans-serif",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {seg.text}
+                  </span>
+                  {showTranslations && translations[seg.id] && (
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        fontSize: "14px",
+                        lineHeight: 1.6,
+                        fontFamily: "'DM Sans', sans-serif",
+                        color: "var(--accent)",
+                        opacity: 0.85,
+                      }}
+                    >
+                      {translations[seg.id]}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {isRecording && partialText && (
+              <div
+                style={{
+                  marginBottom: "12px",
+                  padding: "10px 16px",
+                  opacity: 0.7,
+                }}
+              >
                 <span
                   style={{
                     fontSize: "15px",
@@ -807,85 +909,156 @@ export function TranscriptArea({
                     color: "var(--text-primary)",
                   }}
                 >
-                  {seg.text}
+                  {partialText}
                 </span>
-                {showTranslations && translations[seg.id] && (
-                  <div
-                    style={{
-                      marginTop: "4px",
-                      fontSize: "14px",
-                      lineHeight: 1.6,
-                      fontFamily: "'DM Sans', sans-serif",
-                      color: "var(--accent)",
-                      opacity: 0.85,
-                    }}
-                  >
-                    {translations[seg.id]}
-                  </div>
-                )}
+                <span
+                  className="cursor-blink"
+                  style={{
+                    display: "inline-block",
+                    width: "2px",
+                    height: "16px",
+                    backgroundColor: "var(--accent)",
+                    marginLeft: "2px",
+                    verticalAlign: "text-bottom",
+                  }}
+                />
               </div>
-            );
-          })}
+            )}
 
-          {isRecording && partialText && (
-            <div
-              style={{
-                marginBottom: "12px",
-                padding: "10px 16px",
-                opacity: 0.7,
-              }}
-            >
-              <span
+            {!isRecording && segments.length === 0 && (
+              <div
                 style={{
-                  fontSize: "15px",
-                  lineHeight: 1.7,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: "var(--text-muted)",
+                  fontSize: "14px",
                   fontFamily: "'DM Sans', sans-serif",
-                  color: "var(--text-primary)",
                 }}
               >
-                {partialText}
-              </span>
-              <span
-                className="cursor-blink"
-                style={{
-                  display: "inline-block",
-                  width: "2px",
-                  height: "16px",
-                  backgroundColor: "var(--accent)",
-                  marginLeft: "2px",
-                  verticalAlign: "text-bottom",
-                }}
-              />
-            </div>
-          )}
+                Click{" "}
+                <span
+                  style={{
+                    color: "var(--accent)",
+                    margin: "0 5px",
+                    fontWeight: 600,
+                  }}
+                >
+                  REC
+                </span>{" "}
+                to begin transcription
+              </div>
+            )}
+          </div>
+        )}
 
-          {!isRecording && segments.length === 0 && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                color: "var(--text-muted)",
-                fontSize: "14px",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              Click{" "}
-              <span
+        {/* Floating scroll buttons */}
+        {segments.length > 0 && (showScrollTop || showScrollBottom) && (
+          <div
+            style={{
+              position: "absolute",
+              right: "16px",
+              bottom: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              zIndex: 10,
+            }}
+          >
+            {showScrollTop && (
+              <button
+                onClick={handleScrollToTop}
                 style={{
-                  color: "var(--accent)",
-                  margin: "0 5px",
-                  fontWeight: 600,
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "rgba(28, 28, 31, 0.85)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "color 0.15s, background-color 0.15s",
+                  padding: 0,
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-primary)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255,255,255,0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-muted)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(28, 28, 31, 0.85)";
+                }}
+                title="Scroll to top"
               >
-                REC
-              </span>{" "}
-              to begin transcription
-            </div>
-          )}
-        </div>
-      )}
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="18 15 12 9 6 15" />
+                </svg>
+              </button>
+            )}
+            {showScrollBottom && (
+              <button
+                onClick={handleScrollToBottom}
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "rgba(28, 28, 31, 0.85)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "color 0.15s, background-color 0.15s",
+                  padding: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--text-primary)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255,255,255,0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--text-muted)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(28, 28, 31, 0.85)";
+                }}
+                title="Scroll to bottom"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
