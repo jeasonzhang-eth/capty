@@ -25,7 +25,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
   - **HTTP Range 续传**：每个文件支持断点续传，网络中断后重新连接从已下载位置继续
   - **智能重试**：每个文件最多 3 次重试，指数退避（2s/4s/6s），30 秒无数据超时保护
   - **统一 UI**：ModelCard 实时显示下载进度 + 暂停/取消按钮，失败时显示错误信息 + 重试按钮
-- **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）；翻译 API 采用非流式模式（稳定兼容各类模型）；3 路并发翻译，大幅提升多段落翻译速度；单段翻译失败自动跳过不影响后续；支持翻译中途停止（Stop Translation 按钮，已翻译段落保留）
+- **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）；翻译 API 采用非流式模式（稳定兼容各类模型）；3 路并发翻译，大幅提升多段落翻译速度；单段翻译失败自动跳过不影响后续；支持翻译中途停止（Stop Translation 按钮，已翻译段落保留）；支持多会话并发翻译，各 session 翻译进度独立，切换会话不中断后台翻译
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
 - **窗口记忆** — 自动保存窗口位置和大小，重启后恢复
@@ -312,7 +312,7 @@ pytest
 
 - **翻译鲁棒性增强** — 翻译 API 从 SSE 流式改为非流式模式（`stream: false`），简化逻辑，提高与各类模型的兼容性；单段翻译失败时自动跳过（控制台 warn），不中断整个翻译流程；新增停止翻译功能，翻译中打开 Translate 菜单显示红色 "Stop Translation (xx%)" 按钮，点击即刻终止翻译循环，已翻译段落保留
 - **翻译持久化修复** — 切换会话时自动加载已有翻译（若当前有激活的翻译语言），不再丢失翻译内容
-- **切换会话自动停止翻译** — 翻译进行中切换到其他会话时，自动中止当前翻译并重置进度，避免旧翻译状态污染新会话
+- **多会话并发翻译** — 翻译状态重构为 per-session 独立架构（`translationProgressMap`），可同时翻译多个会话，各自进度互不影响；切换会话时翻译继续在后台运行，回切后自动显示最新进度；后台翻译完成后自动从 DB 刷新翻译结果
 
 ### 2026-03-29 (58)
 

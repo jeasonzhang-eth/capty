@@ -194,9 +194,19 @@ function App(): React.JSX.Element {
   const [translatePrompt, setTranslatePrompt] = useState(
     DEFAULT_TRANSLATE_PROMPT,
   );
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [translationProgress, setTranslationProgress] = useState(0);
-  const translateAbortRef = useRef(false);
+  // Per-session translation tracking: sessionId → progress%
+  const [translationProgressMap, setTranslationProgressMap] = useState<
+    Record<number, number>
+  >({});
+  const translateAbortMapRef = useRef<Record<number, boolean>>({});
+  // Derived: is the *current* session translating?
+  const isTranslating =
+    store.currentSessionId != null &&
+    store.currentSessionId in translationProgressMap;
+  const translationProgress =
+    store.currentSessionId != null
+      ? (translationProgressMap[store.currentSessionId] ?? 0)
+      : 0;
   // Map: segmentId → translated text (for current session + language)
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [activeTranslationLang, setActiveTranslationLang] = useState<
@@ -677,12 +687,6 @@ function App(): React.JSX.Element {
         ) {
           audioPlayer.stop();
         }
-        // Stop active translation if switching away
-        if (isTranslating) {
-          translateAbortRef.current = true;
-          setIsTranslating(false);
-          setTranslationProgress(0);
-        }
         store.setCurrentSessionId(sessionId);
         const segments = await window.capty.listSegments(sessionId);
         store.setSegments(
@@ -722,13 +726,7 @@ function App(): React.JSX.Element {
         console.error("Failed to load session:", err);
       }
     },
-    [
-      store,
-      activePromptType,
-      audioPlayer,
-      activeTranslationLang,
-      isTranslating,
-    ],
+    [store, activePromptType, audioPlayer, activeTranslationLang],
   );
 
   const handlePlaySession = useCallback(
@@ -1188,9 +1186,11 @@ function App(): React.JSX.Element {
 
   const handleTranslate = useCallback(
     async (targetLanguage: string) => {
-      if (isTranslating || store.segments.length === 0) return;
+      if (store.segments.length === 0) return;
       const sessionId = store.currentSessionId;
       if (!sessionId) return;
+      // Already translating this session
+      if (sessionId in translateAbortMapRef.current) return;
 
       const providerId =
         selectedTranslateLlmProviderId ||
@@ -1200,15 +1200,14 @@ function App(): React.JSX.Element {
         return;
       }
 
-      translateAbortRef.current = false;
-      setIsTranslating(true);
-      setTranslationProgress(0);
+      translateAbortMapRef.current[sessionId] = false;
+      setTranslationProgressMap((prev) => ({ ...prev, [sessionId]: 0 }));
       setActiveTranslationLang(targetLanguage);
 
-      const segments = store.segments;
+      const segments = [...store.segments];
       const total = segments.length;
       const newTranslations: Record<number, string> = {};
-      setTranslations(newTranslations);
+      setTranslations({});
       let completed = 0;
 
       const CONCURRENCY = 3;
@@ -1216,7 +1215,7 @@ function App(): React.JSX.Element {
       const translateOne = async (
         seg: (typeof segments)[number],
       ): Promise<void> => {
-        if (translateAbortRef.current) return;
+        if (translateAbortMapRef.current[sessionId]) return;
         try {
           const result = await window.capty.translate(
             providerId,
@@ -1224,10 +1223,13 @@ function App(): React.JSX.Element {
             targetLanguage,
             translatePrompt,
           );
-          if (translateAbortRef.current) return;
+          if (translateAbortMapRef.current[sessionId]) return;
 
           newTranslations[seg.id] = result;
-          setTranslations({ ...newTranslations });
+          // Only update displayed translations if still viewing this session
+          if (useAppStore.getState().currentSessionId === sessionId) {
+            setTranslations({ ...newTranslations });
+          }
 
           await window.capty.saveTranslation(
             seg.id,
@@ -1239,31 +1241,52 @@ function App(): React.JSX.Element {
           console.warn(`Translation skipped for segment ${seg.id}:`, err);
         }
         completed++;
-        setTranslationProgress(Math.round((completed / total) * 100));
+        setTranslationProgressMap((prev) => ({
+          ...prev,
+          [sessionId]: Math.round((completed / total) * 100),
+        }));
       };
 
       // Process segments in batches of CONCURRENCY
       for (let i = 0; i < total; i += CONCURRENCY) {
-        if (translateAbortRef.current) break;
+        if (translateAbortMapRef.current[sessionId]) break;
         const batch = segments.slice(i, i + CONCURRENCY);
         await Promise.all(batch.map(translateOne));
       }
 
-      setIsTranslating(false);
-      setTranslationProgress(0);
+      // Cleanup finished session
+      delete translateAbortMapRef.current[sessionId];
+      setTranslationProgressMap((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+      // If user switched back, reload translations from DB
+      if (useAppStore.getState().currentSessionId === sessionId) {
+        try {
+          const rows = await window.capty.listTranslations(
+            sessionId,
+            targetLanguage,
+          );
+          const map: Record<number, string> = {};
+          for (const row of rows) {
+            map[row.segment_id] = row.translated_text;
+          }
+          setTranslations(map);
+        } catch {
+          // keep newTranslations as-is
+        }
+      }
     },
-    [
-      isTranslating,
-      store,
-      selectedTranslateLlmProviderId,
-      llmProviders,
-      translatePrompt,
-    ],
+    [store, selectedTranslateLlmProviderId, llmProviders, translatePrompt],
   );
 
   const handleStopTranslation = useCallback(() => {
-    translateAbortRef.current = true;
-  }, []);
+    const sid = store.currentSessionId;
+    if (sid != null) {
+      translateAbortMapRef.current[sid] = true;
+    }
+  }, [store.currentSessionId]);
 
   // Load saved translations when switching language or session
   const handleLoadTranslations = useCallback(
