@@ -677,6 +677,12 @@ function App(): React.JSX.Element {
         ) {
           audioPlayer.stop();
         }
+        // Stop active translation if switching away
+        if (isTranslating) {
+          translateAbortRef.current = true;
+          setIsTranslating(false);
+          setTranslationProgress(0);
+        }
         store.setCurrentSessionId(sessionId);
         const segments = await window.capty.listSegments(sessionId);
         store.setSegments(
@@ -716,7 +722,13 @@ function App(): React.JSX.Element {
         console.error("Failed to load session:", err);
       }
     },
-    [store, activePromptType, audioPlayer, activeTranslationLang],
+    [
+      store,
+      activePromptType,
+      audioPlayer,
+      activeTranslationLang,
+      isTranslating,
+    ],
   );
 
   const handlePlaySession = useCallback(
