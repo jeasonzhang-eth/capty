@@ -44,6 +44,7 @@ interface TtsVoiceInfo {
 interface SummaryPanelProps {
   readonly summaries: readonly Summary[];
   readonly isGenerating: boolean;
+  readonly generatingPromptType: string | null;
   readonly streamingContent: string;
   readonly generateError: string | null;
   readonly currentSessionId: number | null;
@@ -111,6 +112,7 @@ table { border-collapse: collapse; } th,td { border: 1px solid #ddd; padding: 8p
 export function SummaryPanel({
   summaries,
   isGenerating,
+  generatingPromptType,
   streamingContent,
   generateError,
   currentSessionId,
@@ -162,6 +164,9 @@ export function SummaryPanel({
   const hasProvider = configuredProviders.length > 0 && localProviderId !== "";
   const canGenerate =
     currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
+  // Is the *current* tab the one being generated?
+  const isGeneratingThisTab =
+    isGenerating && generatingPromptType === activePromptType;
 
   // Reversed summaries: newest first
   const reversedSummaries = useMemo(
@@ -459,7 +464,7 @@ export function SummaryPanel({
               flexShrink: 0,
             }}
           >
-            {isGenerating && (
+            {isGeneratingThisTab && (
               <span
                 style={{
                   display: "inline-block",
@@ -472,7 +477,7 @@ export function SummaryPanel({
                 }}
               />
             )}
-            {isGenerating ? "Generating..." : "Generate"}
+            {isGeneratingThisTab ? "Generating..." : "Generate"}
           </button>
         </div>
       </div>
@@ -534,7 +539,7 @@ export function SummaryPanel({
         {currentSessionId !== null &&
           hasProvider &&
           summaries.length === 0 &&
-          !isGenerating && (
+          !isGeneratingThisTab && (
             <div
               style={{
                 textAlign: "center",
@@ -548,8 +553,8 @@ export function SummaryPanel({
             </div>
           )}
 
-        {/* Streaming card (shown while generating) */}
-        {isGenerating && <StreamingCard content={streamingContent} />}
+        {/* Streaming card (shown while generating this tab) */}
+        {isGeneratingThisTab && <StreamingCard content={streamingContent} />}
 
         {/* Summaries list (newest first) */}
         {reversedSummaries.map((summary) => (

@@ -316,6 +316,7 @@ pytest
 - **字幕区快速滚动** — TranscriptArea 右下角浮动箭头按钮，支持一键滚动到顶部/底部；根据滚动位置智能显隐（距顶/底 80px 阈值）；毛玻璃暗色风格，兼容 Lrc 歌词同步模式和普通滚动模式
 - **翻译显隐记忆** — 每个 session 的"显示/隐藏翻译"偏好独立持久化到 localStorage，切换 session 自动恢复上次选择
 - **翻译状态重启恢复** — `activeTranslationLang` 和 `targetLanguage` 持久化到 localStorage，重启应用后自动加载已翻译内容，Show/Hide 菜单项正常显示
+- **Summary 流式输出绑定 Tab** — Generate 的流式内容和 spinner 仅在发起生成的 Tab 上显示，切换到其他 Tab（Questions/Context）不会看到无关的流式输出
 
 ### 2026-03-29 (58)
 

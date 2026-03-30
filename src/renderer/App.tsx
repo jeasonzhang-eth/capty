@@ -227,6 +227,9 @@ function App(): React.JSX.Element {
   // Summary state
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [generatingPromptType, setGeneratingPromptType] = useState<
+    string | null
+  >(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
 
@@ -1591,6 +1594,7 @@ function App(): React.JSX.Element {
       if (!store.currentSessionId || isGeneratingSummary) return;
       setStreamingContent("");
       setIsGeneratingSummary(true);
+      setGeneratingPromptType(promptType);
       setGenerateError(null);
       try {
         const result = await window.capty.summarize(
@@ -1614,6 +1618,7 @@ function App(): React.JSX.Element {
         setStreamingContent("");
       } finally {
         setIsGeneratingSummary(false);
+        setGeneratingPromptType(null);
       }
     },
     [store.currentSessionId, isGeneratingSummary],
@@ -1854,6 +1859,7 @@ function App(): React.JSX.Element {
         <SummaryPanel
           summaries={summaries}
           isGenerating={isGeneratingSummary}
+          generatingPromptType={generatingPromptType}
           streamingContent={streamingContent}
           generateError={generateError}
           currentSessionId={store.currentSessionId}
