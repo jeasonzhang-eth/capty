@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface ModelInfo {
   readonly id: string;
@@ -106,14 +106,32 @@ interface SettingsModalProps {
   }[];
   readonly onChangeTtsVoice: (voice: string) => void;
   readonly onChangeTtsModel: (modelId: string) => void;
-  readonly selectedLlmProviderId: string | null;
-  readonly onChangeLlmProvider: (providerId: string) => void;
-  readonly selectedRapidLlmProviderId: string | null;
-  readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly selectedSummaryModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeSummaryModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
+  readonly selectedRapidModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeRapidModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
   readonly rapidRenamePrompt: string;
   readonly onChangeRapidRenamePrompt: (prompt: string) => void;
-  readonly selectedTranslateLlmProviderId: string | null;
-  readonly onChangeTranslateLlmProvider: (providerId: string) => void;
+  readonly selectedTranslateModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeTranslateModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
   readonly translatePrompt: string;
   readonly onChangeTranslatePrompt: (prompt: string) => void;
   readonly onClose: () => void;
@@ -3891,6 +3909,334 @@ function LanguageModelsTab({
   );
 }
 
+/* ─── Unified Model Selector ─── */
+
+function UnifiedModelSelector({
+  providers,
+  selected,
+  onChange,
+  onGearClick,
+}: {
+  readonly providers: readonly LlmProvider[];
+  readonly selected: { providerId: string; model: string } | null;
+  readonly onChange: (sel: { providerId: string; model: string }) => void;
+  readonly onGearClick?: () => void;
+}): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  // Build flat list: all models from all providers that have models
+  const allModels: {
+    providerId: string;
+    providerName: string;
+    model: string;
+  }[] = [];
+  for (const p of providers) {
+    const models = p.models?.length ? p.models : p.model ? [p.model] : [];
+    for (const m of models) {
+      allModels.push({ providerId: p.id, providerName: p.name, model: m });
+    }
+  }
+
+  // Filter
+  const filtered = search
+    ? allModels.filter(
+        (m) =>
+          m.model.toLowerCase().includes(search.toLowerCase()) ||
+          m.providerName.toLowerCase().includes(search.toLowerCase()),
+      )
+    : allModels;
+
+  // Group by provider
+  const groups = new Map<string, typeof filtered>();
+  for (const m of filtered) {
+    if (!groups.has(m.providerName)) groups.set(m.providerName, []);
+    groups.get(m.providerName)!.push(m);
+  }
+
+  // Find current selection display
+  const selectedEntry = selected
+    ? allModels.find(
+        (m) =>
+          m.providerId === selected.providerId && m.model === selected.model,
+      )
+    : null;
+
+  const getInitial = (name: string): string => name.charAt(0).toUpperCase();
+
+  return (
+    <div
+      ref={dropdownRef}
+      style={{
+        position: "relative",
+        marginRight: onGearClick ? "40px" : 0,
+      }}
+    >
+      {/* Closed state */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: "var(--bg-primary)",
+          border: `1px solid ${isOpen ? "var(--accent)" : "var(--border)"}`,
+          borderRadius: isOpen ? "6px 6px 0 0" : "6px",
+          padding: "8px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          cursor: "pointer",
+          fontSize: "13px",
+        }}
+      >
+        {selectedEntry ? (
+          <>
+            <div
+              style={{
+                width: "18px",
+                height: "18px",
+                borderRadius: "50%",
+                background: "rgba(139,139,240,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--accent)",
+                fontSize: "9px",
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {getInitial(selectedEntry.providerName)}
+            </div>
+            <span
+              style={{
+                color: "var(--text-primary)",
+                flex: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {selectedEntry.model}
+            </span>
+            <span
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                flexShrink: 0,
+              }}
+            >
+              {selectedEntry.providerName}
+            </span>
+          </>
+        ) : (
+          <span style={{ color: "var(--text-muted)" }}>Select a model...</span>
+        )}
+        <span
+          style={{
+            color: "var(--text-muted)",
+            marginLeft: "auto",
+            flexShrink: 0,
+          }}
+        >
+          {isOpen ? "\u25B4" : "\u25BE"}
+        </span>
+      </div>
+
+      {/* Gear button — navigates to Language Models settings tab */}
+      {onGearClick && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onGearClick();
+          }}
+          style={{
+            position: "absolute",
+            right: "-36px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            background: "var(--bg-primary)",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            padding: "6px",
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+          }}
+          title="Configure providers"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
+        </button>
+      )}
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            background: "var(--bg-surface, #1e1e1e)",
+            border: "1px solid var(--accent)",
+            borderTop: "1px solid var(--border)",
+            borderRadius: "0 0 6px 6px",
+            maxHeight: "280px",
+            overflowY: "auto",
+            zIndex: 1000,
+          }}
+        >
+          {/* Search */}
+          <div
+            style={{
+              padding: "6px 8px",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter..."
+              autoFocus
+              style={{
+                width: "100%",
+                background: "var(--bg-primary, #1a1a1a)",
+                border: "1px solid var(--border)",
+                borderRadius: "4px",
+                padding: "4px 8px",
+                color: "var(--text-primary)",
+                fontSize: "12px",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {/* Grouped items */}
+          {allModels.length === 0 && (
+            <div
+              style={{
+                padding: "12px",
+                textAlign: "center",
+                color: "var(--text-muted)",
+                fontSize: "12px",
+              }}
+            >
+              No models available. Add models in Language Models tab.
+            </div>
+          )}
+          {Array.from(groups).map(([providerName, models]) => (
+            <div key={providerName}>
+              <div
+                style={{
+                  padding: "6px 12px 2px",
+                  color: "var(--text-muted)",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                {providerName}
+              </div>
+              {models.map((m) => {
+                const isSelected =
+                  selected?.providerId === m.providerId &&
+                  selected?.model === m.model;
+                return (
+                  <div
+                    key={`${m.providerId}-${m.model}`}
+                    onClick={() => {
+                      onChange({
+                        providerId: m.providerId,
+                        model: m.model,
+                      });
+                      setIsOpen(false);
+                      setSearch("");
+                    }}
+                    style={{
+                      padding: "6px 12px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      cursor: "pointer",
+                      background: isSelected
+                        ? "rgba(139,139,240,0.1)"
+                        : "transparent",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        background: "rgba(139,139,240,0.15)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--accent)",
+                        fontSize: "9px",
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {getInitial(m.providerName)}
+                    </div>
+                    <span
+                      style={{
+                        color: isSelected
+                          ? "var(--accent)"
+                          : "var(--text-primary)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {m.model}
+                    </span>
+                    <span
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "11px",
+                        marginLeft: "auto",
+                      }}
+                    >
+                      {m.providerName}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Default Models Tab ─── */
 
 function DefaultModelsTab({
@@ -3904,16 +4250,17 @@ function DefaultModelsTab({
   onChangeTtsModel,
   onChangeTtsVoice,
   llmProviders,
-  selectedLlmProviderId,
-  onChangeLlmProvider,
-  selectedRapidLlmProviderId,
-  onChangeRapidLlmProvider,
+  selectedSummaryModel,
+  onChangeSummaryModel,
+  selectedRapidModel,
+  onChangeRapidModel,
   rapidRenamePrompt,
   onChangeRapidRenamePrompt,
-  selectedTranslateLlmProviderId,
-  onChangeTranslateLlmProvider,
+  selectedTranslateModel,
+  onChangeTranslateModel,
   translatePrompt,
   onChangeTranslatePrompt,
+  onSwitchToTab,
 }: {
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
@@ -3930,24 +4277,40 @@ function DefaultModelsTab({
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly onChangeTtsVoice: (voice: string) => void;
   readonly llmProviders: readonly LlmProvider[];
-  readonly selectedLlmProviderId: string | null;
-  readonly onChangeLlmProvider: (providerId: string) => void;
-  readonly selectedRapidLlmProviderId: string | null;
-  readonly onChangeRapidLlmProvider: (providerId: string) => void;
+  readonly selectedSummaryModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeSummaryModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
+  readonly selectedRapidModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeRapidModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
   readonly rapidRenamePrompt: string;
   readonly onChangeRapidRenamePrompt: (prompt: string) => void;
-  readonly selectedTranslateLlmProviderId: string | null;
-  readonly onChangeTranslateLlmProvider: (providerId: string) => void;
+  readonly selectedTranslateModel: {
+    providerId: string;
+    model: string;
+  } | null;
+  readonly onChangeTranslateModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
   readonly translatePrompt: string;
   readonly onChangeTranslatePrompt: (prompt: string) => void;
+  readonly onSwitchToTab?: (tab: string) => void;
 }): React.ReactElement {
   const downloadedAsrModels = models.filter(
     (m) => m.downloaded && m.supported !== false,
   );
   const downloadedTtsModels = ttsModels.filter((m) => m.downloaded);
-  const configuredLlmProviders = llmProviders.filter(
-    (p) => p.apiKey && p.model,
-  );
 
   // Group voices by language
   const voicesByLang = ttsVoices.reduce<
@@ -4083,20 +4446,12 @@ function DefaultModelsTab({
         <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Language model for generating summaries and analysis
         </div>
-        <select
-          value={selectedLlmProviderId ?? ""}
-          onChange={(e) => onChangeLlmProvider(e.target.value)}
-          style={selectStyle}
-        >
-          {configuredLlmProviders.length === 0 && (
-            <option value="">No configured LLM providers</option>
-          )}
-          {configuredLlmProviders.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.model})
-            </option>
-          ))}
-        </select>
+        <UnifiedModelSelector
+          providers={llmProviders}
+          selected={selectedSummaryModel}
+          onChange={onChangeSummaryModel}
+          onGearClick={() => onSwitchToTab?.("language-models")}
+        />
       </div>
 
       {/* Rapid Model */}
@@ -4105,20 +4460,12 @@ function DefaultModelsTab({
         <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Fast language model for quick tasks like renaming sessions
         </div>
-        <select
-          value={selectedRapidLlmProviderId ?? ""}
-          onChange={(e) => onChangeRapidLlmProvider(e.target.value)}
-          style={selectStyle}
-        >
-          {configuredLlmProviders.length === 0 && (
-            <option value="">No configured LLM providers</option>
-          )}
-          {configuredLlmProviders.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.model})
-            </option>
-          ))}
-        </select>
+        <UnifiedModelSelector
+          providers={llmProviders}
+          selected={selectedRapidModel}
+          onChange={onChangeRapidModel}
+          onGearClick={() => onSwitchToTab?.("language-models")}
+        />
         <div
           style={{
             fontSize: "13px",
@@ -4163,20 +4510,12 @@ function DefaultModelsTab({
         <div style={{ ...sectionDescStyle, marginBottom: "10px" }}>
           Language model for translating transcription text
         </div>
-        <select
-          value={selectedTranslateLlmProviderId ?? ""}
-          onChange={(e) => onChangeTranslateLlmProvider(e.target.value)}
-          style={selectStyle}
-        >
-          {configuredLlmProviders.length === 0 && (
-            <option value="">No configured LLM providers</option>
-          )}
-          {configuredLlmProviders.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.model})
-            </option>
-          ))}
-        </select>
+        <UnifiedModelSelector
+          providers={llmProviders}
+          selected={selectedTranslateModel}
+          onChange={onChangeTranslateModel}
+          onGearClick={() => onSwitchToTab?.("language-models")}
+        />
         <div
           style={{
             fontSize: "13px",
@@ -4274,14 +4613,14 @@ export function SettingsModal({
   ttsVoices,
   onChangeTtsVoice,
   onChangeTtsModel,
-  selectedLlmProviderId,
-  onChangeLlmProvider,
-  selectedRapidLlmProviderId,
-  onChangeRapidLlmProvider,
+  selectedSummaryModel,
+  onChangeSummaryModel,
+  selectedRapidModel,
+  onChangeRapidModel,
   rapidRenamePrompt,
   onChangeRapidRenamePrompt,
-  selectedTranslateLlmProviderId,
-  onChangeTranslateLlmProvider,
+  selectedTranslateModel,
+  onChangeTranslateModel,
   translatePrompt,
   onChangeTranslatePrompt,
   onClose,
@@ -4458,16 +4797,17 @@ export function SettingsModal({
                 onChangeTtsModel={onChangeTtsModel}
                 onChangeTtsVoice={onChangeTtsVoice}
                 llmProviders={llmProviders}
-                selectedLlmProviderId={selectedLlmProviderId}
-                onChangeLlmProvider={onChangeLlmProvider}
-                selectedRapidLlmProviderId={selectedRapidLlmProviderId}
-                onChangeRapidLlmProvider={onChangeRapidLlmProvider}
+                selectedSummaryModel={selectedSummaryModel}
+                onChangeSummaryModel={onChangeSummaryModel}
+                selectedRapidModel={selectedRapidModel}
+                onChangeRapidModel={onChangeRapidModel}
                 rapidRenamePrompt={rapidRenamePrompt}
                 onChangeRapidRenamePrompt={onChangeRapidRenamePrompt}
-                selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
-                onChangeTranslateLlmProvider={onChangeTranslateLlmProvider}
+                selectedTranslateModel={selectedTranslateModel}
+                onChangeTranslateModel={onChangeTranslateModel}
                 translatePrompt={translatePrompt}
                 onChangeTranslatePrompt={onChangeTranslatePrompt}
+                onSwitchToTab={(tab) => setActiveTab(tab as TabId)}
               />
             )}
             {activeTab === "speech" && (
