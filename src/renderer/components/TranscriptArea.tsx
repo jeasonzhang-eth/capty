@@ -32,8 +32,11 @@ interface TranscriptAreaProps {
   readonly activeTranslationLang: string | null;
   readonly onLoadTranslations?: (targetLanguage: string) => void;
   readonly llmProviders: readonly LlmProvider[];
-  readonly selectedTranslateProviderId: string | null;
-  readonly onChangeTranslateProvider: (providerId: string) => void;
+  readonly selectedTranslateModel: { providerId: string; model: string } | null;
+  readonly onChangeTranslateModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
 }
 
 /* ─── Translate Dropdown Menu ─── */
@@ -52,8 +55,11 @@ interface TranslateMenuProps {
   readonly onStopTranslation: (() => void) | null;
   readonly onClose: () => void;
   readonly providers: readonly LlmProvider[];
-  readonly selectedProviderId: string;
-  readonly onChangeProvider: (providerId: string) => void;
+  readonly selectedTranslateModel: { providerId: string; model: string } | null;
+  readonly onChangeTranslateModel: (sel: {
+    providerId: string;
+    model: string;
+  }) => void;
 }
 
 function TranslateMenu({
@@ -68,8 +74,8 @@ function TranslateMenu({
   onStopTranslation,
   onClose,
   providers,
-  selectedProviderId,
-  onChangeProvider,
+  selectedTranslateModel,
+  onChangeTranslateModel,
 }: TranslateMenuProps): React.ReactElement {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showLangSub, setShowLangSub] = useState(false);
@@ -216,106 +222,145 @@ function TranslateMenu({
         )}
       </div>
 
-      {/* 1b. Translate Model — with submenu */}
-      {providers.length > 0 && (
-        <div
-          style={{ position: "relative" }}
-          onMouseEnter={() => setShowModelSub(true)}
-          onMouseLeave={() => setShowModelSub(false)}
+      {/* 1b. Translate Model — hover submenu */}
+      <div
+        style={{ position: "relative" }}
+        onMouseEnter={() => setShowModelSub(true)}
+        onMouseLeave={() => setShowModelSub(false)}
+      >
+        <button
+          style={itemStyle}
+          onMouseEnter={handleItemHover}
+          onMouseLeave={handleItemLeave}
         >
-          <button
-            style={itemStyle}
-            onMouseEnter={handleItemHover}
-            onMouseLeave={handleItemLeave}
+          <span>Model</span>
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              color: "var(--text-muted)",
+              fontSize: "12px",
+            }}
           >
-            <span>Translate Model</span>
             <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                color: "var(--text-muted)",
-                fontSize: "12px",
                 maxWidth: "120px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
             >
-              {providers.find((p) => p.id === selectedProviderId)?.model ??
-                "Select"}
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                <path
-                  d="M3 1.5L5.5 4L3 6.5"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              {selectedTranslateModel?.model ?? "Not set"}
             </span>
-          </button>
-          {showModelSub && (
-            <div
-              style={{
-                position: "absolute",
-                left: "100%",
-                top: "-1px",
-                marginLeft: "2px",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                background: "rgba(28, 28, 31, 0.88)",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                boxShadow:
-                  "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.04)",
-                overflow: "hidden",
-                minWidth: "180px",
-                maxWidth: "280px",
-                zIndex: 101,
-              }}
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {providers.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    onChangeProvider(p.id);
-                    setShowModelSub(false);
-                  }}
-                  style={itemStyle}
-                  onMouseEnter={handleItemHover}
-                  onMouseLeave={handleItemLeave}
-                >
-                  <span
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+        </button>
+        {showModelSub && (
+          <div
+            style={{
+              position: "absolute",
+              left: "100%",
+              top: "-1px",
+              marginLeft: "2px",
+              minWidth: "220px",
+              maxHeight: "320px",
+              overflowY: "auto",
+              backgroundColor: "var(--bg-surface)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              padding: "4px 0",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+              zIndex: 101,
+            }}
+          >
+            {providers.map((p) => {
+              const models = p.models?.length
+                ? p.models
+                : p.model
+                  ? [p.model]
+                  : [];
+              if (models.length === 0) return null;
+              return (
+                <React.Fragment key={p.id}>
+                  <div
                     style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      padding: "6px 14px 2px",
+                      color: "var(--text-muted)",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
                     }}
                   >
-                    {p.name} ({p.model})
-                  </span>
-                  {selectedProviderId === p.id && (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="var(--accent)"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ flexShrink: 0 }}
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                    {p.name}
+                  </div>
+                  {models.map((m) => {
+                    const isSelected =
+                      selectedTranslateModel?.providerId === p.id &&
+                      selectedTranslateModel?.model === m;
+                    return (
+                      <button
+                        key={`${p.id}-${m}`}
+                        onClick={() =>
+                          onChangeTranslateModel({ providerId: p.id, model: m })
+                        }
+                        onMouseEnter={handleItemHover}
+                        onMouseLeave={handleItemLeave}
+                        style={{
+                          ...itemStyle,
+                          color: isSelected
+                            ? "var(--accent)"
+                            : "var(--text-primary)",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          {isSelected ? (
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : (
+                            <span style={{ width: "14px" }} />
+                          )}
+                          {m}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* separator */}
       <div
@@ -551,8 +596,8 @@ export function TranscriptArea({
   activeTranslationLang,
   onLoadTranslations,
   llmProviders,
-  selectedTranslateProviderId,
-  onChangeTranslateProvider,
+  selectedTranslateModel,
+  onChangeTranslateModel,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
@@ -593,14 +638,6 @@ export function TranscriptArea({
     setTargetLanguageRaw(lang);
     localStorage.setItem("capty:targetLanguage", lang);
   }, []);
-
-  // Configured LLM providers (have apiKey + model)
-  const configuredProviders = useMemo(
-    () => llmProviders.filter((p) => p.apiKey && p.model),
-    [llmProviders],
-  );
-  const effectiveProviderId =
-    selectedTranslateProviderId ?? configuredProviders[0]?.id ?? "";
 
   const hasTranslations = Object.keys(translations).length > 0;
   const transcribingTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -817,9 +854,9 @@ export function TranscriptArea({
                     onTranslate={() => onTranslate(targetLanguage)}
                     onStopTranslation={onStopTranslation}
                     onClose={() => setShowTranslateMenu(false)}
-                    providers={configuredProviders}
-                    selectedProviderId={effectiveProviderId}
-                    onChangeProvider={onChangeTranslateProvider}
+                    providers={llmProviders}
+                    selectedTranslateModel={selectedTranslateModel}
+                    onChangeTranslateModel={onChangeTranslateModel}
                   />
                 )}
                 <button

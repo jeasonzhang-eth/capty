@@ -50,7 +50,7 @@ interface SummaryPanelProps {
   readonly currentSessionId: number | null;
   readonly hasSegments: boolean;
   readonly llmProviders: readonly LlmProvider[];
-  readonly selectedLlmProviderId: string | null;
+  readonly selectedSummaryModel: { providerId: string; model: string } | null;
   readonly promptTypes: readonly PromptType[];
   readonly activePromptType: string;
   readonly initialWidth: number;
@@ -61,7 +61,11 @@ interface SummaryPanelProps {
   readonly ttsProviderReady: boolean;
   readonly isSidecarTts: boolean;
   readonly onWidthChange: (width: number) => void;
-  readonly onSummarize: (providerId: string, promptType: string) => void;
+  readonly onSummarize: (
+    providerId: string,
+    model: string,
+    promptType: string,
+  ) => void;
   readonly onChangePromptType: (promptType: string) => void;
   readonly onSavePromptTypes: (types: PromptType[]) => void;
   readonly onChangeTtsModel: (modelId: string) => void;
@@ -118,7 +122,7 @@ export function SummaryPanel({
   currentSessionId,
   hasSegments,
   llmProviders,
-  selectedLlmProviderId,
+  selectedSummaryModel,
   promptTypes,
   activePromptType,
   initialWidth,
@@ -135,33 +139,40 @@ export function SummaryPanel({
   onChangeTtsModel,
   onChangeTtsVoice,
 }: SummaryPanelProps): React.ReactElement {
-  // Only show configured providers in the dropdown
-  const configuredProviders = useMemo(
-    () => llmProviders.filter((p) => p.apiKey && p.model),
+  const availableProviders = useMemo(
+    () => llmProviders.filter((p) => (p.models?.length ?? 0) > 0 || p.model),
     [llmProviders],
   );
 
-  const [localProviderId, setLocalProviderId] = useState<string>(
-    () =>
-      (selectedLlmProviderId &&
-      configuredProviders.some((p) => p.id === selectedLlmProviderId)
-        ? selectedLlmProviderId
-        : configuredProviders[0]?.id) ?? "",
-  );
-
-  // Sync localProviderId when providers load asynchronously
-  useEffect(() => {
-    if (configuredProviders.length > 0 && localProviderId === "") {
-      const id =
-        selectedLlmProviderId &&
-        configuredProviders.some((p) => p.id === selectedLlmProviderId)
-          ? selectedLlmProviderId
-          : configuredProviders[0]?.id;
-      if (id) setLocalProviderId(id);
+  const [localSelection, setLocalSelection] = useState<{
+    providerId: string;
+    model: string;
+  } | null>(() => {
+    if (selectedSummaryModel) return selectedSummaryModel;
+    const first = availableProviders[0];
+    if (first) {
+      const model = first.models?.[0] || first.model || "";
+      return { providerId: first.id, model };
     }
-  }, [configuredProviders, selectedLlmProviderId, localProviderId]);
+    return null;
+  });
 
-  const hasProvider = configuredProviders.length > 0 && localProviderId !== "";
+  // Sync localSelection when providers load asynchronously
+  useEffect(() => {
+    if (availableProviders.length > 0 && !localSelection) {
+      if (selectedSummaryModel) {
+        setLocalSelection(selectedSummaryModel);
+      } else {
+        const first = availableProviders[0];
+        if (first) {
+          const model = first.models?.[0] || first.model || "";
+          setLocalSelection({ providerId: first.id, model });
+        }
+      }
+    }
+  }, [availableProviders, selectedSummaryModel, localSelection]);
+
+  const hasProvider = localSelection !== null;
   const canGenerate =
     currentSessionId !== null && hasSegments && hasProvider && !isGenerating;
   // Is the *current* tab the one being generated?
@@ -416,10 +427,18 @@ export function SummaryPanel({
             alignItems: "center",
           }}
         >
-          {configuredProviders.length > 0 && (
+          {availableProviders.length > 0 && (
             <select
-              value={localProviderId}
-              onChange={(e) => setLocalProviderId(e.target.value)}
+              value={
+                localSelection
+                  ? `${localSelection.providerId}::${localSelection.model}`
+                  : ""
+              }
+              onChange={(e) => {
+                const [pid, ...rest] = e.target.value.split("::");
+                const model = rest.join("::");
+                setLocalSelection({ providerId: pid, model });
+              }}
               disabled={isGenerating}
               className="provider-select"
               style={{
@@ -436,15 +455,30 @@ export function SummaryPanel({
                 transition: "border-color 0.15s ease",
               }}
             >
-              {configuredProviders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.model})
-                </option>
-              ))}
+              {availableProviders.map((p) => {
+                const models = p.models?.length
+                  ? p.models
+                  : p.model
+                    ? [p.model]
+                    : [];
+                return models.map((m) => (
+                  <option key={`${p.id}::${m}`} value={`${p.id}::${m}`}>
+                    {p.name} / {m}
+                  </option>
+                ));
+              })}
             </select>
           )}
           <button
-            onClick={() => onSummarize(localProviderId, activePromptType)}
+            onClick={() => {
+              if (localSelection) {
+                onSummarize(
+                  localSelection.providerId,
+                  localSelection.model,
+                  activePromptType,
+                );
+              }
+            }}
             disabled={!canGenerate}
             style={{
               padding: "5px 12px",
