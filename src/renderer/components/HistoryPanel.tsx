@@ -52,6 +52,7 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
+    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
   });
