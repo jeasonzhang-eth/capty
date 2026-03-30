@@ -18,6 +18,7 @@ export interface LlmProvider {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly models: string[];
   readonly isPreset: boolean;
 }
 
@@ -2834,6 +2835,377 @@ const PRESET_PROVIDERS: readonly {
   },
 ];
 
+/* ─── Fetch Models Dialog ─── */
+
+function FetchModelsDialog({
+  providerName,
+  fetchedModels,
+  existingModels,
+  onAdd,
+  onClose,
+  onRefresh,
+  isRefreshing,
+}: {
+  readonly providerName: string;
+  readonly fetchedModels: readonly { id: string; name: string }[];
+  readonly existingModels: readonly string[];
+  readonly onAdd: (modelId: string) => void;
+  readonly onClose: () => void;
+  readonly onRefresh: () => void;
+  readonly isRefreshing: boolean;
+}): React.ReactElement {
+  const [search, setSearch] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
+  const existingSet = new Set(existingModels);
+
+  // Filter by search
+  const filtered = search
+    ? fetchedModels.filter(
+        (m) =>
+          m.id.toLowerCase().includes(search.toLowerCase()) ||
+          m.name.toLowerCase().includes(search.toLowerCase()),
+      )
+    : fetchedModels;
+
+  // Grouping logic
+  const shouldGroup = filtered.length > 20;
+
+  const groups: { name: string; models: typeof filtered }[] = [];
+  if (shouldGroup) {
+    const groupMap = new Map<string, typeof filtered>();
+    for (const m of filtered) {
+      const slashIdx = m.id.indexOf("/");
+      const groupName =
+        slashIdx > 0 ? m.id.substring(0, slashIdx) : providerName;
+      if (!groupMap.has(groupName)) groupMap.set(groupName, []);
+      groupMap.get(groupName)!.push(m);
+    }
+    for (const [name, models] of groupMap) {
+      groups.push({ name, models });
+    }
+    groups.sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    groups.push({ name: "", models: filtered });
+  }
+
+  const toggleGroup = (name: string): void => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const getInitial = (modelId: string): string => {
+    const slashIdx = modelId.indexOf("/");
+    const name = slashIdx > 0 ? modelId.substring(0, slashIdx) : modelId;
+    return name.charAt(0).toUpperCase();
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 10000,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        style={{
+          background: "var(--bg-primary, #1a1a1a)",
+          borderRadius: "12px",
+          width: "520px",
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+          border: "1px solid var(--border, #333)",
+        }}
+      >
+        {/* Title bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 16px",
+            borderBottom: "1px solid var(--border, #333)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "15px",
+              fontWeight: 600,
+              color: "var(--text-primary, #ccc)",
+            }}
+          >
+            {providerName} Models
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted, #888)",
+              cursor: "pointer",
+              fontSize: "18px",
+              padding: "0 4px",
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div
+          style={{
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--border, #333)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "var(--bg-surface, #222)",
+              border: "1px solid var(--border, #333)",
+              borderRadius: "8px",
+              padding: "8px 12px",
+            }}
+          >
+            <span
+              style={{
+                color: "var(--text-muted, #666)",
+                fontSize: "14px",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search model ID or name..."
+              style={{
+                flex: 1,
+                background: "none",
+                border: "none",
+                outline: "none",
+                color: "var(--text-primary, #ccc)",
+                fontSize: "13px",
+              }}
+            />
+          </div>
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-muted, #888)",
+              cursor: isRefreshing ? "default" : "pointer",
+              fontSize: "18px",
+              padding: "4px",
+              opacity: isRefreshing ? 0.5 : 1,
+            }}
+            title="Refresh"
+          >
+            &#8635;
+          </button>
+        </div>
+
+        {/* Model list */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+          {filtered.length === 0 && (
+            <div
+              style={{
+                padding: "24px",
+                textAlign: "center",
+                color: "var(--text-muted, #666)",
+                fontSize: "13px",
+              }}
+            >
+              {isRefreshing ? "Fetching models..." : "No models found"}
+            </div>
+          )}
+          {groups.map((group) => (
+            <div key={group.name || "__flat"}>
+              {/* Group header (only if grouping) */}
+              {shouldGroup && (
+                <div
+                  onClick={() => toggleGroup(group.name)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--border, #222)",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "var(--text-muted, #555)",
+                      fontSize: "10px",
+                      marginRight: "8px",
+                    }}
+                  >
+                    {collapsedGroups.has(group.name) ? "\u25B6" : "\u25BC"}
+                  </span>
+                  <span
+                    style={{
+                      color: "var(--text-primary, #ccc)",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {group.name}
+                  </span>
+                  <span
+                    style={{
+                      background: "rgba(74,222,128,0.15)",
+                      color: "#4ade80",
+                      fontSize: "11px",
+                      padding: "1px 8px",
+                      borderRadius: "10px",
+                      marginLeft: "8px",
+                    }}
+                  >
+                    {group.models.length}
+                  </span>
+                </div>
+              )}
+              {/* Model rows */}
+              {!collapsedGroups.has(group.name) && (
+                <div
+                  style={{
+                    padding: shouldGroup ? "0 16px 8px" : "0 16px",
+                  }}
+                >
+                  {group.models.map((m) => {
+                    const isAdded = existingSet.has(m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          marginBottom: "4px",
+                          background: isAdded
+                            ? "rgba(139,139,240,0.08)"
+                            : "var(--bg-surface, #1e1e1e)",
+                          borderRadius: "8px",
+                          opacity: isAdded ? 0.5 : 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "50%",
+                            background: "rgba(139,139,240,0.15)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--accent, #8b8bf0)",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            marginRight: "10px",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {getInitial(m.id)}
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            color: "var(--text-primary, #ddd)",
+                            fontSize: "13px",
+                            fontFamily: "monospace",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {m.id}
+                        </div>
+                        {isAdded ? (
+                          <span
+                            style={{
+                              color: "var(--text-muted, #555)",
+                              fontSize: "11px",
+                              marginLeft: "8px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Added
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => onAdd(m.id)}
+                            style={{
+                              background: "rgba(139,139,240,0.15)",
+                              color: "var(--accent, #8b8bf0)",
+                              border: "1px solid rgba(139,139,240,0.3)",
+                              borderRadius: "50%",
+                              width: "24px",
+                              height: "24px",
+                              fontSize: "16px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              lineHeight: 1,
+                              marginLeft: "8px",
+                            }}
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page: Language Models ─── */
 
 function LanguageModelsTab({
@@ -2849,8 +3221,14 @@ function LanguageModelsTab({
     name: "",
     baseUrl: "",
     apiKey: "",
-    model: "",
+    models: [] as string[],
   });
+  const [showFetchDialog, setShowFetchDialog] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [isFetching, setIsFetching] = useState(false);
+  const [manualModelInput, setManualModelInput] = useState("");
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<
     Record<string, { ok: boolean; message: string }>
@@ -2875,6 +3253,7 @@ function LanguageModelsTab({
         baseUrl: preset.baseUrl,
         apiKey: "",
         model: "",
+        models: [],
         isPreset: true,
       };
       const next = [...providers, newProvider];
@@ -2884,7 +3263,7 @@ function LanguageModelsTab({
         name: newProvider.name,
         baseUrl: newProvider.baseUrl,
         apiKey: "",
-        model: "",
+        models: [],
       });
     },
     [providers, save],
@@ -2898,6 +3277,7 @@ function LanguageModelsTab({
       baseUrl: "",
       apiKey: "",
       model: "",
+      models: [],
       isPreset: false,
     };
     const next = [...providers, newProvider];
@@ -2907,7 +3287,7 @@ function LanguageModelsTab({
       name: "Custom Provider",
       baseUrl: "",
       apiKey: "",
-      model: "",
+      models: [],
     });
   }, [providers, save]);
 
@@ -2922,7 +3302,7 @@ function LanguageModelsTab({
         name: provider.name,
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey,
-        model: provider.model,
+        models: provider.models ?? (provider.model ? [provider.model] : []),
       });
     },
     [editingId],
@@ -2937,7 +3317,8 @@ function LanguageModelsTab({
             name: p.isPreset ? p.name : editForm.name,
             baseUrl: p.isPreset ? p.baseUrl : editForm.baseUrl,
             apiKey: editForm.apiKey,
-            model: editForm.model,
+            model: editForm.models[0] ?? "",
+            models: editForm.models,
           }
         : p,
     );
@@ -2991,6 +3372,53 @@ function LanguageModelsTab({
       }, 5000);
     }
   }, []);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editForm.baseUrl) return;
+    setIsFetching(true);
+    try {
+      const models = await window.capty.llmFetchModels({
+        baseUrl: editForm.baseUrl,
+        apiKey: editForm.apiKey,
+      });
+      setFetchedModels(models);
+      setShowFetchDialog(true);
+    } catch (err) {
+      console.warn("Failed to fetch models:", err);
+      setFetchedModels([]);
+      setShowFetchDialog(true);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [editForm.baseUrl, editForm.apiKey]);
+
+  const handleAddModelFromFetch = useCallback(
+    (modelId: string) => {
+      if (editForm.models.includes(modelId)) return;
+      setEditForm((prev) => ({
+        ...prev,
+        models: [...prev.models, modelId],
+      }));
+    },
+    [editForm.models],
+  );
+
+  const handleRemoveModel = useCallback((modelId: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      models: prev.models.filter((m) => m !== modelId),
+    }));
+  }, []);
+
+  const handleAddManualModel = useCallback(() => {
+    const trimmed = manualModelInput.trim();
+    if (!trimmed || editForm.models.includes(trimmed)) return;
+    setEditForm((prev) => ({
+      ...prev,
+      models: [...prev.models, trimmed],
+    }));
+    setManualModelInput("");
+  }, [manualModelInput, editForm.models]);
 
   const availablePresets = PRESET_PROVIDERS.filter(
     (preset) => !providers.some((p) => p.id === preset.id),
@@ -3046,7 +3474,8 @@ function LanguageModelsTab({
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {providers.map((provider) => {
-          const isConfigured = Boolean(provider.apiKey && provider.model);
+          const modelCount =
+            provider.models?.length ?? (provider.model ? 1 : 0);
           const isEditing = editingId === provider.id;
 
           return (
@@ -3092,17 +3521,17 @@ function LanguageModelsTab({
                         Preset
                       </span>
                     )}
-                    <span
-                      style={{
-                        ...tagStyle,
-                        backgroundColor: isConfigured
-                          ? "rgba(74, 222, 128, 0.12)"
-                          : "rgba(239, 68, 68, 0.12)",
-                        color: isConfigured ? "#4ADE80" : "#EF4444",
-                      }}
-                    >
-                      {isConfigured ? "Configured" : "Not configured"}
-                    </span>
+                    {modelCount > 0 && (
+                      <span
+                        style={{
+                          ...tagStyle,
+                          backgroundColor: "rgba(139,139,240,0.12)",
+                          color: "var(--accent, #8b8bf0)",
+                        }}
+                      >
+                        {modelCount} model{modelCount !== 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{
@@ -3112,7 +3541,6 @@ function LanguageModelsTab({
                     }}
                   >
                     {provider.baseUrl || "No URL set"}
-                    {provider.model ? ` \u00b7 ${provider.model}` : ""}
                   </div>
                 </div>
 
@@ -3125,7 +3553,7 @@ function LanguageModelsTab({
                     alignItems: "center",
                   }}
                 >
-                  {isConfigured && (
+                  {modelCount > 0 && (
                     <button
                       onClick={() => handleTest(provider)}
                       disabled={testingId === provider.id}
@@ -3237,7 +3665,19 @@ function LanguageModelsTab({
                     </>
                   )}
                   <div>
-                    <div style={labelStyle}>API Key</div>
+                    <div style={labelStyle}>
+                      <span>
+                        API Key{" "}
+                        <span
+                          style={{
+                            color: "var(--text-muted)",
+                            fontSize: "11px",
+                          }}
+                        >
+                          (optional for local models)
+                        </span>
+                      </span>
+                    </div>
                     <input
                       type="password"
                       value={editForm.apiKey}
@@ -3251,21 +3691,167 @@ function LanguageModelsTab({
                       style={{ ...inputStyle, fontFamily: "monospace" }}
                     />
                   </div>
-                  <div>
-                    <div style={labelStyle}>Model Name</div>
-                    <input
-                      type="text"
-                      value={editForm.model}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          model: e.target.value,
-                        })
-                      }
-                      placeholder="e.g. gpt-4o, deepseek-chat"
-                      style={inputStyle}
-                    />
+
+                  {/* Models Section */}
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--border)",
+                      paddingTop: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "14px",
+                            color: "var(--text-primary)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Models
+                        </span>
+                        <span
+                          style={{
+                            background: "rgba(139,139,240,0.15)",
+                            color: "var(--accent)",
+                            fontSize: "11px",
+                            padding: "1px 8px",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          {editForm.models.length}
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleFetchModels}
+                        disabled={!editForm.baseUrl || isFetching}
+                        style={{
+                          background: "rgba(139,139,240,0.1)",
+                          color: "var(--accent)",
+                          border: "1px solid rgba(139,139,240,0.3)",
+                          borderRadius: "4px",
+                          padding: "3px 12px",
+                          fontSize: "12px",
+                          cursor:
+                            !editForm.baseUrl || isFetching
+                              ? "default"
+                              : "pointer",
+                          opacity: !editForm.baseUrl || isFetching ? 0.5 : 1,
+                        }}
+                      >
+                        {isFetching ? "Fetching..." : "\u21BB Fetch Models"}
+                      </button>
+                    </div>
+
+                    {/* Model list */}
+                    {editForm.models.length > 0 && (
+                      <div
+                        style={{
+                          background: "var(--bg-surface, #1e1e1e)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        {editForm.models.map((modelId, idx) => (
+                          <div
+                            key={modelId}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "8px 12px",
+                              borderBottom:
+                                idx < editForm.models.length - 1
+                                  ? "1px solid var(--border-muted, #2a2a2a)"
+                                  : undefined,
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "var(--text-primary)",
+                                fontSize: "13px",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {modelId}
+                            </span>
+                            <button
+                              onClick={() => handleRemoveModel(modelId)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "var(--text-muted)",
+                                cursor: "pointer",
+                                fontSize: "16px",
+                                padding: "0 4px",
+                              }}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Manual add */}
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <input
+                        type="text"
+                        value={manualModelInput}
+                        onChange={(e) => setManualModelInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddManualModel();
+                        }}
+                        placeholder="Type model name to add..."
+                        style={{
+                          flex: 1,
+                          background: "var(--bg-surface, #2a2a2a)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          padding: "6px 10px",
+                          color: "var(--text-primary)",
+                          fontSize: "12px",
+                          fontFamily: "monospace",
+                          outline: "none",
+                        }}
+                      />
+                      <button
+                        onClick={handleAddManualModel}
+                        disabled={!manualModelInput.trim()}
+                        style={{
+                          background: "rgba(139,139,240,0.1)",
+                          color: "var(--accent)",
+                          border: "1px solid rgba(139,139,240,0.3)",
+                          borderRadius: "4px",
+                          padding: "4px 12px",
+                          fontSize: "12px",
+                          cursor: manualModelInput.trim()
+                            ? "pointer"
+                            : "default",
+                          opacity: manualModelInput.trim() ? 1 : 0.5,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
+
                   <div
                     style={{
                       display: "flex",
@@ -3275,14 +3861,9 @@ function LanguageModelsTab({
                   >
                     <button
                       onClick={handleSaveEdit}
-                      disabled={!editForm.apiKey || !editForm.model}
                       style={{
                         ...primaryBtnStyle,
-                        cursor:
-                          !editForm.apiKey || !editForm.model
-                            ? "not-allowed"
-                            : "pointer",
-                        opacity: !editForm.apiKey || !editForm.model ? 0.5 : 1,
+                        cursor: "pointer",
                       }}
                     >
                       Save
@@ -3294,6 +3875,18 @@ function LanguageModelsTab({
           );
         })}
       </div>
+
+      {showFetchDialog && (
+        <FetchModelsDialog
+          providerName={providers.find((p) => p.id === editingId)?.name ?? ""}
+          fetchedModels={fetchedModels}
+          existingModels={editForm.models}
+          onAdd={handleAddModelFromFetch}
+          onClose={() => setShowFetchDialog(false)}
+          onRefresh={handleFetchModels}
+          isRefreshing={isFetching}
+        />
+      )}
     </>
   );
 }
