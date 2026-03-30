@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-30 (62)
+
+- **音频下载功能（IPC 层）** — 新增 yt-dlp 音频下载 IPC handlers：`audio:download-start`（异步启动下载，自动获取标题、下载音频、转换 WAV、创建会话）、`audio:download-cancel`（终止进程并清理临时文件）、`audio:download-retry`（删除旧记录并触发重新下载）、`audio:download-list`（列出所有下载记录）、`audio:download-remove`（删除记录及临时文件）；下载过程通过 `audio:download-progress` 事件实时推送进度（fetching-info → downloading → converting → completed/error）
+
 ### 2026-03-30 (61)
 
 - **音频下载功能（数据层）** — 新增 `downloads` 数据库表及 CRUD 辅助函数（`createDownload`、`getDownload`、`listDownloads`、`updateDownload`、`deleteDownload`、`listInterruptedDownloads`），用于跟踪 yt-dlp 音频下载状态（URL、进度、速度、ETA、错误信息等），支持异常中断后恢复查询

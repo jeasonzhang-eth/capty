@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "node:path";
 import { join } from "path";
@@ -97,6 +97,32 @@ import {
   calcDirSizeGb,
   isModelDownloaded,
 } from "./download/download-manager";
+
+/** Track active yt-dlp child processes by download ID for cancel support. */
+const activeDownloads = new Map<number, ChildProcess>();
+
+/** Extract domain from URL for display. */
+function extractSource(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    return host.replace(/^www\./, "");
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Parse yt-dlp download progress line. */
+function parseYtdlpProgress(line: string): {
+  percent: number;
+  speed: string;
+  eta: string;
+} | null {
+  const m = line.match(
+    /\[download\]\s+([\d.]+)%\s+of\s+~?[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)/,
+  );
+  if (!m) return null;
+  return { percent: parseFloat(m[1]), speed: m[2], eta: m[3] };
+}
 
 export interface IpcDeps {
   readonly db: Database.Database;
@@ -2283,4 +2309,320 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       return result.filePath;
     },
   );
+
+  // ─── Audio Download via yt-dlp ───
+
+  ipcMain.handle("audio:download-list", () => {
+    return listDownloads(db);
+  });
+
+  ipcMain.handle("audio:download-remove", (_event, downloadId: number) => {
+    const dl = getDownload(db, downloadId);
+    if (dl?.temp_dir) {
+      try {
+        fs.rmSync(dl.temp_dir, { recursive: true, force: true });
+      } catch {
+        // temp dir may already be cleaned
+      }
+    }
+    deleteDownload(db, downloadId);
+  });
+
+  ipcMain.handle("audio:download-cancel", (_event, downloadId: number) => {
+    const proc = activeDownloads.get(downloadId);
+    if (proc) {
+      proc.kill("SIGTERM");
+      activeDownloads.delete(downloadId);
+    }
+    const dl = getDownload(db, downloadId);
+    if (dl?.temp_dir) {
+      try {
+        fs.rmSync(dl.temp_dir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+    updateDownload(db, downloadId, { status: "cancelled", progress: 0 });
+    const win = getMainWindow();
+    if (win) {
+      win.webContents.send("audio:download-progress", {
+        id: downloadId,
+        stage: "cancelled" as const,
+      });
+    }
+  });
+
+  ipcMain.handle("audio:download-start", async (_event, url: string) => {
+    const win = getMainWindow();
+
+    // 1. Check yt-dlp exists
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const check = spawn("which", ["yt-dlp"]);
+        check.on("close", (code) =>
+          code === 0 ? resolve() : reject(new Error("not found")),
+        );
+        check.on("error", reject);
+      });
+    } catch {
+      throw new Error("yt-dlp not found. Install: brew install yt-dlp");
+    }
+
+    // 2. Create download record
+    const source = extractSource(url);
+    const downloadId = createDownload(db, { url, source });
+
+    // 3. Run download async (don't await — return downloadId immediately)
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+
+    (async () => {
+      try {
+        // Push fetching-info event
+        if (win) {
+          win.webContents.send("audio:download-progress", {
+            id: downloadId,
+            stage: "fetching-info",
+          });
+        }
+
+        // 4. Fetch video title
+        let videoTitle = "";
+        try {
+          videoTitle = await new Promise<string>((resolve, reject) => {
+            const proc = spawn("yt-dlp", [
+              "--print",
+              "title",
+              "--no-playlist",
+              url,
+            ]);
+            let out = "";
+            proc.stdout.on("data", (chunk: Buffer) => {
+              out += chunk.toString();
+            });
+            proc.on("close", (code) => {
+              if (code === 0) resolve(out.trim());
+              else
+                reject(
+                  new Error(`yt-dlp title fetch exited with code ${code}`),
+                );
+            });
+            proc.on("error", reject);
+          });
+        } catch {
+          videoTitle = ""; // fallback: no title
+        }
+
+        if (videoTitle) {
+          updateDownload(db, downloadId, { title: videoTitle });
+        }
+
+        // 5. Prepare paths
+        const now = new Date();
+        const pad = (n: number): string => String(n).padStart(2, "0");
+        const dirTimestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+        const readableTimestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+        const tempDir = join(
+          dataDir,
+          "audio",
+          ".downloading",
+          String(downloadId),
+        );
+        fs.mkdirSync(tempDir, { recursive: true });
+        updateDownload(db, downloadId, {
+          temp_dir: tempDir,
+          status: "downloading",
+        });
+
+        const outputTemplate = join(tempDir, `${dirTimestamp}.%(ext)s`);
+
+        // 6. Spawn yt-dlp download
+        updateDownload(db, downloadId, { status: "downloading" });
+        if (win) {
+          win.webContents.send("audio:download-progress", {
+            id: downloadId,
+            stage: "downloading",
+            title: videoTitle || undefined,
+            source,
+          });
+        }
+
+        const ytdlp = spawn("yt-dlp", [
+          "-f",
+          "ba",
+          "--continue",
+          "--newline",
+          "--no-playlist",
+          "-o",
+          outputTemplate,
+          url,
+        ]);
+        activeDownloads.set(downloadId, ytdlp);
+
+        let stderrBuf = "";
+        ytdlp.stderr.on("data", (chunk: Buffer) => {
+          stderrBuf += chunk.toString();
+        });
+
+        // 7. Parse progress
+        ytdlp.stdout.on("data", (chunk: Buffer) => {
+          const lines = chunk.toString().split("\n");
+          for (const line of lines) {
+            const progress = parseYtdlpProgress(line);
+            if (progress) {
+              updateDownload(db, downloadId, {
+                progress: progress.percent,
+                speed: progress.speed,
+                eta: progress.eta,
+              });
+              if (win) {
+                win.webContents.send("audio:download-progress", {
+                  id: downloadId,
+                  stage: "downloading",
+                  percent: progress.percent,
+                  speed: progress.speed,
+                  eta: progress.eta,
+                });
+              }
+            }
+          }
+        });
+
+        // 8. Wait for yt-dlp to finish
+        const exitCode = await new Promise<number | null>((resolve) => {
+          ytdlp.on("close", resolve);
+        });
+        activeDownloads.delete(downloadId);
+
+        // Check if cancelled
+        const currentDl = getDownload(db, downloadId);
+        if (currentDl?.status === "cancelled") return;
+
+        if (exitCode !== 0) {
+          const errMsg =
+            stderrBuf.trim().split("\n").pop() ||
+            `yt-dlp exited with code ${exitCode}`;
+          updateDownload(db, downloadId, { status: "failed", error: errMsg });
+          if (win) {
+            win.webContents.send("audio:download-progress", {
+              id: downloadId,
+              stage: "error",
+              error: errMsg,
+            });
+          }
+          return;
+        }
+
+        // 9. Converting stage
+        updateDownload(db, downloadId, { status: "converting", progress: 100 });
+        if (win) {
+          win.webContents.send("audio:download-progress", {
+            id: downloadId,
+            stage: "converting",
+          });
+        }
+
+        // Find downloaded file (yt-dlp may have saved as .m4a, .webm, .opus, etc.)
+        const files = fs.readdirSync(tempDir);
+        const downloadedFile = files.find((f) => !f.endsWith(".part"));
+        if (!downloadedFile) {
+          updateDownload(db, downloadId, {
+            status: "failed",
+            error: "Downloaded file not found in temp directory",
+          });
+          if (win) {
+            win.webContents.send("audio:download-progress", {
+              id: downloadId,
+              stage: "error",
+              error: "Downloaded file not found",
+            });
+          }
+          return;
+        }
+
+        // 10. Convert to WAV
+        // Deduplicate session directory
+        let finalTimestamp = dirTimestamp;
+        let sessionDir = join(dataDir, "audio", finalTimestamp);
+        let suffix = 1;
+        while (fs.existsSync(sessionDir)) {
+          finalTimestamp = `${dirTimestamp}-${suffix}`;
+          sessionDir = join(dataDir, "audio", finalTimestamp);
+          suffix++;
+        }
+        fs.mkdirSync(sessionDir, { recursive: true });
+
+        const wavPath = join(sessionDir, `${finalTimestamp}.wav`);
+        await convertToWav(join(tempDir, downloadedFile), wavPath);
+
+        // 11. Calculate duration
+        const wavStat = fs.statSync(wavPath);
+        const pcmBytes = wavStat.size - 44;
+        const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
+
+        // 12. Create session
+        const sessionTitle = videoTitle
+          ? `${readableTimestamp} ${videoTitle}`
+          : readableTimestamp;
+        const sessionId = createSession(db, { modelName: "yt-dlp" });
+        updateSession(db, sessionId, {
+          audioPath: finalTimestamp,
+          title: sessionTitle,
+          startedAt: readableTimestamp,
+          status: "completed",
+          durationSeconds,
+        });
+
+        // 13. Update download record
+        const completedAt = new Date();
+        const completedStr = `${completedAt.getFullYear()}-${pad(completedAt.getMonth() + 1)}-${pad(completedAt.getDate())} ${pad(completedAt.getHours())}:${pad(completedAt.getMinutes())}:${pad(completedAt.getSeconds())}`;
+        updateDownload(db, downloadId, {
+          status: "completed",
+          session_id: sessionId,
+          completed_at: completedStr,
+          progress: 100,
+        });
+
+        // 14. Clean up temp dir
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        // 15. Push completed event
+        if (win) {
+          win.webContents.send("audio:download-progress", {
+            id: downloadId,
+            stage: "completed",
+            sessionId,
+          });
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        updateDownload(db, downloadId, { status: "failed", error: message });
+        if (win) {
+          win.webContents.send("audio:download-progress", {
+            id: downloadId,
+            stage: "error",
+            error: message,
+          });
+        }
+      }
+    })();
+
+    return { downloadId };
+  });
+
+  ipcMain.handle("audio:download-retry", async (_event, downloadId: number) => {
+    const dl = getDownload(db, downloadId);
+    if (!dl) throw new Error("Download not found");
+
+    // Delete old record and start a fresh download with the same URL
+    const url = dl.url;
+    deleteDownload(db, downloadId);
+
+    // Trigger new download via IPC event to renderer, which calls downloadAudio()
+    const win = getMainWindow();
+    if (win) {
+      win.webContents.send("audio:download-retry-trigger", { url });
+    }
+  });
 }
