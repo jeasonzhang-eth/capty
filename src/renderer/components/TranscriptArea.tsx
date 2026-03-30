@@ -444,7 +444,32 @@ export function TranscriptArea({
   const prevSegmentCountRef = useRef(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showTranslateMenu, setShowTranslateMenu] = useState(false);
-  const [showTranslations, setShowTranslations] = useState(true);
+  const [showTranslations, setShowTranslationsRaw] = useState(() => {
+    if (sessionId == null) return true;
+    const stored = localStorage.getItem(`capty:showTranslations:${sessionId}`);
+    return stored !== null ? stored === "true" : true;
+  });
+  const setShowTranslations = useCallback(
+    (val: boolean | ((prev: boolean) => boolean)) => {
+      setShowTranslationsRaw((prev) => {
+        const next = typeof val === "function" ? val(prev) : val;
+        if (sessionId != null) {
+          localStorage.setItem(
+            `capty:showTranslations:${sessionId}`,
+            String(next),
+          );
+        }
+        return next;
+      });
+    },
+    [sessionId],
+  );
+  // Reload preference when switching sessions
+  useEffect(() => {
+    if (sessionId == null) return;
+    const stored = localStorage.getItem(`capty:showTranslations:${sessionId}`);
+    setShowTranslationsRaw(stored !== null ? stored === "true" : true);
+  }, [sessionId]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<string>("中文");
 
