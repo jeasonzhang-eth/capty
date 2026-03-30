@@ -687,9 +687,24 @@ function App(): React.JSX.Element {
             text: s.text,
           })),
         );
-        // Clear translations (will be loaded if user picks a language)
-        setTranslations({});
-        setActiveTranslationLang(null);
+        // Auto-load translations for the new session if a language was active
+        if (activeTranslationLang) {
+          try {
+            const rows = await window.capty.listTranslations(
+              sessionId,
+              activeTranslationLang,
+            );
+            const map: Record<number, string> = {};
+            for (const row of rows) {
+              map[row.segment_id] = row.translated_text;
+            }
+            setTranslations(map);
+          } catch {
+            setTranslations({});
+          }
+        } else {
+          setTranslations({});
+        }
         // Load summaries for this session filtered by active prompt type
         const sessionSummaries = await window.capty.listSummaries(
           sessionId,
@@ -701,7 +716,7 @@ function App(): React.JSX.Element {
         console.error("Failed to load session:", err);
       }
     },
-    [store, activePromptType, audioPlayer],
+    [store, activePromptType, audioPlayer, activeTranslationLang],
   );
 
   const handlePlaySession = useCallback(
