@@ -65,6 +65,12 @@ import {
   deleteSummary,
   saveTranslation,
   getTranslations,
+  createDownload,
+  getDownload,
+  listDownloads,
+  updateDownload,
+  deleteDownload,
+  listInterruptedDownloads,
 } from "./database";
 import {
   saveSegmentAudio,

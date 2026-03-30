@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-30 (61)
+
+- **音频下载功能（数据层）** — 新增 `downloads` 数据库表及 CRUD 辅助函数（`createDownload`、`getDownload`、`listDownloads`、`updateDownload`、`deleteDownload`、`listInterruptedDownloads`），用于跟踪 yt-dlp 音频下载状态（URL、进度、速度、ETA、错误信息等），支持异常中断后恢复查询
+
 ### 2026-03-30 (60)
 
 - **LLM 多模型 Provider 支持** — 每个 LLM Provider 现支持多个模型，新增 `models[]` 字段存储模型列表

@@ -100,6 +100,24 @@ function initTables(db: Database.Database): void {
       UNIQUE(segment_id, target_language)
     )
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS downloads (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      url           TEXT NOT NULL,
+      title         TEXT,
+      source        TEXT,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      progress      REAL DEFAULT 0,
+      speed         TEXT,
+      eta           TEXT,
+      temp_dir      TEXT,
+      session_id    INTEGER,
+      error         TEXT,
+      created_at    TEXT NOT NULL,
+      completed_at  TEXT
+    )
+  `);
 }
 
 export function createDatabase(dbPath: string): Database.Database {
@@ -458,4 +476,91 @@ export function deleteTranslationsBySession(
   db.prepare("DELETE FROM segment_translations WHERE session_id = ?").run(
     sessionId,
   );
+}
+
+// ─── Downloads ───
+
+export interface DownloadRow {
+  readonly id: number;
+  readonly url: string;
+  readonly title: string | null;
+  readonly source: string | null;
+  readonly status: string;
+  readonly progress: number;
+  readonly speed: string | null;
+  readonly eta: string | null;
+  readonly temp_dir: string | null;
+  readonly session_id: number | null;
+  readonly error: string | null;
+  readonly created_at: string;
+  readonly completed_at: string | null;
+}
+
+export function createDownload(
+  db: Database.Database,
+  opts: { url: string; source: string },
+): number {
+  const now = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const localTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const stmt = db.prepare(
+    "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, 'pending', ?)",
+  );
+  const result = stmt.run(opts.url, opts.source, localTime);
+  return result.lastInsertRowid as number;
+}
+
+export function getDownload(
+  db: Database.Database,
+  id: number,
+): DownloadRow | undefined {
+  return db.prepare("SELECT * FROM downloads WHERE id = ?").get(id) as
+    | DownloadRow
+    | undefined;
+}
+
+export function listDownloads(db: Database.Database): DownloadRow[] {
+  return db
+    .prepare("SELECT * FROM downloads ORDER BY created_at DESC")
+    .all() as DownloadRow[];
+}
+
+export function updateDownload(
+  db: Database.Database,
+  id: number,
+  fields: Partial<{
+    title: string;
+    status: string;
+    progress: number;
+    speed: string;
+    eta: string;
+    temp_dir: string;
+    session_id: number;
+    error: string | null;
+    completed_at: string;
+  }>,
+): void {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    setClauses.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (setClauses.length === 0) return;
+  values.push(id);
+  db.prepare(`UPDATE downloads SET ${setClauses.join(", ")} WHERE id = ?`).run(
+    ...values,
+  );
+}
+
+export function deleteDownload(db: Database.Database, id: number): void {
+  db.prepare("DELETE FROM downloads WHERE id = ?").run(id);
+}
+
+export function listInterruptedDownloads(db: Database.Database): DownloadRow[] {
+  return db
+    .prepare(
+      "SELECT * FROM downloads WHERE status IN ('pending', 'downloading', 'converting') ORDER BY created_at DESC",
+    )
+    .all() as DownloadRow[];
 }
