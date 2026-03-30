@@ -65,6 +65,10 @@ const api = {
     ipcRenderer.invoke("asr:fetch-models", provider) as Promise<
       Array<{ id: string; name: string }>
     >,
+  llmFetchModels: (provider: { baseUrl: string; apiKey: string }) =>
+    ipcRenderer.invoke("llm:fetch-models", provider) as Promise<
+      Array<{ id: string; name: string }>
+    >,
 
   // Models
   listModels: () => ipcRenderer.invoke("models:list"),
@@ -319,21 +323,35 @@ const api = {
       success: boolean;
       model: string;
     }>,
-  summarize: (sessionId: number, providerId: string, promptType: string) =>
-    ipcRenderer.invoke("llm:summarize", sessionId, providerId, promptType),
+  summarize: (
+    sessionId: number,
+    providerId: string,
+    model: string,
+    promptType: string,
+  ) =>
+    ipcRenderer.invoke(
+      "llm:summarize",
+      sessionId,
+      providerId,
+      model,
+      promptType,
+    ),
   generateTitle: (
     sessionId: number,
     providerId: string,
+    model: string,
     systemPrompt: string,
   ) =>
     ipcRenderer.invoke(
       "llm:generate-title",
       sessionId,
       providerId,
+      model,
       systemPrompt,
     ) as Promise<string>,
   translate: (
     providerId: string,
+    model: string,
     text: string,
     targetLanguage: string,
     promptTemplate: string,
@@ -341,6 +359,7 @@ const api = {
     ipcRenderer.invoke(
       "llm:translate",
       providerId,
+      model,
       text,
       targetLanguage,
       promptTemplate,

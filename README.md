@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-30 (61)
+
+- **LLM 模型列表获取与显式模型参数** — 新增 `llm:fetch-models` IPC 接口，支持从 Provider 的 `/v1/models` 和 `/models` 端点获取可用模型列表（兼容 OpenAI 和数组两种响应格式）；`llm:summarize`、`llm:generate-title`、`llm:translate` 三个 IPC handler 均改为接受显式 `model` 参数（不再从 provider config 读取），为多模型独立选择做准备；Authorization header 改为条件式（支持无 API Key 的 Provider）
+
 ### 2026-03-30 (60)
 
 - **LLM 多模型数据模型** — LlmProvider 新增 `models[]` 字段支持每个 Provider 存储多个模型；AppConfig 新增 `selectedSummaryModel` / `selectedTranslateModel` / `selectedRapidModel` 三个独立模型选择字段（替代单一 `selectedLlmProviderId`）；readConfig 自动迁移旧配置（从 `model` 填充 `models[]`，从 `selectedLlmProviderId` 迁移到 `selectedSummaryModel`）

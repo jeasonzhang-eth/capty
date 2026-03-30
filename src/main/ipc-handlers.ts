@@ -1416,6 +1416,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       _event,
       sessionId: number,
       providerId: string,
+      model: string,
       promptType: string,
     ) => {
       const win = getMainWindow();
@@ -1428,9 +1429,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       );
       if (!provider) {
         throw new Error("Selected LLM provider not found");
-      }
-      if (!provider.apiKey) {
-        throw new Error("API key not configured for selected provider");
       }
 
       // Resolve the system prompt from prompt type
@@ -1458,10 +1456,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${provider.apiKey}`,
+            ...(provider.apiKey
+              ? { Authorization: `Bearer ${provider.apiKey}` }
+              : {}),
           },
           body: JSON.stringify({
-            model: provider.model,
+            model: model,
             messages: [
               {
                 role: "system",
@@ -1488,7 +1488,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         const reader = resp.body!.getReader();
         const decoder = new TextDecoder();
         let fullContent = "";
-        let actualModel = provider.model;
+        let actualModel = model;
         let buffer = "";
 
         while (true) {
@@ -1576,6 +1576,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       _event,
       sessionId: number,
       providerId: string,
+      model: string,
       systemPrompt: string,
     ) => {
       const config = readConfig(configDir);
@@ -1587,9 +1588,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       );
       if (!provider) {
         throw new Error("Selected LLM provider not found");
-      }
-      if (!provider.apiKey) {
-        throw new Error("API key not configured for selected provider");
       }
 
       const segments = getSegments(db, sessionId);
@@ -1604,10 +1602,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${provider.apiKey}`,
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
         },
         body: JSON.stringify({
-          model: provider.model,
+          model: model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: transcriptText },
@@ -1639,6 +1639,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     async (
       _event,
       providerId: string,
+      model: string,
       text: string,
       targetLanguage: string,
       promptTemplate: string,
@@ -1653,9 +1654,6 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (!provider) {
         throw new Error("Selected translate LLM provider not found");
       }
-      if (!provider.apiKey) {
-        throw new Error("API key not configured for translate provider");
-      }
 
       const prompt = promptTemplate
         .replace("{{target_language}}", targetLanguage)
@@ -1667,10 +1665,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${provider.apiKey}`,
+          ...(provider.apiKey
+            ? { Authorization: `Bearer ${provider.apiKey}` }
+            : {}),
         },
         body: JSON.stringify({
-          model: provider.model,
+          model: model,
           messages: [{ role: "user", content: prompt }],
           stream: false,
         }),
@@ -1755,6 +1755,48 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         clearTimeout(timeout);
         throw err;
       }
+    },
+  );
+
+  // LLM: fetch available models from provider
+  ipcMain.handle(
+    "llm:fetch-models",
+    async (_event, provider: { baseUrl: string; apiKey: string }) => {
+      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+      const headers: Record<string, string> = {};
+      if (provider.apiKey)
+        headers["Authorization"] = `Bearer ${provider.apiKey}`;
+
+      const endpoints = [`${baseUrl}/v1/models`, `${baseUrl}/models`];
+
+      for (const url of endpoints) {
+        try {
+          const resp = await net.fetch(url, {
+            headers,
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+
+          // OpenAI format: {data: [{id, ...}, ...]}
+          if (data.data && Array.isArray(data.data)) {
+            return data.data.map((m: { id: string }) => ({
+              id: m.id,
+              name: m.id,
+            }));
+          }
+          // Array format: [{id, name?, ...}, ...]
+          if (Array.isArray(data)) {
+            return data.map((m: { id: string; name?: string }) => ({
+              id: m.id,
+              name: m.name || m.id,
+            }));
+          }
+        } catch {
+          continue;
+        }
+      }
+      return [];
     },
   );
 
