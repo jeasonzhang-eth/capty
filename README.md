@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (65)
+
+- **音频下载管理器对话框** — 新增 `DownloadManagerDialog` React 组件：URL 输入框支持粘贴 YouTube/Bilibili 链接一键下载；下载列表按状态排序（活跃任务置顶）；实时显示各阶段状态（获取信息 → 下载中含进度条/速度/ETA → 转换 WAV → 完成/失败/已取消）；失败/取消项支持重试和删除；已完成项可点击跳转对应会话；Portal 渲染模态窗口，毛玻璃暗色风格
+
 ### 2026-03-31 (64)
 
 - **音频下载按钮（HistoryPanel）** — HistoryPanel 侧边栏新增 "Download Audio" 按钮（位于 Upload Audio 按钮下方），支持 badge 圆点指示器（橙色=下载中，红色=下载失败），点击打开下载管理器对话框；新增 `onDownloadAudio` 回调和 `downloadBadge` 属性
