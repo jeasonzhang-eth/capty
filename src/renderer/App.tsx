@@ -1892,6 +1892,11 @@ function App(): React.JSX.Element {
   // Listen for audio download progress events
   useEffect(() => {
     const cleanup = window.capty.onAudioDownloadProgress((event) => {
+      // When download completes, refresh session list so new session appears in sidebar
+      if (event.stage === "completed") {
+        store.loadSessions();
+      }
+
       setAudioDownloads((prev) => {
         const idx = prev.findIndex((d) => d.id === event.id);
         if (idx === -1) {
@@ -1925,7 +1930,7 @@ function App(): React.JSX.Element {
       });
     });
     return cleanup;
-  }, [computeDownloadBadge]);
+  }, [computeDownloadBadge, store]);
 
   // Load download list on mount + crash recovery
   useEffect(() => {

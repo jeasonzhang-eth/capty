@@ -315,6 +315,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (62)
+
+- **音频下载：session 刷新修复** — 下载完成后自动刷新侧边栏 session 列表，新创建的 session 即时显示
+
 ### 2026-03-31 (61)
 
 - **音频下载 (yt-dlp)** — 新增 Download Audio 按钮 + Download Manager 弹窗，从 YouTube/Bilibili 下载音频
