@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (64)
+
+- **音频下载按钮（HistoryPanel）** — HistoryPanel 侧边栏新增 "Download Audio" 按钮（位于 Upload Audio 按钮下方），支持 badge 圆点指示器（橙色=下载中，红色=下载失败），点击打开下载管理器对话框；新增 `onDownloadAudio` 回调和 `downloadBadge` 属性
+
 ### 2026-03-31 (63)
 
 - **音频下载功能（Preload API）** — 在 preload 层暴露 yt-dlp 音频下载 IPC 桥接方法：`downloadAudio`（启动下载）、`cancelAudioDownload`（取消下载）、`retryAudioDownload`（重试下载）、`getAudioDownloads`（列出下载记录）、`removeAudioDownload`（删除记录）、`onAudioDownloadProgress`（实时进度回调，含阶段/标题/百分比/速度/ETA）、`onAudioDownloadRetryTrigger`（重试触发事件），所有事件监听器返回清理函数
