@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-30 (62)
+
+- **App.tsx 状态管理升级为 Provider+Model 选择** — 三个功能维度的 LLM 选择从单一 `selectedXxxProviderId`（仅存 provider ID）升级为 `{ providerId, model }` 对象（`selectedSummaryModel` / `selectedTranslateModel` / `selectedRapidModel`）；所有 handler（`handleSummarize`、`handleTranslate`、`handleAiRename`）均更新为向 IPC 传递显式 model 参数；provider 查找逻辑从检查 `apiKey && model` 改为检查 `models.length > 0`（兼容无 API Key 的本地服务）；新增 `useEffect` 在 provider 列表变化时自动校验已选模型（provider 被删除则清空，model 被移除则回退到首个可用模型）
+
 ### 2026-03-30 (61)
 
 - **LLM 模型列表获取与显式模型参数** — 新增 `llm:fetch-models` IPC 接口，支持从 Provider 的 `/v1/models` 和 `/models` 端点获取可用模型列表（兼容 OpenAI 和数组两种响应格式）；`llm:summarize`、`llm:generate-title`、`llm:translate` 三个 IPC handler 均改为接受显式 `model` 参数（不再从 provider config 读取），为多模型独立选择做准备；Authorization header 改为条件式（支持无 API Key 的 Provider）

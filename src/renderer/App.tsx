@@ -180,14 +180,14 @@ function App(): React.JSX.Element {
 
   // LLM provider state
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
-  const [selectedLlmProviderId, setSelectedLlmProviderId] = useState<
-    string | null
-  >(null);
-  const [selectedRapidLlmProviderId, setSelectedRapidLlmProviderId] = useState<
-    string | null
-  >(null);
-  const [selectedTranslateLlmProviderId, setSelectedTranslateLlmProviderId] =
-    useState<string | null>(null);
+  // Provider + model pair per feature
+  type ModelSelection = { providerId: string; model: string } | null;
+  const [selectedSummaryModel, setSelectedSummaryModel] =
+    useState<ModelSelection>(null);
+  const [selectedTranslateModel, setSelectedTranslateModel] =
+    useState<ModelSelection>(null);
+  const [selectedRapidModel, setSelectedRapidModel] =
+    useState<ModelSelection>(null);
   const [rapidRenamePrompt, setRapidRenamePrompt] = useState(
     DEFAULT_RAPID_RENAME_PROMPT,
   );
@@ -381,19 +381,19 @@ function App(): React.JSX.Element {
         if (savedProviders?.length) {
           setLlmProviders(savedProviders);
         }
-        const savedLlmId = config.selectedLlmProviderId as string | null;
-        if (savedLlmId) {
-          setSelectedLlmProviderId(savedLlmId);
+        // Restore model selections (new format)
+        if (config.selectedSummaryModel) {
+          setSelectedSummaryModel(
+            config.selectedSummaryModel as ModelSelection,
+          );
         }
-        const savedRapidId = config.selectedRapidLlmProviderId as string | null;
-        if (savedRapidId) {
-          setSelectedRapidLlmProviderId(savedRapidId);
+        if (config.selectedTranslateModel) {
+          setSelectedTranslateModel(
+            config.selectedTranslateModel as ModelSelection,
+          );
         }
-        const savedTranslateId = config.selectedTranslateLlmProviderId as
-          | string
-          | null;
-        if (savedTranslateId) {
-          setSelectedTranslateLlmProviderId(savedTranslateId);
+        if (config.selectedRapidModel) {
+          setSelectedRapidModel(config.selectedRapidModel as ModelSelection);
         }
         const savedRenamePrompt = config.rapidRenamePrompt as
           | string
@@ -1144,34 +1144,37 @@ function App(): React.JSX.Element {
     await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
   }, []);
 
-  const handleChangeLlmProvider = useCallback(async (providerId: string) => {
-    setSelectedLlmProviderId(providerId);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      selectedLlmProviderId: providerId,
-    });
-  }, []);
-
-  const handleChangeRapidLlmProvider = useCallback(
-    async (providerId: string) => {
-      setSelectedRapidLlmProviderId(providerId);
+  const handleChangeSummaryModel = useCallback(
+    async (selection: { providerId: string; model: string }) => {
+      setSelectedSummaryModel(selection);
       const config = await window.capty.getConfig();
       await window.capty.setConfig({
         ...config,
-        selectedRapidLlmProviderId: providerId,
+        selectedSummaryModel: selection,
       });
     },
     [],
   );
 
-  const handleChangeTranslateLlmProvider = useCallback(
-    async (providerId: string) => {
-      setSelectedTranslateLlmProviderId(providerId);
+  const handleChangeRapidModel = useCallback(
+    async (selection: { providerId: string; model: string }) => {
+      setSelectedRapidModel(selection);
       const config = await window.capty.getConfig();
       await window.capty.setConfig({
         ...config,
-        selectedTranslateLlmProviderId: providerId,
+        selectedRapidModel: selection,
+      });
+    },
+    [],
+  );
+
+  const handleChangeTranslateModel = useCallback(
+    async (selection: { providerId: string; model: string }) => {
+      setSelectedTranslateModel(selection);
+      const config = await window.capty.getConfig();
+      await window.capty.setConfig({
+        ...config,
+        selectedTranslateModel: selection,
       });
     },
     [],
@@ -1203,13 +1206,16 @@ function App(): React.JSX.Element {
       // Already translating this session
       if (sessionId in translateAbortMapRef.current) return;
 
-      const providerId =
-        selectedTranslateLlmProviderId ||
-        llmProviders.find((p) => p.apiKey && p.model)?.id;
-      if (!providerId) {
+      // Resolve provider + model for translation
+      const sel = selectedTranslateModel;
+      const provider = sel
+        ? llmProviders.find((p) => p.id === sel.providerId)
+        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
+      if (!provider) {
         console.warn("Translate: no LLM provider configured");
         return;
       }
+      const modelToUse = sel?.model || provider.models[0] || provider.model;
 
       translateAbortMapRef.current[sessionId] = false;
       setTranslationProgressMap((prev) => ({ ...prev, [sessionId]: 0 }));
@@ -1229,7 +1235,8 @@ function App(): React.JSX.Element {
         if (translateAbortMapRef.current[sessionId]) return;
         try {
           const result = await window.capty.translate(
-            providerId,
+            provider.id,
+            modelToUse,
             seg.text,
             targetLanguage,
             translatePrompt,
@@ -1289,7 +1296,7 @@ function App(): React.JSX.Element {
         }
       }
     },
-    [store, selectedTranslateLlmProviderId, llmProviders, translatePrompt],
+    [store, selectedTranslateModel, llmProviders, translatePrompt],
   );
 
   const handleStopTranslation = useCallback(() => {
@@ -1323,19 +1330,22 @@ function App(): React.JSX.Element {
   const handleAiRename = useCallback(
     async (sessionId: number) => {
       if (aiRenamingSessionId) return;
-      // Use Rapid Model if set, otherwise fallback to first configured provider
-      const providerId =
-        selectedRapidLlmProviderId ||
-        llmProviders.find((p) => p.apiKey && p.model)?.id;
-      if (!providerId) {
+      // Resolve provider + model for AI rename
+      const sel = selectedRapidModel;
+      const provider = sel
+        ? llmProviders.find((p) => p.id === sel.providerId)
+        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
+      if (!provider) {
         console.warn("AI rename: no LLM provider configured");
         return;
       }
+      const modelToUse = sel?.model || provider.models[0] || provider.model;
       setAiRenamingSessionId(sessionId);
       try {
         const rawTitle = await window.capty.generateTitle(
           sessionId,
-          providerId,
+          provider.id,
+          modelToUse,
           rapidRenamePrompt,
         );
         if (rawTitle) {
@@ -1360,7 +1370,7 @@ function App(): React.JSX.Element {
       }
     },
     [
-      selectedRapidLlmProviderId,
+      selectedRapidModel,
       llmProviders,
       rapidRenamePrompt,
       aiRenamingSessionId,
@@ -1590,7 +1600,7 @@ function App(): React.JSX.Element {
   );
 
   const handleSummarize = useCallback(
-    async (providerId: string, promptType: string) => {
+    async (providerId: string, model: string, promptType: string) => {
       if (!store.currentSessionId || isGeneratingSummary) return;
       setStreamingContent("");
       setIsGeneratingSummary(true);
@@ -1600,16 +1610,17 @@ function App(): React.JSX.Element {
         const result = await window.capty.summarize(
           store.currentSessionId,
           providerId,
+          model,
           promptType,
         );
         setSummaries((prev) => [...prev, result as Summary]);
         setStreamingContent("");
-        // Remember last used provider
-        setSelectedLlmProviderId(providerId);
+        // Remember last used model selection
+        setSelectedSummaryModel({ providerId, model });
         const config = await window.capty.getConfig();
         await window.capty.setConfig({
           ...config,
-          selectedLlmProviderId: providerId,
+          selectedSummaryModel: { providerId, model },
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to generate";
@@ -1734,6 +1745,36 @@ function App(): React.JSX.Element {
     return () => clearInterval(timer);
   }, [selectedTtsProviderId, ttsProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Validate model selections when providers change
+  useEffect(() => {
+    const validateSelection = (
+      sel: ModelSelection,
+      setSel: (s: ModelSelection) => void,
+    ): void => {
+      if (!sel) return;
+      const provider = llmProviders.find((p) => p.id === sel.providerId);
+      if (!provider) {
+        setSel(null);
+        return;
+      }
+      const models = provider.models?.length
+        ? provider.models
+        : provider.model
+          ? [provider.model]
+          : [];
+      if (!models.includes(sel.model)) {
+        if (models.length > 0) {
+          setSel({ providerId: provider.id, model: models[0] });
+        } else {
+          setSel(null);
+        }
+      }
+    };
+    validateSelection(selectedSummaryModel, setSelectedSummaryModel);
+    validateSelection(selectedTranslateModel, setSelectedTranslateModel);
+    validateSelection(selectedRapidModel, setSelectedRapidModel);
+  }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Listen for LLM streaming chunks
   useEffect(() => {
     const unsub = window.capty.onSummaryChunk(({ content, done }) => {
@@ -1816,7 +1857,7 @@ function App(): React.JSX.Element {
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
           onUploadAudio={handleUploadAudio}
           onAiRename={
-            llmProviders.some((p) => p.apiKey && p.model)
+            llmProviders.some((p) => (p.models?.length ?? 0) > 0)
               ? handleAiRename
               : undefined
           }
@@ -1839,8 +1880,8 @@ function App(): React.JSX.Element {
           onTranslate={
             !store.isRecording &&
             store.segments.length > 0 &&
-            (selectedTranslateLlmProviderId ||
-              llmProviders.some((p) => p.apiKey && p.model))
+            (selectedTranslateModel ||
+              llmProviders.some((p) => (p.models?.length ?? 0) > 0))
               ? handleTranslate
               : null
           }
@@ -1856,8 +1897,8 @@ function App(): React.JSX.Element {
               : undefined
           }
           llmProviders={llmProviders}
-          selectedTranslateProviderId={selectedTranslateLlmProviderId}
-          onChangeTranslateProvider={handleChangeTranslateLlmProvider}
+          selectedTranslateModel={selectedTranslateModel}
+          onChangeTranslateModel={handleChangeTranslateModel}
         />
         <SummaryPanel
           summaries={summaries}
@@ -1868,7 +1909,7 @@ function App(): React.JSX.Element {
           currentSessionId={store.currentSessionId}
           hasSegments={store.segments.length > 0}
           llmProviders={llmProviders}
-          selectedLlmProviderId={selectedLlmProviderId}
+          selectedSummaryModel={selectedSummaryModel}
           promptTypes={promptTypes}
           activePromptType={activePromptType}
           initialWidth={summaryPanelWidth}
@@ -1997,14 +2038,14 @@ function App(): React.JSX.Element {
           ttsVoices={ttsVoices}
           onChangeTtsVoice={handleChangeTtsVoice}
           onChangeTtsModel={handleChangeTtsModelForPlay}
-          selectedLlmProviderId={selectedLlmProviderId}
-          onChangeLlmProvider={handleChangeLlmProvider}
-          selectedRapidLlmProviderId={selectedRapidLlmProviderId}
-          onChangeRapidLlmProvider={handleChangeRapidLlmProvider}
+          selectedSummaryModel={selectedSummaryModel}
+          onChangeSummaryModel={handleChangeSummaryModel}
+          selectedRapidModel={selectedRapidModel}
+          onChangeRapidModel={handleChangeRapidModel}
           rapidRenamePrompt={rapidRenamePrompt}
           onChangeRapidRenamePrompt={handleChangeRapidRenamePrompt}
-          selectedTranslateLlmProviderId={selectedTranslateLlmProviderId}
-          onChangeTranslateLlmProvider={handleChangeTranslateLlmProvider}
+          selectedTranslateModel={selectedTranslateModel}
+          onChangeTranslateModel={handleChangeTranslateModel}
           translatePrompt={translatePrompt}
           onChangeTranslatePrompt={handleChangeTranslatePrompt}
           onClose={() => setShowSettings(false)}
