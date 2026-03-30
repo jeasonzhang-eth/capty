@@ -308,6 +308,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (63)
+
+- **音频下载功能（Preload API）** — 在 preload 层暴露 yt-dlp 音频下载 IPC 桥接方法：`downloadAudio`（启动下载）、`cancelAudioDownload`（取消下载）、`retryAudioDownload`（重试下载）、`getAudioDownloads`（列出下载记录）、`removeAudioDownload`（删除记录）、`onAudioDownloadProgress`（实时进度回调，含阶段/标题/百分比/速度/ETA）、`onAudioDownloadRetryTrigger`（重试触发事件），所有事件监听器返回清理函数
+
 ### 2026-03-30 (62)
 
 - **音频下载功能（IPC 层）** — 新增 yt-dlp 音频下载 IPC handlers：`audio:download-start`（异步启动下载，自动获取标题、下载音频、转换 WAV、创建会话）、`audio:download-cancel`（终止进程并清理临时文件）、`audio:download-retry`（删除旧记录并触发重新下载）、`audio:download-list`（列出所有下载记录）、`audio:download-remove`（删除记录及临时文件）；下载过程通过 `audio:download-progress` 事件实时推送进度（fetching-info → downloading → converting → completed/error）

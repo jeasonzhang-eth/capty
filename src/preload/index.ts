@@ -413,6 +413,61 @@ const api = {
       isBuiltin: boolean;
     }[],
   ) => ipcRenderer.invoke("prompt-types:save", types),
+
+  // Audio download (yt-dlp)
+  downloadAudio: (url: string) =>
+    ipcRenderer.invoke("audio:download-start", url) as Promise<{
+      downloadId: number;
+    }>,
+  cancelAudioDownload: (downloadId: number) =>
+    ipcRenderer.invoke("audio:download-cancel", downloadId) as Promise<void>,
+  retryAudioDownload: (downloadId: number) =>
+    ipcRenderer.invoke("audio:download-retry", downloadId) as Promise<void>,
+  getAudioDownloads: () =>
+    ipcRenderer.invoke("audio:download-list") as Promise<
+      Array<{
+        id: number;
+        url: string;
+        title: string | null;
+        source: string | null;
+        status: string;
+        progress: number;
+        speed: string | null;
+        eta: string | null;
+        session_id: number | null;
+        error: string | null;
+        created_at: string;
+        completed_at: string | null;
+      }>
+    >,
+  removeAudioDownload: (downloadId: number) =>
+    ipcRenderer.invoke("audio:download-remove", downloadId) as Promise<void>,
+  onAudioDownloadProgress: (
+    callback: (event: {
+      id: number;
+      stage: string;
+      title?: string;
+      source?: string;
+      percent?: number;
+      speed?: string;
+      eta?: string;
+      sessionId?: number;
+      error?: string;
+    }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("audio:download-progress", handler);
+    return () => {
+      ipcRenderer.removeListener("audio:download-progress", handler);
+    };
+  },
+  onAudioDownloadRetryTrigger: (callback: (data: { url: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("audio:download-retry-trigger", handler);
+    return () => {
+      ipcRenderer.removeListener("audio:download-retry-trigger", handler);
+    };
+  },
 };
 
 if (process.contextIsolated) {
