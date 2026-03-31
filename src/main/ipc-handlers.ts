@@ -2185,12 +2185,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         );
       }
 
-      // Resolve the TTS model path so the sidecar can auto-switch
-      const ttsModelId = config.selectedTtsModelId;
-      let ttsModelPath = "";
-      if (ttsModelId) {
-        const dataDir = config.dataDir ?? join(configDir, "data");
-        ttsModelPath = join(dataDir, "models", "tts", ttsModelId);
+      // Resolve model: sidecar uses local path, external uses provider.model
+      let modelValue = "";
+      if (provider.isSidecar) {
+        const ttsModelId = config.selectedTtsModelId;
+        if (ttsModelId) {
+          const dataDir = config.dataDir ?? join(configDir, "data");
+          modelValue = join(dataDir, "models", "tts", ttsModelId);
+        }
+      } else {
+        modelValue = provider.model ?? "";
       }
 
       const baseUrl = normalizeTtsUrl(url);
@@ -2199,7 +2203,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           input: text,
-          model: ttsModelPath || undefined,
+          model: modelValue || undefined,
           voice: opts?.voice ?? provider?.voice ?? "auto",
           speed: opts?.speed ?? 1.0,
           lang_code: opts?.langCode ?? "auto",
@@ -2243,12 +2247,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       }
       const url = provider.baseUrl ?? "http://localhost:8765";
 
-      // Resolve TTS model path
-      const ttsModelId = config.selectedTtsModelId;
-      let ttsModelPath = "";
-      if (ttsModelId) {
-        const dataDir = config.dataDir ?? join(configDir, "data");
-        ttsModelPath = join(dataDir, "models", "tts", ttsModelId);
+      // Resolve model: sidecar uses local path, external uses provider.model
+      let modelValue = "";
+      if (provider.isSidecar) {
+        const ttsModelId = config.selectedTtsModelId;
+        if (ttsModelId) {
+          const dataDir = config.dataDir ?? join(configDir, "data");
+          modelValue = join(dataDir, "models", "tts", ttsModelId);
+        }
+      } else {
+        modelValue = provider.model ?? "";
       }
 
       const controller = new AbortController();
@@ -2261,7 +2269,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             input: text,
-            model: ttsModelPath || undefined,
+            model: modelValue || undefined,
             voice: opts?.voice ?? provider?.voice ?? "auto",
             speed: opts?.speed ?? 1.0,
             lang_code: opts?.langCode ?? "auto",
