@@ -1639,7 +1639,7 @@ function SummaryCard({
           marginTop: "8px",
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
           fontSize: "10px",
           fontFamily: "'JetBrains Mono', monospace",
           color: "var(--text-muted)",
@@ -1648,112 +1648,126 @@ function SummaryCard({
         <span
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: "4px",
+            flexDirection: "column",
+            gap: "2px",
             minWidth: 0,
           }}
         >
-          <button
-            onClick={
-              ttsModels.length > 0 && ttsProviderReady
-                ? handleTtsClick
-                : undefined
-            }
-            title={
-              ttsModels.length === 0
-                ? "Download a TTS model in Settings"
-                : !ttsProviderReady
-                  ? "TTS provider is not available"
-                  : ttsState === "idle"
-                    ? "Read aloud"
-                    : ttsState === "loading"
-                      ? "Loading..."
-                      : "Stop"
-            }
-            className="tts-play-btn"
-            style={{
-              padding: "2px 4px",
-              fontSize: "12px",
-              backgroundColor: "transparent",
-              border: "none",
-              cursor:
+          {/* Row 1: play button + provider name */}
+          <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <button
+              onClick={
                 ttsModels.length > 0 && ttsProviderReady
-                  ? "pointer"
-                  : "not-allowed",
-              color:
-                ttsState === "playing" ? "var(--accent)" : "var(--text-muted)",
-              opacity:
-                ttsModels.length === 0 || !ttsProviderReady
-                  ? 0.3
-                  : ttsState === "loading"
-                    ? 0.5
-                    : 0.7,
-              transition: "opacity 0.15s ease, color 0.15s ease",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "18px",
-              height: "18px",
-              flexShrink: 0,
-            }}
-          >
-            {ttsState === "loading" ? (
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "10px",
-                  height: "10px",
-                  border: "1.5px solid var(--text-muted)",
-                  borderTopColor: "var(--accent)",
-                  borderRadius: "50%",
-                  animation: "spin 0.8s linear infinite",
-                }}
-              />
-            ) : ttsState === "playing" ? (
-              "■"
-            ) : (
-              "▶"
+                  ? handleTtsClick
+                  : undefined
+              }
+              title={
+                ttsModels.length === 0
+                  ? "Download a TTS model in Settings"
+                  : !ttsProviderReady
+                    ? "TTS provider is not available"
+                    : ttsState === "idle"
+                      ? "Read aloud"
+                      : ttsState === "loading"
+                        ? "Loading..."
+                        : "Stop"
+              }
+              className="tts-play-btn"
+              style={{
+                padding: "2px 4px",
+                fontSize: "12px",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor:
+                  ttsModels.length > 0 && ttsProviderReady
+                    ? "pointer"
+                    : "not-allowed",
+                color:
+                  ttsState === "playing"
+                    ? "var(--accent)"
+                    : "var(--text-muted)",
+                opacity:
+                  ttsModels.length === 0 || !ttsProviderReady
+                    ? 0.3
+                    : ttsState === "loading"
+                      ? 0.5
+                      : 0.7,
+                transition: "opacity 0.15s ease, color 0.15s ease",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "18px",
+                height: "18px",
+                flexShrink: 0,
+              }}
+            >
+              {ttsState === "loading" ? (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "10px",
+                    height: "10px",
+                    border: "1.5px solid var(--text-muted)",
+                    borderTopColor: "var(--accent)",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+              ) : ttsState === "playing" ? (
+                "■"
+              ) : (
+                "▶"
+              )}
+            </button>
+            {ttsProviderName && (
+              <span style={{ opacity: 0.7 }}>{ttsProviderName}</span>
             )}
-          </button>
-          {ttsProviderName && (
-            <span style={{ opacity: 0.7 }}>{ttsProviderName}</span>
-          )}
-          {ttsModels.length >= 1 && (
-            <>
-              <span style={{ opacity: 0.4 }}>·</span>
-              <select
-                value={selectedTtsModelId}
-                onChange={(e) => onChangeTtsModel(e.target.value)}
-                className="tts-model-select"
-                style={{
-                  fontSize: "9px",
-                  padding: "1px 2px",
-                  backgroundColor: "transparent",
-                  border: "1px solid var(--border)",
-                  borderRadius: "3px",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  outline: "none",
-                  maxWidth: "100px",
-                }}
-              >
-                {ttsModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          {ttsVoices.length > 0 && (
-            <>
-              <span style={{ opacity: 0.4 }}>·</span>
-              <VoiceSelect
-                voices={ttsVoices}
-                value={selectedTtsVoice}
-                onChange={onChangeTtsVoice}
-              />
-            </>
+          </span>
+          {/* Row 2: model selector + voice selector */}
+          {(ttsModels.length >= 1 || ttsVoices.length > 0) && (
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                paddingLeft: "22px",
+              }}
+            >
+              {ttsModels.length >= 1 && (
+                <select
+                  value={selectedTtsModelId}
+                  onChange={(e) => onChangeTtsModel(e.target.value)}
+                  className="tts-model-select"
+                  style={{
+                    fontSize: "9px",
+                    padding: "1px 2px",
+                    backgroundColor: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: "3px",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    outline: "none",
+                    maxWidth: "100px",
+                  }}
+                >
+                  {ttsModels.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {ttsVoices.length > 0 && (
+                <>
+                  <span style={{ opacity: 0.4 }}>·</span>
+                  <VoiceSelect
+                    voices={ttsVoices}
+                    value={selectedTtsVoice}
+                    onChange={onChangeTtsVoice}
+                  />
+                </>
+              )}
+            </span>
           )}
         </span>
         <span
