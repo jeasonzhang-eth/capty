@@ -2130,7 +2130,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   });
 
   // TTS voice listing (OpenAI-compatible /v1/audio/voices)
-  ipcMain.handle("tts:list-voices", async (_event, modelDir: string) => {
+  ipcMain.handle("tts:list-voices", async () => {
     const config = readConfig(configDir);
     const provider = (config.ttsProviders ?? []).find(
       (p) => p.id === (config.selectedTtsProviderId ?? "sidecar"),
@@ -2139,10 +2139,19 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const baseUrl = normalizeTtsUrl(url);
 
     try {
-      // Pass model_dir for sidecar disk fallback when model not loaded
-      const queryParams = modelDir
-        ? `?model_dir=${encodeURIComponent(modelDir)}`
-        : "";
+      // For sidecar, pass model_dir so it can read voices from disk
+      // when the TTS model is not yet loaded
+      let queryParams = "";
+      if (provider?.isSidecar && config.selectedTtsModelId) {
+        const dataDir = config.dataDir ?? join(configDir, "data");
+        const modelDir = join(
+          dataDir,
+          "models",
+          "tts",
+          config.selectedTtsModelId,
+        );
+        queryParams = `?model_dir=${encodeURIComponent(modelDir)}`;
+      }
       const resp = await net.fetch(`${baseUrl}/v1/audio/voices${queryParams}`, {
         signal: AbortSignal.timeout(10000),
       });

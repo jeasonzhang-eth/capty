@@ -559,11 +559,9 @@ function App(): React.JSX.Element {
           }
 
           // Fetch voice list for the selected TTS model
-          if (effectiveTtsModelId && dataDir) {
+          if (effectiveTtsModelId) {
             try {
-              const voiceResult = await window.capty.ttsListVoices(
-                `${dataDir}/models/tts/${effectiveTtsModelId}`,
-              );
+              const voiceResult = await window.capty.ttsListVoices();
               setTtsVoices(voiceResult.voices);
               // Validate saved voice — reset to "auto" if not in this model's list
               const currentVoice = savedTtsVoice ?? "auto";
@@ -1422,34 +1420,27 @@ function App(): React.JSX.Element {
     [],
   );
 
-  const handleChangeTtsModelForPlay = useCallback(
-    async (modelId: string) => {
-      // Immediately reset voice to "auto" to avoid stale voice for new model
-      setSelectedTtsModelId(modelId);
-      setSelectedTtsVoice("auto");
+  const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
+    // Immediately reset voice to "auto" to avoid stale voice for new model
+    setSelectedTtsModelId(modelId);
+    setSelectedTtsVoice("auto");
+    setTtsVoices([]);
+
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      selectedTtsModelId: modelId,
+      selectedTtsVoice: "auto",
+    });
+
+    // Fetch voice list for the new model
+    try {
+      const result = await window.capty.ttsListVoices();
+      setTtsVoices(result.voices);
+    } catch {
       setTtsVoices([]);
-
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedTtsModelId: modelId,
-        selectedTtsVoice: "auto",
-      });
-
-      // Fetch voice list for the new model
-      const dataDir = store.dataDir;
-      if (!dataDir) return;
-      try {
-        const result = await window.capty.ttsListVoices(
-          `${dataDir}/models/tts/${modelId}`,
-        );
-        setTtsVoices(result.voices);
-      } catch {
-        setTtsVoices([]);
-      }
-    },
-    [store.dataDir],
-  );
+    }
+  }, []);
 
   const handleDownloadTtsModel = useCallback(
     async (model: {

@@ -218,8 +218,8 @@ const api = {
       success: boolean;
       bytes: number;
     }>,
-  ttsListVoices: (modelDir: string) =>
-    ipcRenderer.invoke("tts:list-voices", modelDir) as Promise<{
+  ttsListVoices: () =>
+    ipcRenderer.invoke("tts:list-voices") as Promise<{
       model: string;
       voices: Array<{ id: string; name: string; lang: string; gender: string }>;
     }>,
