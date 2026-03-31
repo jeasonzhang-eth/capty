@@ -61,6 +61,8 @@ interface SummaryPanelProps {
   readonly ttsProviderReady: boolean;
   readonly isSidecarTts: boolean;
   readonly ttsProviderName: string | null;
+  readonly ttsProviderModel: string;
+  readonly ttsProviderVoice: string;
   readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (
     providerId: string,
@@ -134,6 +136,8 @@ export function SummaryPanel({
   ttsProviderReady,
   isSidecarTts,
   ttsProviderName,
+  ttsProviderModel,
+  ttsProviderVoice,
   onWidthChange,
   onSummarize,
   onChangePromptType,
@@ -607,6 +611,8 @@ export function SummaryPanel({
             ttsProviderReady={ttsProviderReady}
             isSidecarTts={isSidecarTts}
             ttsProviderName={ttsProviderName}
+            ttsProviderModel={ttsProviderModel}
+            ttsProviderVoice={ttsProviderVoice}
             onChangeTtsModel={onChangeTtsModel}
             onChangeTtsVoice={onChangeTtsVoice}
           />
@@ -1374,6 +1380,8 @@ function SummaryCard({
   ttsProviderReady,
   isSidecarTts,
   ttsProviderName,
+  ttsProviderModel,
+  ttsProviderVoice,
   onChangeTtsModel,
   onChangeTtsVoice,
 }: {
@@ -1386,6 +1394,8 @@ function SummaryCard({
   readonly ttsProviderReady: boolean;
   readonly isSidecarTts: boolean;
   readonly ttsProviderName: string | null;
+  readonly ttsProviderModel: string;
+  readonly ttsProviderVoice: string;
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly onChangeTtsVoice: (voice: string) => void;
 }): React.ReactElement {
@@ -1723,52 +1733,65 @@ function SummaryCard({
               <span style={{ opacity: 0.7 }}>{ttsProviderName}</span>
             )}
           </span>
-          {/* Row 2: model selector + voice selector */}
-          {(ttsModels.length >= 1 || ttsVoices.length > 0) && (
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                paddingLeft: "22px",
-              }}
-            >
-              {ttsModels.length >= 1 && (
-                <select
-                  value={selectedTtsModelId}
-                  onChange={(e) => onChangeTtsModel(e.target.value)}
-                  className="tts-model-select"
-                  style={{
-                    fontSize: "9px",
-                    padding: "1px 2px",
-                    backgroundColor: "transparent",
-                    border: "1px solid var(--border)",
-                    borderRadius: "3px",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    outline: "none",
-                    maxWidth: "100px",
-                  }}
-                >
-                  {ttsModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {ttsVoices.length > 0 && (
-                <>
-                  <span style={{ opacity: 0.4 }}>·</span>
-                  <VoiceSelect
-                    voices={ttsVoices}
-                    value={selectedTtsVoice}
-                    onChange={onChangeTtsVoice}
-                  />
-                </>
-              )}
-            </span>
-          )}
+          {/* Row 2: model + voice (sidecar: selectors, external: static labels) */}
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              paddingLeft: "22px",
+              opacity: 0.7,
+            }}
+          >
+            {isSidecarTts ? (
+              <>
+                {ttsModels.length >= 1 && (
+                  <select
+                    value={selectedTtsModelId}
+                    onChange={(e) => onChangeTtsModel(e.target.value)}
+                    className="tts-model-select"
+                    style={{
+                      fontSize: "9px",
+                      padding: "1px 2px",
+                      backgroundColor: "transparent",
+                      border: "1px solid var(--border)",
+                      borderRadius: "3px",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      outline: "none",
+                      maxWidth: "100px",
+                    }}
+                  >
+                    {ttsModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {ttsVoices.length > 0 && (
+                  <>
+                    <span style={{ opacity: 0.4 }}>·</span>
+                    <VoiceSelect
+                      voices={ttsVoices}
+                      value={selectedTtsVoice}
+                      onChange={onChangeTtsVoice}
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {ttsProviderModel && <span>{ttsProviderModel}</span>}
+                {ttsProviderVoice && ttsProviderVoice !== "auto" && (
+                  <>
+                    <span style={{ opacity: 0.4 }}>·</span>
+                    <span>{ttsProviderVoice}</span>
+                  </>
+                )}
+              </>
+            )}
+          </span>
         </span>
         <span
           style={{

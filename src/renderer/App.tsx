@@ -2059,6 +2059,14 @@ function App(): React.JSX.Element {
             ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ??
             null
           }
+          ttsProviderModel={
+            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.model ??
+            ""
+          }
+          ttsProviderVoice={
+            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.voice ??
+            ""
+          }
           onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}
