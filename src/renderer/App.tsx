@@ -1798,6 +1798,35 @@ function App(): React.JSX.Element {
     return () => clearInterval(timer);
   }, [selectedTtsProviderId, ttsProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Refresh voice list when TTS provider changes
+  useEffect(() => {
+    if (!selectedTtsProviderId) return;
+    const provider = ttsProviders.find((p) => p.id === selectedTtsProviderId);
+    if (!provider?.isSidecar) {
+      // External providers don't use voice selectors
+      setTtsVoices([]);
+      return;
+    }
+    (async () => {
+      try {
+        const result = await window.capty.ttsListVoices();
+        setTtsVoices(result.voices);
+        // If saved voice not in list, default to first
+        if (
+          result.voices.length > 0 &&
+          !result.voices.some((v) => v.id === selectedTtsVoice)
+        ) {
+          const first = result.voices[0].id;
+          setSelectedTtsVoice(first);
+          const config = await window.capty.getConfig();
+          await window.capty.setConfig({ ...config, selectedTtsVoice: first });
+        }
+      } catch {
+        setTtsVoices([]);
+      }
+    })();
+  }, [selectedTtsProviderId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Validate model selections when providers change
   useEffect(() => {
     const validateSelection = (

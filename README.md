@@ -327,6 +327,7 @@ pytest
 - **Voice 列表接口简化** — `tts:list-voices` 不再需要前端传递 modelDir 参数，IPC handler 自行从 config 读取 model 路径并传给 sidecar；前端调用简化为无参数的 `ttsListVoices()`；sidecar `/v1/audio/voices` 端点支持 `model_dir` 查询参数作为模型未加载时的磁盘回退
 - **移除 TTS Voice "Auto" 选项** — Sidecar Voice 列表不再包含 "Auto" 占位项，默认选择列表中第一个真实 voice；用户选择后持久化保存，切换模型时自动回退到新模型的第一个 voice
 - **Voice API 标准化** — Sidecar `/v1/audio/voices` 改为 Mistral 标准格式 `{items: [{id, name}], total, page, page_size, total_pages}`，删除旧的 `/tts/voices` 端点
+- **切换 TTS Provider 自动刷新 Voice** — 切换 Provider 后自动重新获取 voice 列表；Sidecar 显示 voice 下拉选择器，外部 Provider 清空 voice 列表
 
 ### 2026-03-31 (64)
 
