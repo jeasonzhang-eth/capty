@@ -324,7 +324,7 @@ pytest
 - **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆；左侧 TTS 区域分两行显示：第一行 `▶ Provider`，第二行根据 Provider 类型自适应（Sidecar 显示模型/Voice 下拉选择器，外部 Provider 显示配置的 model/voice 静态文本）
 - **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型分流：Sidecar 用 UI 选择器的 voice + lang_code，外部 Provider 仅用 Settings 中配置的 provider.voice 和 provider.model，不发送 lang_code
 - **外部 TTS Provider 统一流式播放** — 外部 Provider（如 OMLX）从一次性下载改为 chunked WAV streaming：通过逐块读取 `/v1/audio/speech` 响应，解析 WAV 头获取采样率后即时播放 PCM 数据块，无需等待完整音频生成（39 秒 → 首块到达即播放）
-- **Voice 列表接口简化** — `tts:list-voices` 不再需要前端传递 modelDir 参数，IPC handler 自行从 config 读取 model 路径并传给 sidecar；前端调用简化为无参数的 `ttsListVoices()`；sidecar `/v1/audio/voices` 端点支持 `model_dir` 查询参数作为模型未加载时的磁盘回退
+- **Voice 列表接口简化** — `tts:list-voices` 不再需要任何参数，sidecar `/v1/audio/voices` 直接从已加载模型读取 voice 列表，模型未加载时返回空
 - **移除 TTS Voice "Auto" 选项** — Sidecar Voice 列表不再包含 "Auto" 占位项，默认选择列表中第一个真实 voice；用户选择后持久化保存，切换模型时自动回退到新模型的第一个 voice
 - **Voice API 标准化** — Sidecar `/v1/audio/voices` 改为 Mistral 标准格式 `{items: [{id, name}], total, page, page_size, total_pages}`，删除旧的 `/tts/voices` 端点
 - **切换 TTS Provider 自动刷新 Voice** — 切换 Provider 后自动重新获取 voice 列表；Sidecar 显示 voice 下拉选择器，外部 Provider 清空 voice 列表

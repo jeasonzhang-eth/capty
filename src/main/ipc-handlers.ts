@@ -2139,20 +2139,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const baseUrl = normalizeTtsUrl(url);
 
     try {
-      // For sidecar, pass model_dir so it can read voices from disk
-      // when the TTS model is not yet loaded
-      let queryParams = "";
-      if (provider?.isSidecar && config.selectedTtsModelId) {
-        const dataDir = config.dataDir ?? join(configDir, "data");
-        const modelDir = join(
-          dataDir,
-          "models",
-          "tts",
-          config.selectedTtsModelId,
-        );
-        queryParams = `?model_dir=${encodeURIComponent(modelDir)}`;
-      }
-      const resp = await net.fetch(`${baseUrl}/v1/audio/voices${queryParams}`, {
+      const resp = await net.fetch(`${baseUrl}/v1/audio/voices`, {
         signal: AbortSignal.timeout(10000),
       });
       if (!resp.ok) return { model: "", voices: [] };
