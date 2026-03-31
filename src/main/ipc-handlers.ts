@@ -2198,16 +2198,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       }
 
       const baseUrl = normalizeTtsUrl(url);
+      const voiceValue = opts?.voice ?? provider?.voice ?? "auto";
+      const bodyObj: Record<string, unknown> = {
+        input: text,
+        model: modelValue || undefined,
+        voice: voiceValue,
+        speed: opts?.speed ?? 1.0,
+      };
+      // lang_code is sidecar-specific, external providers don't support it
+      if (provider.isSidecar) {
+        bodyObj.lang_code = opts?.langCode ?? "auto";
+      }
       const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: text,
-          model: modelValue || undefined,
-          voice: opts?.voice ?? provider?.voice ?? "auto",
-          speed: opts?.speed ?? 1.0,
-          lang_code: opts?.langCode ?? "auto",
-        }),
+        body: JSON.stringify(bodyObj),
         signal: AbortSignal.timeout(120000),
       });
 
@@ -2264,16 +2269,20 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       try {
         const baseUrl = normalizeTtsUrl(url);
+        const voiceValue = opts?.voice ?? provider?.voice ?? "auto";
+        const bodyObj: Record<string, unknown> = {
+          input: text,
+          model: modelValue || undefined,
+          voice: voiceValue,
+          speed: opts?.speed ?? 1.0,
+        };
+        if (provider.isSidecar) {
+          bodyObj.lang_code = opts?.langCode ?? "auto";
+        }
         const resp = await net.fetch(`${baseUrl}/v1/audio/speech/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: text,
-            model: modelValue || undefined,
-            voice: opts?.voice ?? provider?.voice ?? "auto",
-            speed: opts?.speed ?? 1.0,
-            lang_code: opts?.langCode ?? "auto",
-          }),
+          body: JSON.stringify(bodyObj),
           signal: controller.signal,
         });
 
