@@ -388,10 +388,33 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
         """Mistral-compatible voice listing endpoint.
 
         Returns paginated voice list from the loaded TTS model.
+        Falls back to scanning TTS model directories on disk.
         """
         voices_data: list[dict] = []
         if tts_runner.is_loaded():
             voices_data = tts_runner.get_voices()
+        else:
+            # Scan TTS model dirs for config with voices
+            tts_dir = Path(models_dir).parent / "tts"
+            if tts_dir.is_dir():
+                for model_path in sorted(tts_dir.iterdir()):
+                    cfg_path = model_path / "config.json"
+                    if not cfg_path.is_file():
+                        continue
+                    try:
+                        import json as _json
+                        cfg = _json.loads(cfg_path.read_text())
+                        spk_id = {}
+                        tc = cfg.get("talker_config", {})
+                        if isinstance(tc, dict):
+                            spk_id = tc.get("spk_id", {}) or {}
+                        if not spk_id:
+                            spk_id = cfg.get("spk_id", {}) or {}
+                        if spk_id:
+                            voices_data = _build_voice_list(spk_id)
+                            break
+                    except Exception:
+                        continue
 
         items = [
             {"id": v["id"], "name": v.get("name", v["id"])}
