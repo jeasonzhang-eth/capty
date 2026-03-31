@@ -47,6 +47,14 @@ class DecodeAudioRequest(BaseModel):
     file_path: str
 
 
+class SpeechRequest(BaseModel):
+    input: str
+    model: str = ""
+    voice: str = "auto"
+    speed: float = 1.0
+    lang_code: str = "auto"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -410,6 +418,18 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
             "voices": voices,
         }
 
+    @app.get("/v1/audio/voices")
+    async def list_voices_standard():
+        """OpenAI-compatible voice listing endpoint.
+
+        Returns a simplified list of voice IDs from the loaded TTS model.
+        """
+        if not tts_runner.is_loaded():
+            return {"voices": []}
+        voices_data = tts_runner.get_voices()
+        voice_ids = [v["id"] for v in voices_data if isinstance(v, dict) and "id" in v]
+        return {"voices": voice_ids}
+
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):
         """Switch the active TTS model."""
@@ -467,30 +487,24 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
                 ) from exc
 
     @app.post("/v1/audio/speech")
-    async def text_to_speech(
-        input: str = Form(...),
-        model: str = Form(""),
-        voice: str = Form("auto"),
-        speed: float = Form(1.0),
-        lang_code: str = Form("auto"),
-    ):
+    async def text_to_speech(req: SpeechRequest):
         """OpenAI-compatible TTS endpoint.
 
-        Accepts multipart/form-data and returns WAV audio bytes.
+        Accepts JSON body and returns WAV audio bytes.
         If ``model`` is provided and differs from the current model,
         the TTS model is switched automatically.
         """
-        if not input.strip():
+        if not req.input.strip():
             raise HTTPException(status_code=400, detail="Empty input text")
 
-        await _ensure_tts_loaded(model)
+        await _ensure_tts_loaded(req.model)
 
         try:
             wav_bytes = await tts_runner.synthesize(
-                text=input,
-                voice=voice,
-                speed=speed,
-                lang_code=lang_code,
+                text=req.input,
+                voice=req.voice,
+                speed=req.speed,
+                lang_code=req.lang_code,
             )
         except Exception as exc:
             logger.exception("TTS synthesis failed")
@@ -502,13 +516,7 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
         return Response(content=wav_bytes, media_type="audio/wav")
 
     @app.post("/v1/audio/speech/stream")
-    async def text_to_speech_stream(
-        input: str = Form(...),
-        model: str = Form(""),
-        voice: str = Form("auto"),
-        speed: float = Form(1.0),
-        lang_code: str = Form("auto"),
-    ):
+    async def text_to_speech_stream(req: SpeechRequest):
         """Streaming TTS endpoint returning NDJSON.
 
         Each line is a JSON object:
@@ -519,10 +527,10 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
 
         Client disconnect triggers cancel_event to stop MLX generation.
         """
-        if not input.strip():
+        if not req.input.strip():
             raise HTTPException(status_code=400, detail="Empty input text")
 
-        await _ensure_tts_loaded(model)
+        await _ensure_tts_loaded(req.model)
 
         cancel_event = threading.Event()
 
@@ -530,10 +538,10 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
             header_sent = False
             try:
                 async for pcm_bytes, sample_rate, is_final in tts_runner.synthesize_stream(
-                    text=input,
-                    voice=voice,
-                    speed=speed,
-                    lang_code=lang_code,
+                    text=req.input,
+                    voice=req.voice,
+                    speed=req.speed,
+                    lang_code=req.lang_code,
                     cancel_event=cancel_event,
                 ):
                     if not header_sent:

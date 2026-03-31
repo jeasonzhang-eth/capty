@@ -316,6 +316,12 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (65)
+
+- **TTS API JSON 格式统一** — Sidecar 和 IPC 层 TTS 端点从 `multipart/form-data` 改为 `application/json`，与 OpenAI 标准一致，兼容 OMLX 等 OpenAI 兼容 TTS 服务
+- **TTS URL 双重 `/v1/` 修复** — 新增 `normalizeTtsUrl()` 自动去除 baseUrl 末尾的 `/v1`，避免拼接出 `/v1/v1/audio/speech`
+- **标准 Voice Listing** — Sidecar 新增 `GET /v1/audio/voices` 端点，IPC 层 `tts:list-voices` 改用标准端点获取 voice 列表
+
 ### 2026-03-31 (64)
 
 - **Summary 独立生成** — 每个 Summary tab 的 Generate 按钮现在独立工作：在一个 tab 生成时，其他 tab 不再被禁用，可同时启动生成；streaming 内容按 `promptType` 路由到对应 tab，互不干扰

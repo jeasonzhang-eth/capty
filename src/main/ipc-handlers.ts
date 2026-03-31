@@ -19,6 +19,11 @@ function assertPathWithin(basePath: string, targetPath: string): void {
   }
 }
 
+/** Strip trailing /v1 so we can append /v1/... consistently. */
+function normalizeTtsUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
 /** Convert any audio file to 16kHz mono 16-bit WAV via ffmpeg. */
 function convertToWav(inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -1144,19 +1149,19 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       _event,
       provider: { baseUrl: string; apiKey: string; model: string },
     ) => {
-      const baseUrl = provider.baseUrl.replace(/\/+$/, "");
-      const formData = new FormData();
-      formData.append("input", "Hello");
-      if (provider.model) formData.append("model", provider.model);
+      const baseUrl = normalizeTtsUrl(provider.baseUrl);
+      const body: Record<string, unknown> = { input: "Hello" };
+      if (provider.model) body.model = provider.model;
 
       const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           ...(provider.apiKey
             ? { Authorization: `Bearer ${provider.apiKey}` }
             : {}),
         },
-        body: formData,
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(30000),
       });
 
@@ -2111,7 +2116,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         return { ready: true, reason: "Sidecar online", ...data };
       } else {
         // External: check if /v1/audio/speech endpoint is reachable
-        const resp = await net.fetch(`${url}/v1/audio/speech`, {
+        const normalizedUrl = normalizeTtsUrl(url);
+        const resp = await net.fetch(`${normalizedUrl}/v1/audio/speech`, {
           method: "OPTIONS",
           signal: AbortSignal.timeout(3000),
         });
@@ -2123,28 +2129,30 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
   });
 
-  // TTS voice listing
-  ipcMain.handle("tts:list-voices", async (_event, modelDir: string) => {
+  // TTS voice listing (OpenAI-compatible /v1/audio/voices)
+  ipcMain.handle("tts:list-voices", async (_event, _modelDir: string) => {
     const config = readConfig(configDir);
     const provider = (config.ttsProviders ?? []).find(
       (p) => p.id === (config.selectedTtsProviderId ?? "sidecar"),
     );
     const url = provider?.baseUrl ?? "http://localhost:8765";
-
-    // Guard: check provider reachability first — return empty on failure
-    try {
-      await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
-    } catch {
-      return { model: "", voices: [] };
-    }
+    const baseUrl = normalizeTtsUrl(url);
 
     try {
-      const resp = await net.fetch(
-        `${url}/tts/voices?model_dir=${encodeURIComponent(modelDir)}`,
-        { signal: AbortSignal.timeout(10000) },
-      );
+      const resp = await net.fetch(`${baseUrl}/v1/audio/voices`, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!resp.ok) return { model: "", voices: [] };
-      return await resp.json();
+      const data = (await resp.json()) as { voices?: string[] };
+      // Standard format: { voices: ["id1", "id2"] }
+      // Convert to Capty internal format
+      const voices = (data.voices ?? []).map((id: string) => ({
+        id,
+        name: id,
+        lang: "",
+        gender: "",
+      }));
+      return { model: "", voices };
     } catch {
       return { model: "", voices: [] };
     }
@@ -2185,16 +2193,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         ttsModelPath = join(dataDir, "models", "tts", ttsModelId);
       }
 
-      const formData = new FormData();
-      formData.append("input", text);
-      if (ttsModelPath) formData.append("model", ttsModelPath);
-      formData.append("voice", opts?.voice ?? provider?.voice ?? "auto");
-      formData.append("speed", String(opts?.speed ?? 1.0));
-      formData.append("lang_code", opts?.langCode ?? "auto");
-
-      const resp = await net.fetch(`${url}/v1/audio/speech`, {
+      const baseUrl = normalizeTtsUrl(url);
+      const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: text,
+          model: ttsModelPath || undefined,
+          voice: opts?.voice ?? provider?.voice ?? "auto",
+          speed: opts?.speed ?? 1.0,
+          lang_code: opts?.langCode ?? "auto",
+        }),
         signal: AbortSignal.timeout(120000),
       });
 
@@ -2246,16 +2255,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       activeStreams.set(streamId, controller);
 
       try {
-        const formData = new FormData();
-        formData.append("input", text);
-        if (ttsModelPath) formData.append("model", ttsModelPath);
-        formData.append("voice", opts?.voice ?? provider?.voice ?? "auto");
-        formData.append("speed", String(opts?.speed ?? 1.0));
-        formData.append("lang_code", opts?.langCode ?? "auto");
-
-        const resp = await net.fetch(`${url}/v1/audio/speech/stream`, {
+        const baseUrl = normalizeTtsUrl(url);
+        const resp = await net.fetch(`${baseUrl}/v1/audio/speech/stream`, {
           method: "POST",
-          body: formData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: text,
+            model: ttsModelPath || undefined,
+            voice: opts?.voice ?? provider?.voice ?? "auto",
+            speed: opts?.speed ?? 1.0,
+            lang_code: opts?.langCode ?? "auto",
+          }),
           signal: controller.signal,
         });
 
