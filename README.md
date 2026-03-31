@@ -324,6 +324,7 @@ pytest
 - **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆；左侧 TTS 区域分两行显示：第一行 `▶ Provider`，第二行根据 Provider 类型自适应（Sidecar 显示模型/Voice 下拉选择器，外部 Provider 显示配置的 model/voice 静态文本）
 - **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型分流：Sidecar 用 UI 选择器的 voice + lang_code，外部 Provider 仅用 Settings 中配置的 provider.voice 和 provider.model，不发送 lang_code
 - **外部 TTS Provider 统一流式播放** — 外部 Provider（如 OMLX）从一次性下载改为 chunked WAV streaming：通过逐块读取 `/v1/audio/speech` 响应，解析 WAV 头获取采样率后即时播放 PCM 数据块，无需等待完整音频生成（39 秒 → 首块到达即播放）
+- **Sidecar Voice 列表磁盘回退修复** — `/v1/audio/voices` 端点增加 `model_dir` 查询参数，模型未加载时从磁盘 config.json 读取 voice 列表（修复切换到 Sidecar 后 Voice 选择器消失的问题）
 
 ### 2026-03-31 (64)
 
