@@ -383,55 +383,18 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
     # OpenAI-compatible TTS API
     # ------------------------------------------------------------------
 
-    @app.get("/tts/voices")
-    async def tts_voices(model_dir: str = ""):
-        """List available voices from the loaded TTS model or model config on disk."""
-        # If model is loaded, read from it directly
-        if tts_runner.is_loaded():
-            voices = tts_runner.get_voices()
-            return {
-                "model": tts_runner._model_id or "",
-                "voices": voices,
-            }
-
-        # Model not loaded yet — read spk_id from config.json on disk
-        voices: list[dict] = []
-        if model_dir:
-            config_path = Path(model_dir) / "config.json"
-            if config_path.is_file():
-                try:
-                    import json as _json
-                    cfg = _json.loads(config_path.read_text())
-                    spk_id = {}
-                    talker_cfg = cfg.get("talker_config", {})
-                    if isinstance(talker_cfg, dict):
-                        spk_id = talker_cfg.get("spk_id", {}) or {}
-                    if not spk_id:
-                        spk_id = cfg.get("spk_id", {}) or {}
-                    if spk_id:
-                        voices = _build_voice_list(spk_id)
-                except Exception:
-                    pass
-
-        return {
-            "model": Path(model_dir).name if model_dir else "",
-            "voices": voices,
-        }
-
     @app.get("/v1/audio/voices")
     async def list_voices_standard(model_dir: str = ""):
-        """OpenAI-compatible voice listing endpoint.
+        """Mistral-compatible voice listing endpoint.
 
-        Returns a simplified list of voice IDs from the loaded TTS model.
+        Returns paginated voice list from the loaded TTS model.
         Falls back to reading config from disk when model is not loaded.
         """
+        voices_data: list[dict] = []
+
         if tts_runner.is_loaded():
             voices_data = tts_runner.get_voices()
-            voice_ids = [v["id"] for v in voices_data if isinstance(v, dict) and "id" in v]
-            return {"voices": voice_ids}
-
-        # Model not loaded — read spk_id from config.json on disk
-        if model_dir:
+        elif model_dir:
             config_path = Path(model_dir) / "config.json"
             if config_path.is_file():
                 try:
@@ -444,13 +407,22 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
                     if not spk_id:
                         spk_id = cfg.get("spk_id", {}) or {}
                     if spk_id:
-                        voices = _build_voice_list(spk_id)
-                        voice_ids = [v["id"] for v in voices if isinstance(v, dict) and "id" in v]
-                        return {"voices": voice_ids}
+                        voices_data = _build_voice_list(spk_id)
                 except Exception:
                     pass
 
-        return {"voices": []}
+        items = [
+            {"id": v["id"], "name": v.get("name", v["id"])}
+            for v in voices_data
+            if isinstance(v, dict) and "id" in v
+        ]
+        return {
+            "items": items,
+            "total": len(items),
+            "page": 1,
+            "page_size": len(items),
+            "total_pages": 1,
+        }
 
     @app.post("/tts/switch")
     async def switch_tts_model(body: SwitchModelRequest):

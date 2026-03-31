@@ -2156,12 +2156,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         signal: AbortSignal.timeout(10000),
       });
       if (!resp.ok) return { model: "", voices: [] };
-      const data = (await resp.json()) as { voices?: string[] };
-      // Standard format: { voices: ["id1", "id2"] }
-      // Convert to Capty internal format
-      const voices = (data.voices ?? []).map((id: string) => ({
-        id,
-        name: id,
+      const data = (await resp.json()) as {
+        items?: Array<{ id: string; name: string }>;
+      };
+      // Mistral format: { items: [{id, name}], total, page, ... }
+      const voices = (data.items ?? []).map((v) => ({
+        id: v.id,
+        name: v.name || v.id,
         lang: "",
         gender: "",
       }));
