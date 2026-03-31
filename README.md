@@ -323,6 +323,7 @@ pytest
 - **下载项显示源链接** — 每个下载项标题下方显示可点击的原始 URL（↗ 图标），点击在系统浏览器打开；修复已完成项目 `completed_at` 为空时日期不显示的问题（回退到 `created_at`）
 - **下载项平台识别** — 自动识别 URL 来源并在标题前显示彩色平台标签（YouTube/Bilibili/TikTok/SoundCloud/Twitter/小宇宙 等 17 个平台），品牌色背景
 - **小宇宙播客支持** — 原生支持小宇宙播客 (xiaoyuzhoufm.com) 音频下载，无需 yt-dlp；通过解析页面 `__NEXT_DATA__` 获取音频直链，HTTP 直接下载并转 WAV
+- **右键菜单优化** — 会话右键菜单重排为：Open Folder → Regenerate Subtitles → Rename → Delete；移除 AI Rename 选项及行内 ✨ 按钮
 
 ### 2026-03-31 (63)
 

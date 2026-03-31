@@ -244,9 +244,6 @@ function App(): React.JSX.Element {
       localStorage.removeItem("capty:activeTranslationLang");
     }
   }, []);
-  const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
-    null,
-  );
 
   // Summary state (per-tab generation support)
   const [summaries, setSummaries] = useState<Summary[]>([]);
@@ -1425,57 +1422,6 @@ function App(): React.JSX.Element {
     [],
   );
 
-  const handleAiRename = useCallback(
-    async (sessionId: number) => {
-      if (aiRenamingSessionId) return;
-      // Resolve provider + model for AI rename
-      const sel = selectedRapidModel;
-      const provider = sel
-        ? llmProviders.find((p) => p.id === sel.providerId)
-        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
-      if (!provider) {
-        console.warn("AI rename: no LLM provider configured");
-        return;
-      }
-      const modelToUse = sel?.model || provider.models[0] || provider.model;
-      setAiRenamingSessionId(sessionId);
-      try {
-        const rawTitle = await window.capty.generateTitle(
-          sessionId,
-          provider.id,
-          modelToUse,
-          rapidRenamePrompt,
-        );
-        if (rawTitle) {
-          // Prepend session timestamp: "2026-03-25T10-42-06：标题"
-          const sess = store.sessions.find(
-            (s: { id: number }) => s.id === sessionId,
-          );
-          let finalTitle = rawTitle;
-          if (sess?.started_at) {
-            const d = new Date(sess.started_at);
-            const pad = (n: number): string => String(n).padStart(2, "0");
-            const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-            finalTitle = `${ts}：${rawTitle}`;
-          }
-          await window.capty.renameSession(sessionId, finalTitle);
-          await store.loadSessions();
-        }
-      } catch (err) {
-        console.error("AI rename failed:", err);
-      } finally {
-        setAiRenamingSessionId(null);
-      }
-    },
-    [
-      selectedRapidModel,
-      llmProviders,
-      rapidRenamePrompt,
-      aiRenamingSessionId,
-      store,
-    ],
-  );
-
   const handleChangeTtsModelForPlay = useCallback(
     async (modelId: string) => {
       // Immediately reset voice to "auto" to avoid stale voice for new model
@@ -2047,12 +1993,6 @@ function App(): React.JSX.Element {
           onUploadAudio={handleUploadAudio}
           onDownloadAudio={() => setShowDownloadManager(true)}
           downloadBadge={downloadBadge}
-          onAiRename={
-            llmProviders.some((p) => (p.models?.length ?? 0) > 0)
-              ? handleAiRename
-              : undefined
-          }
-          aiRenamingSessionId={aiRenamingSessionId}
         />
         <TranscriptArea
           segments={store.segments}

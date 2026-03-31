@@ -38,8 +38,6 @@ interface HistoryPanelProps {
   readonly onUploadAudio: () => void;
   readonly onDownloadAudio: () => void;
   readonly downloadBadge: "active" | "failed" | null;
-  readonly onAiRename?: (id: number) => void;
-  readonly aiRenamingSessionId?: number | null;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -130,9 +128,6 @@ if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-    .session-row:hover .ai-rename-btn {
-      opacity: 1 !important;
-    }
   `;
   document.head.appendChild(style);
 }
@@ -157,8 +152,6 @@ export function HistoryPanel({
   onUploadAudio,
   onDownloadAudio,
   downloadBadge,
-  onAiRename,
-  aiRenamingSessionId,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -325,13 +318,6 @@ export function HistoryPanel({
     }
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, [contextMenu.sessionId, onOpenFolder]);
-
-  const handleAiRenameClick = useCallback(() => {
-    if (contextMenu.sessionId !== null && onAiRename) {
-      onAiRename(contextMenu.sessionId);
-    }
-    setContextMenu((prev) => ({ ...prev, visible: false }));
-  }, [contextMenu.sessionId, onAiRename]);
 
   const handleDeleteClick = useCallback(() => {
     setConfirmDeleteId(contextMenu.sessionId);
@@ -693,78 +679,6 @@ export function HistoryPanel({
                           >
                             {session.title}
                           </span>
-                          {onAiRename &&
-                            session.status === "completed" &&
-                            (aiRenamingSessionId === session.id ? (
-                              <span
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: "18px",
-                                  height: "18px",
-                                  flexShrink: 0,
-                                  animation: "spin 1s linear infinite",
-                                }}
-                              >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 14 14"
-                                  fill="none"
-                                >
-                                  <circle
-                                    cx="7"
-                                    cy="7"
-                                    r="5.5"
-                                    stroke="var(--accent)"
-                                    strokeWidth="1.5"
-                                    strokeDasharray="8 6"
-                                    strokeLinecap="round"
-                                  />
-                                </svg>
-                              </span>
-                            ) : (
-                              <button
-                                className="ai-rename-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onAiRename(session.id);
-                                }}
-                                title="AI Rename"
-                                style={{
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  padding: "0 2px",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: "18px",
-                                  height: "18px",
-                                  flexShrink: 0,
-                                  opacity: 0,
-                                  transition: "opacity 0.15s",
-                                  color: "var(--text-muted)",
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.color = "var(--accent)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.color =
-                                    "var(--text-muted)";
-                                }}
-                              >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 16 16"
-                                  fill="currentColor"
-                                >
-                                  <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
-                                </svg>
-                              </button>
-                            ))}
                         </div>
                       )}
                       <div
@@ -966,26 +880,6 @@ export function HistoryPanel({
                 isCompleted && regeneratingSessionId === null;
               return (
                 <>
-                  {canRegenerate && (
-                    <div
-                      onClick={handleRegenerateClick}
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: "13px",
-                        cursor: "pointer",
-                        color: "var(--text-primary)",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.backgroundColor =
-                          "var(--accent-glow)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.backgroundColor = "transparent")
-                      }
-                    >
-                      Regenerate Subtitles
-                    </div>
-                  )}
                   {isCompleted && (
                     <div
                       onClick={handleOpenFolderClick}
@@ -1006,17 +900,14 @@ export function HistoryPanel({
                       Open Folder
                     </div>
                   )}
-                  {isCompleted && onAiRename && (
+                  {canRegenerate && (
                     <div
-                      onClick={handleAiRenameClick}
+                      onClick={handleRegenerateClick}
                       style={{
                         padding: "8px 16px",
                         fontSize: "13px",
                         cursor: "pointer",
                         color: "var(--text-primary)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
                       }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.backgroundColor =
@@ -1026,16 +917,7 @@ export function HistoryPanel({
                         (e.currentTarget.style.backgroundColor = "transparent")
                       }
                     >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 16 16"
-                        fill="currentColor"
-                        style={{ opacity: 0.7 }}
-                      >
-                        <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
-                      </svg>
-                      AI Rename
+                      Regenerate Subtitles
                     </div>
                   )}
                 </>
