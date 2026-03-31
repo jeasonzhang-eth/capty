@@ -260,6 +260,8 @@ function App(): React.JSX.Element {
   // Prompt type state
   const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
   const [activePromptType, setActivePromptType] = useState("summarize");
+  const activePromptTypeRef = useRef(activePromptType);
+  activePromptTypeRef.current = activePromptType;
 
   // Layout persistence state
   const DEFAULT_HISTORY_WIDTH = 240;
@@ -1702,14 +1704,20 @@ function App(): React.JSX.Element {
       setGeneratingPromptType(promptType);
       setGenerateError(null);
       try {
-        const result = await window.capty.summarize(
+        await window.capty.summarize(
           store.currentSessionId,
           providerId,
           model,
           promptType,
         );
-        setSummaries((prev) => [...prev, result as Summary]);
         setStreamingContent("");
+        // Reload summaries for the currently active tab (user may have switched)
+        const currentTab = activePromptTypeRef.current;
+        const freshSummaries = await window.capty.listSummaries(
+          store.currentSessionId,
+          currentTab,
+        );
+        setSummaries(freshSummaries as Summary[]);
         // Remember last used model selection
         setSelectedSummaryModel({ providerId, model });
         const config = await window.capty.getConfig();

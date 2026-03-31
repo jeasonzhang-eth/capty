@@ -315,6 +315,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (63)
+
+- **Summary 跨 Tab 污染修复** — 在 Summary tab 点击 Generate 后切换到其他 tab（如 Context），生成结果不再错误显示在当前 tab；改为生成完成后按当前 tab 重新加载 summaries
+
 ### 2026-03-31 (62)
 
 - **音频下载：session 刷新修复** — 下载完成后自动刷新侧边栏 session 列表，新创建的 session 即时显示
