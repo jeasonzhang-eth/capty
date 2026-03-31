@@ -318,7 +318,13 @@ pytest
 
 ### 2026-03-31 (66)
 
-- **Sidecar EnginePool 重构设计与实现计划** — 设计文档 + 8 步实现计划：引入 EnginePool 模式替代单一 ModelRunner/TTSRunner，ASR 和 TTS 引擎可同时驻留内存；全局单线程 MLX executor 保证线程安全，协作式 TTS streaming（逐句提交）让 ASR 请求可在 TTS 生成间隙插入执行；API 端点 100% 向后兼容，前端零改动
+- **Sidecar EnginePool 重构** — 引入 EnginePool 模式替代单一 ModelRunner/TTSRunner：
+  - `mlx_executor.py` — 全局单线程 MLX executor，`run_on_mlx()` 保证线程安全，自动 cache 清理
+  - `engine.py` — BaseEngine/ASREngine/TTSEngine 抽象，合并原 `model_runner.py` 和 `tts_runner.py`
+  - `engine_pool.py` — 固定 2 槽位（asr + tts），asyncio.Lock 串行化 load/unload，两个模型可同时驻留内存
+  - 协作式 TTS streaming — `split_sentences()` 按句切分文本，每句独立提交 `run_on_mlx()`，ASR 请求可在 TTS 句间插入执行（最坏延迟从 30s+ 降至 2-5s）
+  - `server.py` 全面改用 EnginePool + Pydantic JSON body，API 端点 100% 向后兼容，前端零改动
+  - 删除 `model_runner.py`、`tts_runner.py`，新增 21 个单元测试（split_sentences + engine_pool）
 
 ### 2026-03-31 (65)
 
