@@ -322,7 +322,7 @@ pytest
 - **TTS URL 双重 `/v1/` 修复** — 新增 `normalizeTtsUrl()` 自动去除 baseUrl 末尾的 `/v1`，避免拼接出 `/v1/v1/audio/speech`
 - **标准 Voice Listing** — Sidecar 新增 `GET /v1/audio/voices` 端点，IPC 层 `tts:list-voices` 改用标准端点获取 voice 列表
 - **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆；左侧 TTS 区域分两行显示：第一行 `▶ Provider`，第二行根据 Provider 类型自适应（Sidecar 显示模型/Voice 下拉选择器，外部 Provider 显示配置的 model/voice 静态文本）
-- **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型发送正确的 model（本地路径 vs 配置名称）和 voice（provider.voice）；`lang_code` 仅在 Sidecar 模式下发送，外部 Provider 不发送该字段
+- **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型分流：Sidecar 用 UI 选择器的 voice + lang_code，外部 Provider 仅用 Settings 中配置的 provider.voice 和 provider.model，不发送 lang_code
 
 ### 2026-03-31 (64)
 

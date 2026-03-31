@@ -2198,14 +2198,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       }
 
       const baseUrl = normalizeTtsUrl(url);
-      const voiceValue = opts?.voice ?? provider?.voice ?? "auto";
+      // Sidecar: opts.voice (from UI selector) > provider.voice > "auto"
+      // External: provider.voice (from Settings config) only
+      const voiceValue = provider.isSidecar
+        ? (opts?.voice ?? provider?.voice ?? "auto")
+        : provider?.voice || undefined;
       const bodyObj: Record<string, unknown> = {
         input: text,
         model: modelValue || undefined,
         voice: voiceValue,
         speed: opts?.speed ?? 1.0,
       };
-      // lang_code is sidecar-specific, external providers don't support it
       if (provider.isSidecar) {
         bodyObj.lang_code = opts?.langCode ?? "auto";
       }
@@ -2269,7 +2272,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
       try {
         const baseUrl = normalizeTtsUrl(url);
-        const voiceValue = opts?.voice ?? provider?.voice ?? "auto";
+        const voiceValue = provider.isSidecar
+          ? (opts?.voice ?? provider?.voice ?? "auto")
+          : provider?.voice || undefined;
         const bodyObj: Record<string, unknown> = {
           input: text,
           model: modelValue || undefined,
