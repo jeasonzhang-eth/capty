@@ -392,7 +392,11 @@ const api = {
       }>
     >,
   onSummaryChunk: (
-    callback: (data: { content: string; done: boolean }) => void,
+    callback: (data: {
+      content: string;
+      done: boolean;
+      promptType: string;
+    }) => void,
   ) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on("llm:summary-chunk", handler);

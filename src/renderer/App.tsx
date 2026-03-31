@@ -248,14 +248,15 @@ function App(): React.JSX.Element {
     null,
   );
 
-  // Summary state
+  // Summary state (per-tab generation support)
   const [summaries, setSummaries] = useState<Summary[]>([]);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [generatingPromptType, setGeneratingPromptType] = useState<
-    string | null
-  >(null);
+  const [generatingTabs, setGeneratingTabs] = useState<Set<string>>(new Set());
+  const generatingTabsRef = useRef(generatingTabs);
+  generatingTabsRef.current = generatingTabs;
+  const [streamingContentMap, setStreamingContentMap] = useState<
+    Record<string, string>
+  >({});
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [streamingContent, setStreamingContent] = useState("");
 
   // Prompt type state
   const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
@@ -1698,10 +1699,10 @@ function App(): React.JSX.Element {
 
   const handleSummarize = useCallback(
     async (providerId: string, model: string, promptType: string) => {
-      if (!store.currentSessionId || isGeneratingSummary) return;
-      setStreamingContent("");
-      setIsGeneratingSummary(true);
-      setGeneratingPromptType(promptType);
+      if (!store.currentSessionId || generatingTabsRef.current.has(promptType))
+        return;
+      setStreamingContentMap((prev) => ({ ...prev, [promptType]: "" }));
+      setGeneratingTabs((prev) => new Set(prev).add(promptType));
       setGenerateError(null);
       try {
         await window.capty.summarize(
@@ -1710,7 +1711,12 @@ function App(): React.JSX.Element {
           model,
           promptType,
         );
-        setStreamingContent("");
+        // Clear streaming content for this tab
+        setStreamingContentMap((prev) => {
+          const next = { ...prev };
+          delete next[promptType];
+          return next;
+        });
         // Reload summaries for the currently active tab (user may have switched)
         const currentTab = activePromptTypeRef.current;
         const freshSummaries = await window.capty.listSummaries(
@@ -1729,13 +1735,20 @@ function App(): React.JSX.Element {
         const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
         setGenerateError(msg);
-        setStreamingContent("");
       } finally {
-        setIsGeneratingSummary(false);
-        setGeneratingPromptType(null);
+        setGeneratingTabs((prev) => {
+          const next = new Set(prev);
+          next.delete(promptType);
+          return next;
+        });
+        setStreamingContentMap((prev) => {
+          const next = { ...prev };
+          delete next[promptType];
+          return next;
+        });
       }
     },
-    [store.currentSessionId, isGeneratingSummary],
+    [store.currentSessionId],
   );
 
   const handleChangePromptType = useCallback(
@@ -1878,12 +1891,17 @@ function App(): React.JSX.Element {
     validateSelection(selectedRapidModel, setSelectedRapidModel);
   }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for LLM streaming chunks
+  // Listen for LLM streaming chunks (routed per-tab by promptType)
   useEffect(() => {
-    const unsub = window.capty.onSummaryChunk(({ content, done }) => {
-      if (done) return;
-      setStreamingContent((prev) => prev + content);
-    });
+    const unsub = window.capty.onSummaryChunk(
+      ({ content, done, promptType }) => {
+        if (done) return;
+        setStreamingContentMap((prev) => ({
+          ...prev,
+          [promptType]: (prev[promptType] || "") + content,
+        }));
+      },
+    );
     return unsub;
   }, []);
 
@@ -2075,9 +2093,11 @@ function App(): React.JSX.Element {
         />
         <SummaryPanel
           summaries={summaries}
-          isGenerating={isGeneratingSummary}
-          generatingPromptType={generatingPromptType}
-          streamingContent={streamingContent}
+          isGenerating={generatingTabs.has(activePromptType)}
+          generatingPromptType={
+            generatingTabs.has(activePromptType) ? activePromptType : null
+          }
+          streamingContent={streamingContentMap[activePromptType] || ""}
           generateError={generateError}
           currentSessionId={store.currentSessionId}
           hasSegments={store.segments.length > 0}

@@ -121,7 +121,11 @@ declare global {
         created_at: string;
       }>;
       onSummaryChunk: (
-        callback: (data: { content: string; done: boolean }) => void,
+        callback: (data: {
+          content: string;
+          done: boolean;
+          promptType: string;
+        }) => void,
       ) => () => void;
       listSummaries: (
         sessionId: number,

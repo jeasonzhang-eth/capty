@@ -11,7 +11,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **歌词式字幕同步** — 基于 react-lrc 的专业字幕同步，纯回放时自动高亮当前段落并居中显示（首尾行也能居中）；用户手动滚动后 5 秒自动恢复跟随；点击任意段落跳转到对应音频位置；播放+转录同时进行时自动切换为手动滚动模式（保持底部跟随新段落，转录停止 3 秒后恢复歌词同步），避免与 react-lrc 的居中滚动冲突，同时保留播放行高亮
 - **LLM 多维分析** — 接入 OpenAI 兼容 API（OpenAI / DeepSeek / OpenRouter 等），SummaryPanel 支持多 Tab 切换不同分析维度：
   - 内置 3 种类型：Summary（结构化摘要）、Questions（深入追问）、Context（背景推测）
-  - 每个 Tab 的生成结果独立存储和展示，支持 Markdown 渲染
+  - 每个 Tab 的生成结果独立存储和展示，支持 Markdown 渲染；各 Tab 可并发独立生成，互不阻塞
   - 可编辑内置类型的提示词（支持 Reset 恢复默认），可添加/编辑/删除自定义 Tab
   - 自定义 Tab 和编辑后的提示词持久化保存，重启后保留
   - SummaryPanel 可选择 provider + model、拖拽调整宽度
@@ -314,6 +314,10 @@ pytest
 ```
 
 ## 更新日志
+
+### 2026-03-31 (64)
+
+- **Summary 独立生成** — 每个 Summary tab 的 Generate 按钮现在独立工作：在一个 tab 生成时，其他 tab 不再被禁用，可同时启动生成；streaming 内容按 `promptType` 路由到对应 tab，互不干扰
 
 ### 2026-03-31 (63)
 

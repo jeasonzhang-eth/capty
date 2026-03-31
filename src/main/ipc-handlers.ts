@@ -1553,6 +1553,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
                 win?.webContents.send("llm:summary-chunk", {
                   content: delta,
                   done: false,
+                  promptType,
                 });
               }
             } catch {
@@ -1565,6 +1566,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         win?.webContents.send("llm:summary-chunk", {
           content: "",
           done: true,
+          promptType,
         });
 
         if (!fullContent) {
@@ -1595,6 +1597,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         win?.webContents.send("llm:summary-chunk", {
           content: "",
           done: true,
+          promptType,
         });
         throw err;
       }
