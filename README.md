@@ -39,7 +39,7 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **界面缩放** — Cmd/Ctrl + = 放大、Cmd/Ctrl + - 缩小、Cmd/Ctrl + 0 重置，缩放比例持久化保存
 - **面板宽度记忆** — HistoryPanel 和 SummaryPanel 均支持拖拽调整宽度，宽度设置自动保存，重启后恢复
 - **统一 ASR Provider 架构** — ASR 后端统一为 Provider 列表（与 LLM Provider 模式一致），支持添加任意数量的 OpenAI 兼容 ASR 服务；Local Sidecar 作为预配置的第一个 Provider，不可删除；一键切换活跃 Provider，ControlBar 状态实时同步
-- **TTS 流式朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；Local Sidecar 模式下采用流式 TTS（NDJSON streaming），首块音频 ~2 秒内开始播放（无需等待整段生成完毕），通过 Web Audio API 无缝调度播放（gapless scheduled playback）；外部 TTS Provider 保留一次性播放路径；支持中英文自动检测，同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型，选择持久化保存
+- **TTS 流式朗读** — SummaryPanel 每张摘要卡片支持 TTS 语音朗读，点击 ▶ 按钮即可听取摘要内容；所有 Provider 统一采用流式播放：Local Sidecar 通过 NDJSON streaming（`/v1/audio/speech/stream`），外部 OpenAI 兼容 Provider 通过 chunked WAV streaming（`/v1/audio/speech`），首块音频到达即开始播放（无需等待整段生成完毕），通过 Web Audio API 无缝调度播放（gapless scheduled playback）；支持中英文自动检测，同一时间只有一个卡片播放，再次点击停止；支持切换 TTS 模型，选择持久化保存
 - **TTS Provider 管理** — Settings 左侧栏独立 "TTS Providers" tab（与 ASR Providers 平行），支持 Local Sidecar 和外部 TTS 服务；Sidecar TTS 含独立 TTS Model Market（下载/删除/搜索 TTS 模型）
 - **模型目录拆分** — `models/` 目录拆分为 `models/asr/` 和 `models/tts/`，ASR 和 TTS 模型分开管理；启动时自动迁移旧目录结构
 - **本地优先** — 所有数据（SQLite 数据库 + WAV 音频）存储在本地，ASR 推理完全本地运行
@@ -323,6 +323,7 @@ pytest
 - **标准 Voice Listing** — Sidecar 新增 `GET /v1/audio/voices` 端点，IPC 层 `tts:list-voices` 改用标准端点获取 voice 列表
 - **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆；左侧 TTS 区域分两行显示：第一行 `▶ Provider`，第二行根据 Provider 类型自适应（Sidecar 显示模型/Voice 下拉选择器，外部 Provider 显示配置的 model/voice 静态文本）
 - **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型分流：Sidecar 用 UI 选择器的 voice + lang_code，外部 Provider 仅用 Settings 中配置的 provider.voice 和 provider.model，不发送 lang_code
+- **外部 TTS Provider 统一流式播放** — 外部 Provider（如 OMLX）从一次性下载改为 chunked WAV streaming：通过逐块读取 `/v1/audio/speech` 响应，解析 WAV 头获取采样率后即时播放 PCM 数据块，无需等待完整音频生成（39 秒 → 首块到达即播放）
 
 ### 2026-03-31 (64)
 

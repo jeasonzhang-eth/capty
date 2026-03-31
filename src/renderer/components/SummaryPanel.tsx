@@ -1475,7 +1475,7 @@ function SummaryCard({
     }
   }, [summary.content, summary.id, selectedTtsVoice]);
 
-  /** Streaming TTS playback (for sidecar provider). */
+  /** Streaming TTS playback (all providers). */
   const handleTtsStreaming = useCallback(async () => {
     const streamId = `tts-${summary.id}-${Date.now()}`;
     currentStreamIdRef.current = streamId;
@@ -1607,12 +1607,8 @@ function SummaryCard({
     // Stop any other card's playback
     stopAllPlayback();
 
-    if (isSidecarTts) {
-      await handleTtsStreaming();
-    } else {
-      await handleTtsNonStreaming();
-    }
-  }, [ttsState, isSidecarTts, handleTtsStreaming, handleTtsNonStreaming]);
+    await handleTtsStreaming();
+  }, [ttsState, handleTtsStreaming]);
 
   // Cleanup on unmount
   useEffect(() => {

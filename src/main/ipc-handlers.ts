@@ -2284,80 +2284,172 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         if (provider.isSidecar) {
           bodyObj.lang_code = opts?.langCode ?? "auto";
         }
-        const resp = await net.fetch(`${baseUrl}/v1/audio/speech/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyObj),
-          signal: controller.signal,
-        });
 
-        if (!resp.ok) {
-          const errBody = await resp.text();
-          win?.webContents.send("tts:stream-error", {
-            streamId,
-            error: `TTS stream failed (${resp.status}): ${errBody}`,
+        if (provider.isSidecar) {
+          // Sidecar: NDJSON streaming via /v1/audio/speech/stream
+          const resp = await net.fetch(`${baseUrl}/v1/audio/speech/stream`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(bodyObj),
+            signal: controller.signal,
           });
-          return;
-        }
 
-        const reader = resp.body!.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
+          if (!resp.ok) {
+            const errBody = await resp.text();
+            win?.webContents.send("tts:stream-error", {
+              streamId,
+              error: `TTS stream failed (${resp.status}): ${errBody}`,
+            });
+            return;
+          }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+          const reader = resp.body!.getReader();
+          const decoder = new TextDecoder();
+          let ndjsonBuf = "";
 
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            ndjsonBuf += decoder.decode(value, { stream: true });
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
+            const lines = ndjsonBuf.split("\n");
+            ndjsonBuf = lines.pop() ?? "";
 
-            try {
-              const parsed = JSON.parse(trimmed) as {
-                type: string;
-                data?: string;
-                sample_rate?: number;
-                is_final?: boolean;
-                message?: string;
-              };
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
 
-              if (parsed.type === "header") {
-                win?.webContents.send("tts:stream-header", {
-                  streamId,
-                  sampleRate: parsed.sample_rate,
-                });
-              } else if (parsed.type === "audio") {
-                if (parsed.data && parsed.data.length > 0) {
-                  win?.webContents.send("tts:stream-data", {
+              try {
+                const parsed = JSON.parse(trimmed) as {
+                  type: string;
+                  data?: string;
+                  sample_rate?: number;
+                  is_final?: boolean;
+                  message?: string;
+                };
+
+                if (parsed.type === "header") {
+                  win?.webContents.send("tts:stream-header", {
                     streamId,
-                    data: parsed.data,
                     sampleRate: parsed.sample_rate,
-                    isFinal: parsed.is_final,
+                  });
+                } else if (parsed.type === "audio") {
+                  if (parsed.data && parsed.data.length > 0) {
+                    win?.webContents.send("tts:stream-data", {
+                      streamId,
+                      data: parsed.data,
+                      sampleRate: parsed.sample_rate,
+                      isFinal: parsed.is_final,
+                    });
+                  }
+                  if (
+                    parsed.is_final &&
+                    (!parsed.data || parsed.data.length === 0)
+                  ) {
+                    win?.webContents.send("tts:stream-end", { streamId });
+                  }
+                } else if (parsed.type === "error") {
+                  win?.webContents.send("tts:stream-error", {
+                    streamId,
+                    error: parsed.message ?? "Unknown TTS error",
                   });
                 }
-                if (
-                  parsed.is_final &&
-                  (!parsed.data || parsed.data.length === 0)
-                ) {
-                  win?.webContents.send("tts:stream-end", { streamId });
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          }
+        } else {
+          // External provider: chunked WAV streaming via /v1/audio/speech
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          if (provider.apiKey) {
+            headers["Authorization"] = `Bearer ${provider.apiKey}`;
+          }
+          const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(bodyObj),
+            signal: controller.signal,
+          });
+
+          if (!resp.ok) {
+            const errBody = await resp.text();
+            win?.webContents.send("tts:stream-error", {
+              streamId,
+              error: `TTS stream failed (${resp.status}): ${errBody}`,
+            });
+            return;
+          }
+
+          const reader = resp.body!.getReader();
+          let wavHeaderParsed = false;
+          let headerBuf = Buffer.alloc(0);
+          let sampleRate = 24000;
+          let dataOffset = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            if (!wavHeaderParsed) {
+              headerBuf = Buffer.concat([headerBuf, Buffer.from(value)]);
+              // WAV header needs at least 44 bytes
+              if (headerBuf.length < 44) continue;
+
+              // Parse sample rate from WAV header (bytes 24-27)
+              sampleRate = headerBuf.readUInt32LE(24);
+
+              // Find "data" chunk to locate PCM start
+              let off = 12; // skip RIFF header (12 bytes)
+              while (off < headerBuf.length - 8) {
+                const chunkId = headerBuf.toString("ascii", off, off + 4);
+                const chunkSize = headerBuf.readUInt32LE(off + 4);
+                if (chunkId === "data") {
+                  dataOffset = off + 8;
+                  break;
                 }
-              } else if (parsed.type === "error") {
-                win?.webContents.send("tts:stream-error", {
+                off += 8 + chunkSize;
+              }
+
+              if (dataOffset === 0) {
+                // "data" chunk not found yet, need more bytes
+                continue;
+              }
+
+              wavHeaderParsed = true;
+              win?.webContents.send("tts:stream-header", {
+                streamId,
+                sampleRate,
+              });
+
+              // Send remaining PCM data after header
+              const pcmData = headerBuf.subarray(dataOffset);
+              if (pcmData.length > 0) {
+                win?.webContents.send("tts:stream-data", {
                   streamId,
-                  error: parsed.message ?? "Unknown TTS error",
+                  data: pcmData.toString("base64"),
+                  sampleRate,
+                  isFinal: false,
                 });
               }
-            } catch {
-              // Skip malformed JSON
+            } else {
+              // Stream raw PCM data chunks
+              const chunk = Buffer.from(value);
+              if (chunk.length > 0) {
+                win?.webContents.send("tts:stream-data", {
+                  streamId,
+                  data: chunk.toString("base64"),
+                  sampleRate,
+                  isFinal: false,
+                });
+              }
             }
           }
         }
 
-        // If stream ended naturally without explicit final marker
+        // Stream ended naturally
         win?.webContents.send("tts:stream-end", { streamId });
       } catch (err: any) {
         if (err?.name === "AbortError") {
