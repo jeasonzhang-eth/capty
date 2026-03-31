@@ -69,7 +69,12 @@ export function DownloadManagerDialog({
 
   // Sort: active downloads first, then by created_at DESC
   const sorted = [...downloads].sort((a, b) => {
-    const activeStatuses = ["pending", "fetching-info", "downloading", "converting"];
+    const activeStatuses = [
+      "pending",
+      "fetching-info",
+      "downloading",
+      "converting",
+    ];
     const aActive = activeStatuses.includes(a.status) ? 0 : 1;
     const bActive = activeStatuses.includes(b.status) ? 0 : 1;
     if (aActive !== bActive) return aActive - bActive;
@@ -119,7 +124,13 @@ export function DownloadManagerDialog({
             flexShrink: 0,
           }}
         >
-          <span style={{ fontWeight: 600, fontSize: "15px", color: "var(--text-primary)" }}>
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: "15px",
+              color: "var(--text-primary)",
+            }}
+          >
             Download Audio
           </span>
           <button
@@ -184,7 +195,14 @@ export function DownloadManagerDialog({
         </div>
 
         {/* Download List */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "12px 20px",
+          }}
+        >
           {sorted.length === 0 ? (
             <div
               style={{
@@ -204,7 +222,11 @@ export function DownloadManagerDialog({
                 onCancel={() => onCancelDownload(dl.id)}
                 onRetry={() => onRetryDownload(dl.id)}
                 onRemove={() => onRemoveDownload(dl.id)}
-                onSelectSession={dl.session_id ? () => onSelectSession(dl.session_id!) : undefined}
+                onSelectSession={
+                  dl.session_id
+                    ? () => onSelectSession(dl.session_id!)
+                    : undefined
+                }
               />
             ))
           )}
@@ -230,9 +252,12 @@ function DownloadItemRow({
 }): React.ReactElement {
   const borderColor = STATUS_COLORS[item.status] || "#888";
   const displayName = item.title || item.url;
-  const isActive = ["pending", "fetching-info", "downloading", "converting"].includes(
-    item.status,
-  );
+  const isActive = [
+    "pending",
+    "fetching-info",
+    "downloading",
+    "converting",
+  ].includes(item.status);
 
   return (
     <div
@@ -242,9 +267,16 @@ function DownloadItemRow({
         borderRadius: "8px",
         borderLeft: `3px solid ${borderColor}`,
         marginBottom: "8px",
-        cursor: item.status === "completed" && onSelectSession ? "pointer" : "default",
+        cursor:
+          item.status === "completed" && onSelectSession
+            ? "pointer"
+            : "default",
       }}
-      onClick={item.status === "completed" && onSelectSession ? onSelectSession : undefined}
+      onClick={
+        item.status === "completed" && onSelectSession
+          ? onSelectSession
+          : undefined
+      }
     >
       {/* Title row */}
       <div
@@ -272,7 +304,9 @@ function DownloadItemRow({
 
         {/* Status / Actions */}
         {item.status === "completed" && (
-          <span style={{ color: "#4cd964", fontSize: "12px", flexShrink: 0 }}>✓</span>
+          <span style={{ color: "#4cd964", fontSize: "12px", flexShrink: 0 }}>
+            ✓
+          </span>
         )}
         {isActive && (
           <button
@@ -306,7 +340,13 @@ function DownloadItemRow({
       {item.status === "downloading" && (
         <>
           {item.source && (
-            <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
+            <div
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "11px",
+                marginBottom: "6px",
+              }}
+            >
               {item.source}
             </div>
           )}
@@ -411,7 +451,13 @@ function DownloadItemRow({
       {/* Cancelled state */}
       {item.status === "cancelled" && (
         <>
-          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
+          <div
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "11px",
+              marginBottom: "6px",
+            }}
+          >
             Cancelled
           </div>
           <div style={{ display: "flex", gap: "12px" }}>

@@ -318,6 +318,7 @@ pytest
 ### 2026-03-31 (64)
 
 - **Summary 独立生成** — 每个 Summary tab 的 Generate 按钮现在独立工作：在一个 tab 生成时，其他 tab 不再被禁用，可同时启动生成；streaming 内容按 `promptType` 路由到对应 tab，互不干扰
+- **下载弹窗滚动** — Download Audio 弹窗下载列表超出高度时可滚动查看（修复 flexbox `minHeight` 问题）
 
 ### 2026-03-31 (63)
 
