@@ -316,6 +316,10 @@ pytest
 
 ## 更新日志
 
+### 2026-03-31 (66)
+
+- **Sidecar EnginePool 重构设计** — 设计文档：引入 EnginePool 模式替代单一 ModelRunner/TTSRunner，ASR 和 TTS 引擎可同时驻留内存；全局单线程 MLX executor 保证线程安全，协作式 TTS streaming（逐句提交）让 ASR 请求可在 TTS 生成间隙插入执行；API 端点 100% 向后兼容，前端零改动
+
 ### 2026-03-31 (65)
 
 - **TTS API JSON 格式统一** — Sidecar 和 IPC 层 TTS 端点从 `multipart/form-data` 改为 `application/json`，与 OpenAI 标准一致，兼容 OMLX 等 OpenAI 兼容 TTS 服务
