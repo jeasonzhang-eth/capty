@@ -1734,49 +1734,54 @@ function SummaryCard({
               onChange={onChangeTtsVoice}
             />
           )}
-          {providerName ? `${providerName} · ` : ""}
-          {summary.model_name}
         </span>
         <span
           style={{
             display: "flex",
-            alignItems: "center",
-            gap: "6px",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: "2px",
             position: "relative",
             flexShrink: 0,
           }}
         >
-          {formatTime(summary.created_at)}
-          <button
-            onClick={() => setShowExportMenu((v) => !v)}
-            title="Export"
-            className="export-menu-trigger"
-            style={{
-              padding: "2px 4px",
-              fontSize: "12px",
-              backgroundColor: "transparent",
-              border: "none",
-              cursor: "pointer",
-              color: showExportMenu ? "var(--accent)" : "var(--text-muted)",
-              opacity: showExportMenu ? 1 : 0.5,
-              transition: "opacity 0.15s ease, color 0.15s ease",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: "18px",
-              height: "18px",
-              flexShrink: 0,
-            }}
-          >
-            ⬇
-          </button>
-          {showExportMenu && (
-            <ExportMenu
-              content={summary.content}
-              contentRef={contentRef as React.RefObject<HTMLDivElement>}
-              onClose={() => setShowExportMenu(false)}
-            />
-          )}
+          <span style={{ opacity: 0.7 }}>
+            {providerName ? `${providerName} · ` : ""}
+            {summary.model_name}
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            {formatTime(summary.created_at)}
+            <button
+              onClick={() => setShowExportMenu((v) => !v)}
+              title="Export"
+              className="export-menu-trigger"
+              style={{
+                padding: "2px 4px",
+                fontSize: "12px",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: showExportMenu ? "var(--accent)" : "var(--text-muted)",
+                opacity: showExportMenu ? 1 : 0.5,
+                transition: "opacity 0.15s ease, color 0.15s ease",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "18px",
+                height: "18px",
+                flexShrink: 0,
+              }}
+            >
+              ⬇
+            </button>
+            {showExportMenu && (
+              <ExportMenu
+                content={summary.content}
+                contentRef={contentRef as React.RefObject<HTMLDivElement>}
+                onClose={() => setShowExportMenu(false)}
+              />
+            )}
+          </span>
         </span>
       </div>
     </div>
