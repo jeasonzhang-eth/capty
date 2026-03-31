@@ -329,6 +329,41 @@ function DownloadItemRow({
         )}
       </div>
 
+      {/* Source URL — always visible, clickable to open in browser */}
+      <div
+        style={{
+          fontSize: "11px",
+          marginBottom: "6px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(item.url, "_blank");
+          }}
+          style={{
+            color: "#5ac8fa",
+            textDecoration: "none",
+            cursor: "pointer",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.textDecoration =
+              "underline";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.textDecoration =
+              "none";
+          }}
+        >
+          ↗ {item.url}
+        </a>
+      </div>
+
       {/* Fetching info state */}
       {(item.status === "pending" || item.status === "fetching-info") && (
         <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
@@ -394,7 +429,7 @@ function DownloadItemRow({
       {item.status === "completed" && (
         <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
           {item.source && `${item.source} · `}
-          {item.completed_at && formatDate(item.completed_at)}
+          {formatDate(item.completed_at || item.created_at)}
         </div>
       )}
 
