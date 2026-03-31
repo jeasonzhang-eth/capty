@@ -321,7 +321,7 @@ pytest
 - **TTS API JSON 格式统一** — Sidecar 和 IPC 层 TTS 端点从 `multipart/form-data` 改为 `application/json`，与 OpenAI 标准一致，兼容 OMLX 等 OpenAI 兼容 TTS 服务
 - **TTS URL 双重 `/v1/` 修复** — 新增 `normalizeTtsUrl()` 自动去除 baseUrl 末尾的 `/v1`，避免拼接出 `/v1/v1/audio/speech`
 - **标准 Voice Listing** — Sidecar 新增 `GET /v1/audio/voices` 端点，IPC 层 `tts:list-voices` 改用标准端点获取 voice 列表
-- **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆
+- **SummaryCard 布局优化** — LLM Provider 名称（如 "oMLX · model"）从左侧 TTS 控件区域移至右侧时间戳上方，避免与 TTS Provider 混淆；左侧 TTS 区域现在显示 `▶ Provider · Model · Voice` 完整信息链
 
 ### 2026-03-31 (64)
 

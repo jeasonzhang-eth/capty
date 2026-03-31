@@ -2055,6 +2055,10 @@ function App(): React.JSX.Element {
             ttsProviders.find((p) => p.id === selectedTtsProviderId)
               ?.isSidecar ?? false
           }
+          ttsProviderName={
+            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ??
+            null
+          }
           onWidthChange={handleSummaryWidthChange}
           onSummarize={handleSummarize}
           onChangePromptType={handleChangePromptType}

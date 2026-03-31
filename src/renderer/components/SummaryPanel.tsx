@@ -60,6 +60,7 @@ interface SummaryPanelProps {
   readonly ttsVoices: readonly TtsVoiceInfo[];
   readonly ttsProviderReady: boolean;
   readonly isSidecarTts: boolean;
+  readonly ttsProviderName: string | null;
   readonly onWidthChange: (width: number) => void;
   readonly onSummarize: (
     providerId: string,
@@ -132,6 +133,7 @@ export function SummaryPanel({
   ttsVoices,
   ttsProviderReady,
   isSidecarTts,
+  ttsProviderName,
   onWidthChange,
   onSummarize,
   onChangePromptType,
@@ -604,6 +606,7 @@ export function SummaryPanel({
             ttsVoices={ttsVoices}
             ttsProviderReady={ttsProviderReady}
             isSidecarTts={isSidecarTts}
+            ttsProviderName={ttsProviderName}
             onChangeTtsModel={onChangeTtsModel}
             onChangeTtsVoice={onChangeTtsVoice}
           />
@@ -1370,6 +1373,7 @@ function SummaryCard({
   ttsVoices,
   ttsProviderReady,
   isSidecarTts,
+  ttsProviderName,
   onChangeTtsModel,
   onChangeTtsVoice,
 }: {
@@ -1381,6 +1385,7 @@ function SummaryCard({
   readonly ttsVoices: readonly TtsVoiceInfo[];
   readonly ttsProviderReady: boolean;
   readonly isSidecarTts: boolean;
+  readonly ttsProviderName: string | null;
   readonly onChangeTtsModel: (modelId: string) => void;
   readonly onChangeTtsVoice: (voice: string) => void;
 }): React.ReactElement {
@@ -1640,7 +1645,14 @@ function SummaryCard({
           color: "var(--text-muted)",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            minWidth: 0,
+          }}
+        >
           <button
             onClick={
               ttsModels.length > 0 && ttsProviderReady
@@ -1703,36 +1715,45 @@ function SummaryCard({
               "▶"
             )}
           </button>
+          {ttsProviderName && (
+            <span style={{ opacity: 0.7 }}>{ttsProviderName}</span>
+          )}
           {ttsModels.length >= 1 && (
-            <select
-              value={selectedTtsModelId}
-              onChange={(e) => onChangeTtsModel(e.target.value)}
-              className="tts-model-select"
-              style={{
-                fontSize: "9px",
-                padding: "1px 2px",
-                backgroundColor: "transparent",
-                border: "1px solid var(--border)",
-                borderRadius: "3px",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                outline: "none",
-                maxWidth: "80px",
-              }}
-            >
-              {ttsModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+            <>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <select
+                value={selectedTtsModelId}
+                onChange={(e) => onChangeTtsModel(e.target.value)}
+                className="tts-model-select"
+                style={{
+                  fontSize: "9px",
+                  padding: "1px 2px",
+                  backgroundColor: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "3px",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  outline: "none",
+                  maxWidth: "100px",
+                }}
+              >
+                {ttsModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </>
           )}
           {ttsVoices.length > 0 && (
-            <VoiceSelect
-              voices={ttsVoices}
-              value={selectedTtsVoice}
-              onChange={onChangeTtsVoice}
-            />
+            <>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <VoiceSelect
+                voices={ttsVoices}
+                value={selectedTtsVoice}
+                onChange={onChangeTtsVoice}
+              />
+            </>
           )}
         </span>
         <span
