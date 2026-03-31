@@ -105,6 +105,14 @@ const PLATFORM_MAP: readonly { pattern: RegExp; info: PlatformInfo }[] = [
     pattern: /qq\.com/i,
     info: { label: "QQ", color: "#12b7f5", bg: "rgba(18,183,245,0.12)" },
   },
+  {
+    pattern: /xiaoyuzhoufm\.com/i,
+    info: {
+      label: "小宇宙",
+      color: "#ee6723",
+      bg: "rgba(238,103,35,0.12)",
+    },
+  },
 ];
 
 const FALLBACK_PLATFORM: PlatformInfo = {
@@ -257,7 +265,7 @@ export function DownloadManagerDialog({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Paste video/audio URL (YouTube, Bilibili, TikTok, ...)"
+            placeholder="Paste URL (YouTube, Bilibili, 小宇宙, TikTok, ...)"
             style={{
               flex: 1,
               padding: "8px 12px",

@@ -28,8 +28,9 @@ macOS 桌面端实时语音转文字应用，基于 Electron + React + 本地 AS
 - **转录翻译** — TranscriptArea 顶部左侧 Translate 下拉菜单，三个选项：Target Language（子菜单选择中文/English，记住上次选择）、Translate/Re-translate（逐段调用 LLM 翻译，进度百分比实时显示）、Show/Hide Translation（切换翻译显示）；翻译结果以 accent 色显示在原文下方，不覆盖原文；翻译持久化存储到 `segment_translations` 表，切换语言自动加载已有翻译；翻译提示词可在 Settings > Default Models > Translate Model 区域自定义编辑（支持 `{{target_language}}` 和 `{{text}}` 占位符）；翻译 API 采用非流式模式（稳定兼容各类模型）；3 路并发翻译，大幅提升多段落翻译速度；单段翻译失败自动跳过不影响后续；支持翻译中途停止（Stop Translation 按钮，已翻译段落保留）；支持多会话并发翻译，各 session 翻译进度独立，切换会话不中断后台翻译
 - **导出** — 转写结果支持导出为 TXT / SRT / Markdown 格式（Export 按钮位于 TranscriptArea 右上角）
 - **音频导入** — 上传已有音频文件（WAV/MP3/M4A/FLAC/OGG/AAC/WMA/OPUS），通过 ffmpeg 统一转换为 16kHz mono WAV，确保格式一致性；导入时自动计算时长
-- **音频下载** — 通过 yt-dlp 从 YouTube / Bilibili 下载音频，支持：
-  - **Download Manager 弹窗** — 输入 URL 一键下载，实时进度条（百分比/速度/ETA）
+- **音频下载** — 从 YouTube / Bilibili / 小宇宙播客 等 1800+ 站点下载音频，支持：
+  - **Download Manager 弹窗** — 输入 URL 一键下载，自动识别平台并显示彩色标签，实时进度条（百分比/速度/ETA）
+  - **小宇宙播客** — 原生支持 xiaoyuzhoufm.com，无需 yt-dlp，直接解析 __NEXT_DATA__ 获取音频直链下载
   - **完整下载历史** — 所有下载记录持久化，支持重试、取消、删除
   - **崩溃恢复** — 应用异常退出后重启自动检测未完成下载，提示用户继续或放弃
   - **后台下载** — 关闭弹窗不中断下载，侧边栏按钮角标显示下载状态（橙色=进行中，红色=失败）
@@ -320,7 +321,8 @@ pytest
 - **Summary 独立生成** — 每个 Summary tab 的 Generate 按钮现在独立工作：在一个 tab 生成时，其他 tab 不再被禁用，可同时启动生成；streaming 内容按 `promptType` 路由到对应 tab，互不干扰
 - **下载弹窗滚动** — Download Audio 弹窗下载列表超出高度时可滚动查看（修复 flexbox `minHeight` 问题）
 - **下载项显示源链接** — 每个下载项标题下方显示可点击的原始 URL（↗ 图标），点击在系统浏览器打开；修复已完成项目 `completed_at` 为空时日期不显示的问题（回退到 `created_at`）
-- **下载项平台识别** — 自动识别 URL 来源并在标题前显示彩色平台标签（YouTube/Bilibili/TikTok/SoundCloud/Twitter 等 16 个平台），品牌色背景；输入框提示更新为支持更多平台
+- **下载项平台识别** — 自动识别 URL 来源并在标题前显示彩色平台标签（YouTube/Bilibili/TikTok/SoundCloud/Twitter/小宇宙 等 17 个平台），品牌色背景
+- **小宇宙播客支持** — 原生支持小宇宙播客 (xiaoyuzhoufm.com) 音频下载，无需 yt-dlp；通过解析页面 `__NEXT_DATA__` 获取音频直链，HTTP 直接下载并转 WAV
 
 ### 2026-03-31 (63)
 
