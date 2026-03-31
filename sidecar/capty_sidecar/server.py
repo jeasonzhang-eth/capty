@@ -50,7 +50,7 @@ class DecodeAudioRequest(BaseModel):
 class SpeechRequest(BaseModel):
     input: str
     model: str = ""
-    voice: str = "auto"
+    voice: str = ""
     speed: float = 1.0
     lang_code: str = "auto"
 

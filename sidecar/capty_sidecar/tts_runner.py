@@ -77,21 +77,7 @@ def _build_voice_list(spk_id: dict) -> list[dict]:
     Uses ``_KNOWN_SPEAKERS`` for rich metadata (language, gender);
     unknown speakers get minimal entries.
     """
-    # Determine default voice for the "Auto" entry
-    default_key = None
-    for preferred in ("vivian", "chelsie", "ethan"):
-        if preferred in spk_id:
-            default_key = preferred
-            break
-    if not default_key:
-        default_key = next(iter(spk_id))
-
-    default_meta = _KNOWN_SPEAKERS.get(default_key, {})
-    default_label = default_meta.get("name", default_key.capitalize())
-
-    voices: list[dict] = [
-        {"id": "auto", "name": f"Auto ({default_label})", "lang": "Auto", "gender": ""},
-    ]
+    voices: list[dict] = []
 
     # Group by language for consistent ordering: Chinese first, then English, then others
     lang_order = ["Chinese", "English"]
@@ -169,7 +155,7 @@ class TTSRunner:
         model types an "auto" placeholder is returned.
         """
         if not self.is_loaded():
-            return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
+            return []
 
         model = self._model
         spk_id: dict = {}
@@ -183,18 +169,18 @@ class TTSRunner:
                 spk_id = getattr(cfg, "spk_id", None) or {}
 
         if not spk_id:
-            return [{"id": "auto", "name": "Auto", "lang": "Auto", "gender": ""}]
+            return []
 
         return _build_voice_list(spk_id)
 
     def _resolve_voice(self, voice: str) -> str | None:
         """Resolve voice parameter for the loaded model.
 
-        - ``"auto"`` on a CustomVoice model → pick the first available speaker
-        - ``"auto"`` on a Base model → ``None`` (model default)
+        - Empty / ``"auto"`` on a CustomVoice model → pick the first available speaker
+        - Empty / ``"auto"`` on a Base model → ``None`` (model default)
         - Explicit name → pass through as-is
         """
-        if voice != "auto":
+        if voice and voice != "auto":
             return voice
 
         if not self.is_loaded():
@@ -233,7 +219,7 @@ class TTSRunner:
     async def synthesize(
         self,
         text: str,
-        voice: str = "auto",
+        voice: str = "",
         speed: float = 1.0,
         lang_code: str = "auto",
     ) -> bytes:
@@ -322,7 +308,7 @@ class TTSRunner:
     async def synthesize_stream(
         self,
         text: str,
-        voice: str = "auto",
+        voice: str = "",
         speed: float = 1.0,
         lang_code: str = "auto",
         cancel_event: threading.Event | None = None,

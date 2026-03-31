@@ -2211,10 +2211,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       }
 
       const baseUrl = normalizeTtsUrl(url);
-      // Sidecar: opts.voice (from UI selector) > provider.voice > "auto"
+      // Sidecar: opts.voice (from UI selector) > provider.voice
       // External: provider.voice (from Settings config) only
       const voiceValue = provider.isSidecar
-        ? (opts?.voice ?? provider?.voice ?? "auto")
+        ? opts?.voice || provider?.voice || undefined
         : provider?.voice || undefined;
       const bodyObj: Record<string, unknown> = {
         input: text,
@@ -2286,7 +2286,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       try {
         const baseUrl = normalizeTtsUrl(url);
         const voiceValue = provider.isSidecar
-          ? (opts?.voice ?? provider?.voice ?? "auto")
+          ? opts?.voice || provider?.voice || undefined
           : provider?.voice || undefined;
         const bodyObj: Record<string, unknown> = {
           input: text,

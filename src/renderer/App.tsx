@@ -175,7 +175,7 @@ function App(): React.JSX.Element {
     }>
   >([]);
   const [selectedTtsModelId, setSelectedTtsModelId] = useState("");
-  const [selectedTtsVoice, setSelectedTtsVoice] = useState("auto");
+  const [selectedTtsVoice, setSelectedTtsVoice] = useState("");
   const [ttsVoices, setTtsVoices] = useState<
     Array<{ id: string; name: string; lang: string; gender: string }>
   >([]);
@@ -563,21 +563,15 @@ function App(): React.JSX.Element {
             try {
               const voiceResult = await window.capty.ttsListVoices();
               setTtsVoices(voiceResult.voices);
-              // Validate saved voice — reset to "auto" if not in this model's list
-              const currentVoice = savedTtsVoice ?? "auto";
+              // Validate saved voice — fall back to first voice if invalid
+              const currentVoice = savedTtsVoice ?? "";
               if (
                 voiceResult.voices.length > 0 &&
                 !voiceResult.voices.some(
                   (v: { id: string }) => v.id === currentVoice,
                 )
               ) {
-                setSelectedTtsVoice("auto");
-              } else if (
-                voiceResult.voices.length === 0 &&
-                currentVoice !== "auto"
-              ) {
-                // Model has no voices dir — force auto
-                setSelectedTtsVoice("auto");
+                setSelectedTtsVoice(voiceResult.voices[0].id);
               }
             } catch {
               // Voice listing not available
@@ -1423,20 +1417,26 @@ function App(): React.JSX.Element {
   const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
     // Immediately reset voice to "auto" to avoid stale voice for new model
     setSelectedTtsModelId(modelId);
-    setSelectedTtsVoice("auto");
+    setSelectedTtsVoice("");
     setTtsVoices([]);
 
     const config = await window.capty.getConfig();
     await window.capty.setConfig({
       ...config,
       selectedTtsModelId: modelId,
-      selectedTtsVoice: "auto",
+      selectedTtsVoice: "",
     });
 
-    // Fetch voice list for the new model
+    // Fetch voice list for the new model and default to first voice
     try {
       const result = await window.capty.ttsListVoices();
       setTtsVoices(result.voices);
+      if (result.voices.length > 0) {
+        const firstVoice = result.voices[0].id;
+        setSelectedTtsVoice(firstVoice);
+        const cfg = await window.capty.getConfig();
+        await window.capty.setConfig({ ...cfg, selectedTtsVoice: firstVoice });
+      }
     } catch {
       setTtsVoices([]);
     }

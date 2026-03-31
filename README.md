@@ -325,6 +325,7 @@ pytest
 - **外部 TTS Provider 兼容性修复** — `tts:speak` 和 `tts:speak-stream` 根据 Provider 类型分流：Sidecar 用 UI 选择器的 voice + lang_code，外部 Provider 仅用 Settings 中配置的 provider.voice 和 provider.model，不发送 lang_code
 - **外部 TTS Provider 统一流式播放** — 外部 Provider（如 OMLX）从一次性下载改为 chunked WAV streaming：通过逐块读取 `/v1/audio/speech` 响应，解析 WAV 头获取采样率后即时播放 PCM 数据块，无需等待完整音频生成（39 秒 → 首块到达即播放）
 - **Voice 列表接口简化** — `tts:list-voices` 不再需要前端传递 modelDir 参数，IPC handler 自行从 config 读取 model 路径并传给 sidecar；前端调用简化为无参数的 `ttsListVoices()`；sidecar `/v1/audio/voices` 端点支持 `model_dir` 查询参数作为模型未加载时的磁盘回退
+- **移除 TTS Voice "Auto" 选项** — Sidecar Voice 列表不再包含 "Auto" 占位项，默认选择列表中第一个真实 voice；用户选择后持久化保存，切换模型时自动回退到新模型的第一个 voice
 
 ### 2026-03-31 (64)
 

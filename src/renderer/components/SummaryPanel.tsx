@@ -1104,7 +1104,6 @@ function VoiceSelect({
   }, [voices]);
 
   const formatLabel = (v: TtsVoiceInfo): string => {
-    if (v.id === "auto") return "Auto";
     const genderChar = v.gender ? ` (${v.gender[0]})` : "";
     return `${v.name}${genderChar}`;
   };
@@ -1126,23 +1125,15 @@ function VoiceSelect({
         maxWidth: "100px",
       }}
     >
-      {Object.entries(grouped).map(([lang, langVoices]) =>
-        lang === "Auto" ? (
-          langVoices.map((v) => (
+      {Object.entries(grouped).map(([lang, langVoices]) => (
+        <optgroup key={lang} label={lang}>
+          {langVoices.map((v) => (
             <option key={v.id} value={v.id}>
               {formatLabel(v)}
             </option>
-          ))
-        ) : (
-          <optgroup key={lang} label={lang}>
-            {langVoices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {formatLabel(v)}
-              </option>
-            ))}
-          </optgroup>
-        ),
-      )}
+          ))}
+        </optgroup>
+      ))}
     </select>
   );
 }
