@@ -7,6 +7,7 @@ All notable changes to Capty are documented in this file.
 - feat: add session category folders for sidebar grouping (download / recording / meeting / phone)
 - feat: add drag-and-drop for session reordering and cross-category move
 - feat: add custom session categories (create/delete) with persistent config
+- fix: session deletion failing with FOREIGN KEY constraint error
 
 ## 2026-04-01
 

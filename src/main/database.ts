@@ -370,6 +370,10 @@ export function deleteSegmentsBySession(
 
 export function deleteSession(db: Database.Database, id: number): void {
   const del = db.transaction(() => {
+    // Delete translations by segment_id subquery (covers mismatched session_id)
+    db.prepare(
+      "DELETE FROM segment_translations WHERE segment_id IN (SELECT id FROM segments WHERE session_id = ?)",
+    ).run(id);
     deleteTranslationsBySession(db, id);
     deleteSummariesBySession(db, id);
     deleteSegmentsBySession(db, id);
