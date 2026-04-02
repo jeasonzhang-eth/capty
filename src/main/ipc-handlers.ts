@@ -109,6 +109,54 @@ import {
 /** Track active yt-dlp child processes by download ID for cancel support. */
 const activeDownloads = new Map<number, ChildProcess>();
 
+/** Managed sidecar child process (null when not started by us). */
+let sidecarProcess: ChildProcess | null = null;
+
+/** Find sidecar binary: dev venv first, then fallback to PATH. */
+function findSidecarBin(): string {
+  const devBin = path.join(app.getAppPath(), "sidecar/.venv/bin/capty-sidecar");
+  if (fs.existsSync(devBin)) return devBin;
+  return "capty-sidecar";
+}
+
+/** Parse port from sidecar base URL, default 8765. */
+function parseSidecarPort(baseUrl: string): number {
+  try {
+    const port = new URL(baseUrl).port;
+    return port ? Number(port) : 8765;
+  } catch {
+    return 8765;
+  }
+}
+
+/** Poll /health until OK or timeout. */
+async function waitForHealth(
+  baseUrl: string,
+  timeoutMs: number,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const resp = await fetch(`${baseUrl}/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (resp.ok) return;
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Sidecar failed to start within timeout");
+}
+
+/** Kill the managed sidecar process if running. */
+export function killSidecar(): void {
+  if (sidecarProcess) {
+    sidecarProcess.kill("SIGTERM");
+    sidecarProcess = null;
+  }
+}
+
 /** Extract domain from URL for display. */
 function extractSource(url: string): string {
   try {
@@ -1051,6 +1099,62 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     } catch {
       return { online: false };
     }
+  });
+
+  // Start sidecar process
+  ipcMain.handle("sidecar:start", async () => {
+    const config = readConfig(configDir);
+    const sidecarProvider = (config.asrProviders ?? []).find(
+      (p) => p.isSidecar,
+    );
+    const baseUrl = sidecarProvider?.baseUrl ?? "http://localhost:8765";
+
+    // Already managed by us
+    if (sidecarProcess) return { ok: true };
+
+    // Already running externally?
+    try {
+      const resp = await fetch(`${baseUrl}/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (resp.ok) return { ok: true };
+    } catch {
+      // not running — proceed to spawn
+    }
+
+    const bin = findSidecarBin();
+    const port = parseSidecarPort(baseUrl);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    const modelsDir = join(dataDir, "models", "asr");
+
+    sidecarProcess = spawn(
+      bin,
+      ["--models-dir", modelsDir, "--port", String(port)],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    sidecarProcess.on("exit", () => {
+      sidecarProcess = null;
+    });
+
+    sidecarProcess.on("error", (err) => {
+      console.error("[sidecar] spawn error:", err.message);
+      sidecarProcess = null;
+    });
+
+    await waitForHealth(baseUrl, 15000);
+    return { ok: true };
+  });
+
+  // Stop sidecar process
+  ipcMain.handle("sidecar:stop", () => {
+    if (sidecarProcess) {
+      sidecarProcess.kill("SIGTERM");
+      sidecarProcess = null;
+    }
+    return { ok: true };
   });
 
   // External ASR transcription (OpenAI-compatible API)

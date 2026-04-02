@@ -54,6 +54,10 @@ const api = {
       online: boolean;
       [key: string]: unknown;
     }>,
+  startSidecar: () =>
+    ipcRenderer.invoke("sidecar:start") as Promise<{ ok: boolean }>,
+  stopSidecar: () =>
+    ipcRenderer.invoke("sidecar:stop") as Promise<{ ok: boolean }>,
 
   // External ASR
   asrTranscribe: (

@@ -24,6 +24,9 @@ interface ControlBarProps {
   readonly onDownloadModel: () => void;
   readonly ttsProviderReady: boolean;
   readonly ttsProviderName: string | null;
+  readonly onStartSidecar?: () => void;
+  readonly onStopSidecar?: () => void;
+  readonly sidecarStarting?: boolean;
 }
 
 export function ControlBar({
@@ -43,6 +46,9 @@ export function ControlBar({
   onDownloadModel,
   ttsProviderReady,
   ttsProviderName,
+  onStartSidecar,
+  onStopSidecar,
+  sidecarStarting,
 }: ControlBarProps): React.ReactElement {
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const needsDownload = selectedModel && !selectedModel.downloaded;
@@ -125,6 +131,81 @@ export function ControlBar({
         >
           ASR
         </span>
+        {isSidecarActive &&
+          !isRecording &&
+          (sidecarStarting ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "14px",
+                height: "14px",
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                animation: "spin 1s linear infinite",
+              }}
+              title="Starting sidecar..."
+            >
+              &#8635;
+            </span>
+          ) : sidecarReady ? (
+            <button
+              onClick={onStopSidecar}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "14px",
+                height: "14px",
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                fontSize: "10px",
+                lineHeight: 1,
+                borderRadius: "2px",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--danger)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+              title="Stop sidecar"
+            >
+              &#9632;
+            </button>
+          ) : (
+            <button
+              onClick={onStartSidecar}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "14px",
+                height: "14px",
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                fontSize: "10px",
+                lineHeight: 1,
+                borderRadius: "2px",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#4ADE80";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-muted)";
+              }}
+              title="Start sidecar"
+            >
+              &#9654;
+            </button>
+          ))}
         {ttsProviderName && (
           <>
             <span

@@ -10,7 +10,11 @@ import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
 import { createDatabase, migrateUtcToLocal } from "./database";
-import { registerIpcHandlers, migrateModelsDir } from "./ipc-handlers";
+import {
+  registerIpcHandlers,
+  migrateModelsDir,
+  killSidecar,
+} from "./ipc-handlers";
 import { repairWavHeaders } from "./audio-files";
 import Database from "better-sqlite3";
 
@@ -174,6 +178,7 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  killSidecar();
   if (db) {
     db.close();
   }

@@ -43,6 +43,7 @@ function App(): React.JSX.Element {
   const [downloadBadge, setDownloadBadge] = useState<
     "active" | "failed" | null
   >(null);
+  const [sidecarStarting, setSidecarStarting] = useState(false);
 
   const computeDownloadBadge = useCallback(
     (list: readonly DownloadItem[]): "active" | "failed" | null => {
@@ -58,6 +59,28 @@ function App(): React.JSX.Element {
     },
     [],
   );
+
+  const handleStartSidecar = useCallback(async () => {
+    setSidecarStarting(true);
+    try {
+      await window.capty.startSidecar();
+      const health = await window.capty.checkSidecarHealth();
+      store.setSidecarReady(health.online);
+    } catch (err) {
+      console.error("Failed to start sidecar:", err);
+    } finally {
+      setSidecarStarting(false);
+    }
+  }, [store]);
+
+  const handleStopSidecar = useCallback(async () => {
+    try {
+      await window.capty.stopSidecar();
+      store.setSidecarReady(false);
+    } catch (err) {
+      console.error("Failed to stop sidecar:", err);
+    }
+  }, [store]);
 
   // Monotonic counter for segment IDs (avoids Date.now() collisions)
   const segmentIdCounter = useRef(0);
@@ -2116,6 +2139,9 @@ function App(): React.JSX.Element {
         ttsProviderName={
           ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ?? null
         }
+        onStartSidecar={handleStartSidecar}
+        onStopSidecar={handleStopSidecar}
+        sidecarStarting={sidecarStarting}
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel
