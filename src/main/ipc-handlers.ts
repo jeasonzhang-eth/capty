@@ -829,9 +829,22 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   }
 
   // Sessions
-  ipcMain.handle("session:create", (_event, modelName: string) => {
-    return createSession(db, { modelName });
-  });
+  ipcMain.handle(
+    "session:create",
+    (_event, modelName: string, category?: string) => {
+      return createSession(db, { modelName, category });
+    },
+  );
+
+  ipcMain.handle(
+    "session:update-category",
+    (_event, id: number, category: string) => {
+      const valid = ["download", "recording", "meeting", "phone"];
+      if (!valid.includes(category))
+        throw new Error(`Invalid category: ${category}`);
+      updateSession(db, id, { category });
+    },
+  );
 
   ipcMain.handle("session:list", () => {
     return listSessions(db);
@@ -1989,7 +2002,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
 
     // 5. Create session with deduplicated path
-    const sessionId = createSession(db, { modelName: "imported" });
+    const sessionId = createSession(db, {
+      modelName: "imported",
+      category: "download",
+    });
     updateSession(db, sessionId, {
       audioPath: finalTimestamp,
       title: readableTimestamp,
@@ -2825,7 +2841,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         const sessionTitle = videoTitle
           ? `${readableTimestamp} ${videoTitle}`
           : readableTimestamp;
-        const sessionId = createSession(db, { modelName: modelTag });
+        const sessionId = createSession(db, {
+          modelName: modelTag,
+          category: "download",
+        });
         updateSession(db, sessionId, {
           audioPath: finalTimestamp,
           title: sessionTitle,

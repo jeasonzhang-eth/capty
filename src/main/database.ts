@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 
 export interface CreateSessionOpts {
   readonly modelName: string;
+  readonly category?: string;
 }
 
 export interface AddSegmentOpts {
@@ -29,6 +30,7 @@ export interface UpdateSessionFields {
   readonly startedAt?: string;
   readonly endedAt?: string;
   readonly playbackPosition?: number;
+  readonly category?: string;
 }
 
 function initTables(db: Database.Database): void {
@@ -86,6 +88,21 @@ function initTables(db: Database.Database): void {
   } catch {
     // Column already exists — ignore
   }
+
+  // Migrate: add category column for session type grouping
+  try {
+    db.exec(
+      "ALTER TABLE sessions ADD COLUMN category TEXT NOT NULL DEFAULT 'recording'",
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migrate: auto-categorize existing download sessions
+  db.exec(`
+    UPDATE sessions SET category = 'download'
+    WHERE model_name IN ('yt-dlp', 'xiaoyuzhou', 'imported') AND category = 'recording'
+  `);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS segment_translations (
@@ -238,10 +255,11 @@ export function createSession(
   const now = new Date();
   const pad = (n: number): string => String(n).padStart(2, "0");
   const localTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const category = opts.category ?? "recording";
   const stmt = db.prepare(
-    "INSERT INTO sessions (model_name, started_at, title) VALUES (?, ?, ?)",
+    "INSERT INTO sessions (model_name, started_at, title, category) VALUES (?, ?, ?, ?)",
   );
-  const result = stmt.run(opts.modelName, localTime, localTime);
+  const result = stmt.run(opts.modelName, localTime, localTime, category);
   return result.lastInsertRowid as number;
 }
 
@@ -255,6 +273,7 @@ export interface SessionRow {
   readonly model_name: string;
   readonly status: string;
   readonly playback_position: number | null;
+  readonly category: string;
 }
 
 export interface SegmentRow {
@@ -368,6 +387,10 @@ export function updateSession(
   if (fields.playbackPosition !== undefined) {
     setClauses.push("playback_position = ?");
     values.push(fields.playbackPosition);
+  }
+  if (fields.category !== undefined) {
+    setClauses.push("category = ?");
+    values.push(fields.category);
   }
 
   if (setClauses.length === 0) {

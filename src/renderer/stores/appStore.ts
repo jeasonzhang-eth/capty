@@ -14,6 +14,7 @@ interface SessionSummary {
   readonly duration_seconds: number | null;
   readonly model_name: string;
   readonly status: string;
+  readonly category: string;
 }
 
 interface ModelInfo {

@@ -13,10 +13,18 @@ interface SessionSummary {
   readonly started_at: string;
   readonly duration_seconds: number | null;
   readonly status: string;
+  readonly category: string;
 }
 
 const HISTORY_MIN_WIDTH = 160;
 const HISTORY_MAX_WIDTH = 400;
+
+const SESSION_CATEGORIES = [
+  { id: "download", label: "\u4e0b\u8f7d\u5185\u5bb9", icon: "\u2193" },
+  { id: "recording", label: "\u4e2a\u4eba\u5f55\u97f3", icon: "\u25cf" },
+  { id: "meeting", label: "\u4f1a\u8bae", icon: "\u25ce" },
+  { id: "phone", label: "\u7535\u8bdd", icon: "\u260f" },
+] as const;
 
 interface HistoryPanelProps {
   readonly sessions: readonly SessionSummary[];
@@ -38,6 +46,9 @@ interface HistoryPanelProps {
   readonly onUploadAudio: () => void;
   readonly onDownloadAudio: () => void;
   readonly downloadBadge: "active" | "failed" | null;
+  readonly onAiRename?: (id: number) => void;
+  readonly aiRenamingSessionId?: number | null;
+  readonly onUpdateCategory?: (id: number, category: string) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -114,6 +125,25 @@ function groupSessionsByDate(
     .map((label) => ({ label, sessions: buckets[label] }));
 }
 
+interface CategoryGroup {
+  readonly category: (typeof SESSION_CATEGORIES)[number];
+  readonly dateGroups: SessionGroup[];
+  readonly totalCount: number;
+}
+
+function groupByCategory(
+  sessions: readonly SessionSummary[],
+): CategoryGroup[] {
+  return SESSION_CATEGORIES.map((cat) => {
+    const filtered = sessions.filter((s) => (s.category || "recording") === cat.id);
+    return {
+      category: cat,
+      dateGroups: groupSessionsByDate(filtered),
+      totalCount: filtered.length,
+    };
+  });
+}
+
 /* Inject keyframe animations for Studio Noir theme */
 const styleTagId = "studio-noir-history-keyframes";
 if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
@@ -127,6 +157,9 @@ if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+    .session-row:hover .ai-rename-btn {
+      opacity: 1 !important;
     }
   `;
   document.head.appendChild(style);
@@ -152,6 +185,9 @@ export function HistoryPanel({
   onUploadAudio,
   onDownloadAudio,
   downloadBadge,
+  onAiRename,
+  aiRenamingSessionId,
+  onUpdateCategory,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -191,60 +227,93 @@ export function HistoryPanel({
     };
   }, [onWidthChange]);
 
-  // Group sessions by date
-  const groups = useMemo(() => groupSessionsByDate(sessions), [sessions]);
+  // Recompute "today" string so grouping refreshes when the date rolls over
+  const todayDateKey = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }, [sessions]); // re-evaluate at least whenever sessions changes
 
-  // Collapsed state: all groups except "Today" start collapsed
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
-    () =>
-      new Set(groups.filter((g) => g.label !== "Today").map((g) => g.label)),
+  // Also set up a timer to refresh at midnight
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const now = new Date();
+    const tomorrow = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+    );
+    const msUntilMidnight = tomorrow.getTime() - now.getTime();
+    const timer = setTimeout(
+      () => forceUpdate((n) => n + 1),
+      msUntilMidnight + 100,
+    );
+    return () => clearTimeout(timer);
+  });
+
+  // Group sessions by category then by date
+  const categoryGroups = useMemo(
+    () => groupByCategory(sessions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, todayDateKey],
   );
 
-  // When groups change (new sessions added), ensure new non-Today groups start collapsed
+  // Collapsed state for categories — all start expanded
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+
+  // Collapsed state for date groups within categories
+  // Key format: "categoryId:dateLabel"
+  const [collapsedDateGroups, setCollapsedDateGroups] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+
+  // Auto-expand the category and date group containing the current session
   useEffect(() => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      for (const g of groups) {
-        // Only auto-collapse groups the user hasn't interacted with yet
-        // If a group is new and not "Today", collapse it
-        if (g.label !== "Today" && !prev.has(g.label)) {
-          // Check if this is truly a new group - don't re-collapse if user expanded it
-          // We skip this to avoid fighting user intent
+    if (currentSessionId === null) return;
+    for (const catGroup of categoryGroups) {
+      for (const dateGroup of catGroup.dateGroups) {
+        if (dateGroup.sessions.some((s) => s.id === currentSessionId)) {
+          // Expand category
+          setCollapsedCategories((prev) => {
+            if (!prev.has(catGroup.category.id)) return prev;
+            const next = new Set(prev);
+            next.delete(catGroup.category.id);
+            return next;
+          });
+          // Expand date group
+          const dateKey = `${catGroup.category.id}:${dateGroup.label}`;
+          setCollapsedDateGroups((prev) => {
+            if (!prev.has(dateKey)) return prev;
+            const next = new Set(prev);
+            next.delete(dateKey);
+            return next;
+          });
+          return;
         }
       }
-      // Remove labels for groups that no longer exist
-      for (const label of prev) {
-        if (!groups.some((g) => g.label === label)) {
-          next.delete(label);
-        }
+    }
+  }, [currentSessionId, categoryGroups]);
+
+  const toggleCategory = useCallback((categoryId: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
       }
       return next;
     });
-  }, [groups]);
+  }, []);
 
-  // Auto-expand the group containing the current session
-  useEffect(() => {
-    if (currentSessionId === null) return;
-    for (const group of groups) {
-      if (group.sessions.some((s) => s.id === currentSessionId)) {
-        setCollapsedGroups((prev) => {
-          if (!prev.has(group.label)) return prev;
-          const next = new Set(prev);
-          next.delete(group.label);
-          return next;
-        });
-        break;
-      }
-    }
-  }, [currentSessionId, groups]);
-
-  const toggleGroup = useCallback((label: string) => {
-    setCollapsedGroups((prev) => {
+  const toggleDateGroup = useCallback((key: string) => {
+    setCollapsedDateGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) {
-        next.delete(label);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(label);
+        next.add(key);
       }
       return next;
     });
@@ -335,6 +404,16 @@ export function HistoryPanel({
     setConfirmDeleteId(null);
   }, []);
 
+  const handleMoveTo = useCallback(
+    (categoryId: string) => {
+      if (contextMenu.sessionId !== null && onUpdateCategory) {
+        onUpdateCategory(contextMenu.sessionId, categoryId);
+      }
+      setContextMenu((prev) => ({ ...prev, visible: false }));
+    },
+    [contextMenu.sessionId, onUpdateCategory],
+  );
+
   // Close context menu on click outside or Escape
   useEffect(() => {
     if (!contextMenu.visible) return;
@@ -357,6 +436,320 @@ export function HistoryPanel({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [contextMenu.visible]);
+
+  // Render a single session row
+  const renderSessionRow = (session: SessionSummary) => {
+    const isSelected = session.id === currentSessionId;
+    const isPlaying = playingSessionId === session.id;
+    return (
+      <div
+        key={session.id}
+        className="session-row"
+        onClick={() => onSelectSession(session.id)}
+        onDoubleClick={() => {
+          if (playingSessionId === session.id) {
+            onStopPlayback();
+          } else if (!isRecording && session.status === "completed") {
+            onPlaySession(session.id);
+          }
+        }}
+        onContextMenu={(e) => handleContextMenu(e, session.id)}
+        onMouseEnter={(e) => {
+          if (!isSelected) {
+            e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
+            e.currentTarget.style.borderLeft = "3px solid var(--text-muted)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isSelected) {
+            e.currentTarget.style.backgroundColor = "transparent";
+            e.currentTarget.style.borderLeft = "3px solid transparent";
+          }
+        }}
+        style={{
+          padding: "10px 16px 10px 28px",
+          cursor: "pointer",
+          marginBottom: "2px",
+          borderLeft: isSelected
+            ? "3px solid var(--accent)"
+            : "3px solid transparent",
+          backgroundColor: isSelected
+            ? "rgba(245, 166, 35, 0.06)"
+            : "transparent",
+          transition: "background-color 0.15s ease, border-left 0.15s ease",
+        }}
+      >
+        {renamingSessionId === session.id ? (
+          <input
+            ref={renameInputRef}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleRenameConfirm();
+              } else if (e.key === "Escape") {
+                handleRenameCancel();
+              }
+              e.stopPropagation();
+            }}
+            onBlur={handleRenameConfirm}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: "13px",
+              fontWeight: 500,
+              marginBottom: "4px",
+              width: "100%",
+              padding: "2px 4px",
+              border: "1px solid var(--accent)",
+              borderRadius: "3px",
+              backgroundColor: "var(--bg-primary)",
+              color: "var(--text-primary)",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--text-primary)",
+              marginBottom: "4px",
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: "4px",
+            }}
+          >
+            <span
+              style={{
+                overflow: "hidden",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                lineHeight: "1.4",
+                flex: 1,
+                minWidth: 0,
+                wordBreak: "break-all",
+              }}
+            >
+              {session.title}
+            </span>
+            {onAiRename &&
+              session.status === "completed" &&
+              (aiRenamingSessionId === session.id ? (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "18px",
+                    height: "18px",
+                    flexShrink: 0,
+                    animation: "spin 1s linear infinite",
+                  }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                  >
+                    <circle
+                      cx="7"
+                      cy="7"
+                      r="5.5"
+                      stroke="var(--accent)"
+                      strokeWidth="1.5"
+                      strokeDasharray="8 6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+              ) : (
+                <button
+                  className="ai-rename-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAiRename(session.id);
+                  }}
+                  title="AI Rename"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "0 2px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "18px",
+                    height: "18px",
+                    flexShrink: 0,
+                    opacity: 0,
+                    transition: "opacity 0.15s",
+                    color: "var(--text-muted)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "var(--accent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "var(--text-muted)";
+                  }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                  >
+                    <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
+                  </svg>
+                </button>
+              ))}
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            fontFamily: "'JetBrains Mono', monospace",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{formatDate(session.started_at)}</span>
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span>{formatDuration(session.duration_seconds)}</span>
+            {session.status === "completed" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (playingSessionId === session.id) {
+                    onStopPlayback();
+                  } else if (!isRecording) {
+                    onPlaySession(session.id);
+                  }
+                }}
+                disabled={isRecording && playingSessionId !== session.id}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: isPlaying ? "var(--accent)" : "var(--text-muted)",
+                  fontSize: "12px",
+                  cursor:
+                    isRecording && playingSessionId !== session.id
+                      ? "not-allowed"
+                      : "pointer",
+                  padding: "0 2px",
+                  opacity:
+                    isRecording && playingSessionId !== session.id ? 0.4 : 1,
+                  animation: isPlaying
+                    ? "breathe 1.5s ease-in-out infinite"
+                    : "none",
+                }}
+                title={
+                  playingSessionId === session.id
+                    ? "Stop"
+                    : isRecording
+                      ? "Cannot play while recording"
+                      : "Play"
+                }
+              >
+                {playingSessionId === session.id ? "\u25A0" : "\u25B6"}
+              </button>
+            )}
+          </span>
+        </div>
+        {session.status === "recording" && (
+          <span
+            style={{
+              display: "inline-block",
+              marginTop: "4px",
+              fontSize: "10px",
+              color: "var(--danger)",
+              fontWeight: 600,
+              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              borderRadius: "10px",
+              padding: "1px 8px",
+              animation: "breathe 2s ease-in-out infinite",
+            }}
+          >
+            RECORDING
+          </span>
+        )}
+        {regeneratingSessionId === session.id && (
+          <div style={{ marginTop: "4px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "3px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "var(--accent)",
+                  fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                Regenerating... {regenerationProgress}%
+              </span>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelRegeneration();
+                }}
+                style={{
+                  fontSize: "10px",
+                  color: "var(--danger)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  padding: "0 4px",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.opacity = "0.7")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.opacity = "1")
+                }
+              >
+                Cancel
+              </span>
+            </div>
+            <div
+              style={{
+                height: "3px",
+                backgroundColor: "var(--border)",
+                borderRadius: "2px",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${regenerationProgress}%`,
+                  background:
+                    "linear-gradient(90deg, var(--accent), var(--accent-hover))",
+                  borderRadius: "2px",
+                  transition: "width 0.2s ease",
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -521,24 +914,34 @@ export function HistoryPanel({
         </button>
       </div>
 
+      {/* Session list with two-level grouping: category → date */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {groups.map((group) => {
-          const isCollapsed = collapsedGroups.has(group.label);
+        {categoryGroups.map((catGroup) => {
+          const isCatCollapsed = collapsedCategories.has(
+            catGroup.category.id,
+          );
           return (
-            <div key={group.label}>
-              {/* Group header */}
+            <div key={catGroup.category.id}>
+              {/* Category header */}
               <div
-                onClick={() => toggleGroup(group.label)}
+                onClick={() => toggleCategory(catGroup.category.id)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(255,255,255,0.03)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
                 style={{
-                  padding: "8px 16px 8px 14px",
+                  padding: "8px 16px 8px 10px",
                   cursor: "pointer",
                   backgroundColor: "transparent",
-                  borderLeft: "2px solid var(--accent)",
-                  marginTop: "8px",
+                  marginTop: "4px",
                   display: "flex",
                   alignItems: "center",
                   gap: "6px",
                   userSelect: "none",
+                  transition: "background-color 0.15s",
                 }}
               >
                 <span
@@ -550,289 +953,116 @@ export function HistoryPanel({
                     textAlign: "center",
                   }}
                 >
-                  {isCollapsed ? "\u25B6" : "\u25BC"}
+                  {isCatCollapsed ? "\u25B6" : "\u25BC"}
                 </span>
                 <span
                   style={{
-                    fontSize: "10px",
+                    fontSize: "13px",
+                    color: "var(--text-muted)",
+                    width: "14px",
+                    textAlign: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {catGroup.category.icon}
+                </span>
+                <span
+                  style={{
+                    fontSize: "12px",
                     fontWeight: 600,
-                    color: "var(--text-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
+                    color: "var(--text-primary)",
+                    flex: 1,
                   }}
                 >
-                  {group.label}
+                  {catGroup.category.label}
                 </span>
                 <span
                   style={{
                     fontSize: "10px",
                     color: "var(--text-muted)",
-                    letterSpacing: "0.08em",
+                    fontFamily: "'JetBrains Mono', monospace",
                   }}
                 >
-                  ({group.sessions.length})
+                  {catGroup.totalCount}
                 </span>
               </div>
-              {/* Session items */}
-              {!isCollapsed &&
-                group.sessions.map((session) => {
-                  const isSelected = session.id === currentSessionId;
-                  const isPlaying = playingSessionId === session.id;
-                  return (
+              {/* Category content */}
+              {!isCatCollapsed && (
+                <>
+                  {catGroup.dateGroups.length === 0 ? (
                     <div
-                      key={session.id}
-                      className="session-row"
-                      onClick={() => onSelectSession(session.id)}
-                      onDoubleClick={() => {
-                        if (playingSessionId === session.id) {
-                          onStopPlayback();
-                        } else if (
-                          !isRecording &&
-                          session.status === "completed"
-                        ) {
-                          onPlaySession(session.id);
-                        }
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, session.id)}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.backgroundColor =
-                            "rgba(255,255,255,0.03)";
-                          e.currentTarget.style.borderLeft =
-                            "3px solid var(--text-muted)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.backgroundColor = "transparent";
-                          e.currentTarget.style.borderLeft =
-                            "3px solid transparent";
-                        }
-                      }}
                       style={{
-                        padding: "10px 16px",
-                        cursor: "pointer",
-                        marginBottom: "2px",
-                        borderLeft: isSelected
-                          ? "3px solid var(--accent)"
-                          : "3px solid transparent",
-                        backgroundColor: isSelected
-                          ? "rgba(245, 166, 35, 0.06)"
-                          : "transparent",
-                        transition:
-                          "background-color 0.15s ease, border-left 0.15s ease",
+                        padding: "8px 16px 8px 40px",
+                        fontSize: "11px",
+                        color: "var(--text-muted)",
+                        opacity: 0.6,
+                        fontStyle: "italic",
                       }}
                     >
-                      {renamingSessionId === session.id ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleRenameConfirm();
-                            } else if (e.key === "Escape") {
-                              handleRenameCancel();
-                            }
-                            e.stopPropagation();
-                          }}
-                          onBlur={handleRenameConfirm}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            marginBottom: "4px",
-                            width: "100%",
-                            padding: "2px 4px",
-                            border: "1px solid var(--accent)",
-                            borderRadius: "3px",
-                            backgroundColor: "var(--bg-primary)",
-                            color: "var(--text-primary)",
-                            outline: "none",
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            color: "var(--text-primary)",
-                            marginBottom: "4px",
-                            display: "flex",
-                            alignItems: "flex-start",
-                            justifyContent: "space-between",
-                            gap: "4px",
-                          }}
-                        >
-                          <span
-                            style={{
-                              overflow: "hidden",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              lineHeight: "1.4",
-                              flex: 1,
-                              minWidth: 0,
-                              wordBreak: "break-all",
-                            }}
-                          >
-                            {session.title}
-                          </span>
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "var(--text-muted)",
-                          fontFamily: "'JetBrains Mono', monospace",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <span>{formatDate(session.started_at)}</span>
-                        <span
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                          }}
-                        >
-                          <span>
-                            {formatDuration(session.duration_seconds)}
-                          </span>
-                          {session.status === "completed" && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (playingSessionId === session.id) {
-                                  onStopPlayback();
-                                } else if (!isRecording) {
-                                  onPlaySession(session.id);
-                                }
-                              }}
-                              disabled={
-                                isRecording && playingSessionId !== session.id
-                              }
-                              style={{
-                                background: "none",
-                                border: "none",
-                                color: isPlaying
-                                  ? "var(--accent)"
-                                  : "var(--text-muted)",
-                                fontSize: "12px",
-                                cursor:
-                                  isRecording && playingSessionId !== session.id
-                                    ? "not-allowed"
-                                    : "pointer",
-                                padding: "0 2px",
-                                opacity:
-                                  isRecording && playingSessionId !== session.id
-                                    ? 0.4
-                                    : 1,
-                                animation: isPlaying
-                                  ? "breathe 1.5s ease-in-out infinite"
-                                  : "none",
-                              }}
-                              title={
-                                playingSessionId === session.id
-                                  ? "Stop"
-                                  : isRecording
-                                    ? "Cannot play while recording"
-                                    : "Play"
-                              }
-                            >
-                              {playingSessionId === session.id
-                                ? "\u25A0"
-                                : "\u25B6"}
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                      {session.status === "recording" && (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            marginTop: "4px",
-                            fontSize: "10px",
-                            color: "var(--danger)",
-                            fontWeight: 600,
-                            backgroundColor: "rgba(239, 68, 68, 0.15)",
-                            borderRadius: "10px",
-                            padding: "1px 8px",
-                            animation: "breathe 2s ease-in-out infinite",
-                          }}
-                        >
-                          RECORDING
-                        </span>
-                      )}
-                      {regeneratingSessionId === session.id && (
-                        <div style={{ marginTop: "4px" }}>
+                      No sessions
+                    </div>
+                  ) : (
+                    catGroup.dateGroups.map((dateGroup) => {
+                      const dateKey = `${catGroup.category.id}:${dateGroup.label}`;
+                      const isDateCollapsed =
+                        collapsedDateGroups.has(dateKey);
+                      return (
+                        <div key={dateKey}>
+                          {/* Date group header */}
                           <div
+                            onClick={() => toggleDateGroup(dateKey)}
                             style={{
+                              padding: "6px 16px 6px 20px",
+                              cursor: "pointer",
+                              backgroundColor: "transparent",
+                              borderLeft: "2px solid var(--accent)",
                               display: "flex",
                               alignItems: "center",
-                              justifyContent: "space-between",
-                              marginBottom: "3px",
+                              gap: "6px",
+                              userSelect: "none",
                             }}
                           >
                             <span
                               style={{
-                                fontSize: "10px",
-                                color: "var(--accent)",
-                                fontWeight: 600,
-                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: "9px",
+                                color: "var(--text-muted)",
+                                display: "inline-block",
+                                width: "8px",
+                                textAlign: "center",
                               }}
                             >
-                              Regenerating... {regenerationProgress}%
+                              {isDateCollapsed ? "\u25B6" : "\u25BC"}
                             </span>
                             <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onCancelRegeneration();
-                              }}
                               style={{
                                 fontSize: "10px",
-                                color: "var(--danger)",
-                                cursor: "pointer",
                                 fontWeight: 600,
-                                padding: "0 4px",
+                                color: "var(--text-muted)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.08em",
                               }}
-                              onMouseEnter={(e) =>
-                                (e.currentTarget.style.opacity = "0.7")
-                              }
-                              onMouseLeave={(e) =>
-                                (e.currentTarget.style.opacity = "1")
-                              }
                             >
-                              Cancel
+                              {dateGroup.label}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                                letterSpacing: "0.08em",
+                              }}
+                            >
+                              ({dateGroup.sessions.length})
                             </span>
                           </div>
-                          <div
-                            style={{
-                              height: "3px",
-                              backgroundColor: "var(--border)",
-                              borderRadius: "2px",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <div
-                              style={{
-                                height: "100%",
-                                width: `${regenerationProgress}%`,
-                                background:
-                                  "linear-gradient(90deg, var(--accent), var(--accent-hover))",
-                                borderRadius: "2px",
-                                transition: "width 0.2s ease",
-                              }}
-                            />
-                          </div>
+                          {/* Session items */}
+                          {!isDateCollapsed &&
+                            dateGroup.sessions.map(renderSessionRow)}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })
+                  )}
+                </>
+              )}
             </div>
           );
         })}
@@ -878,6 +1108,7 @@ export function HistoryPanel({
               const isCompleted = targetSession?.status === "completed";
               const canRegenerate =
                 isCompleted && regeneratingSessionId === null;
+              const currentCategory = targetSession?.category || "recording";
               return (
                 <>
                   {isCompleted && (
@@ -920,44 +1151,113 @@ export function HistoryPanel({
                       Regenerate Subtitles
                     </div>
                   )}
+                  <div
+                    onClick={handleRenameClick}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      color: "var(--text-primary)",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor =
+                        "var(--accent-glow)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "transparent")
+                    }
+                  >
+                    Rename
+                  </div>
+                  {/* Move to... submenu */}
+                  {onUpdateCategory && (
+                    <>
+                      <div
+                        style={{
+                          height: "1px",
+                          backgroundColor: "var(--border)",
+                          margin: "4px 0",
+                        }}
+                      />
+                      <div
+                        style={{
+                          padding: "4px 16px",
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          userSelect: "none",
+                        }}
+                      >
+                        Move to...
+                      </div>
+                      {SESSION_CATEGORIES.filter(
+                        (cat) => cat.id !== currentCategory,
+                      ).map((cat) => (
+                        <div
+                          key={cat.id}
+                          onClick={() => handleMoveTo(cat.id)}
+                          style={{
+                            padding: "6px 16px 6px 24px",
+                            fontSize: "13px",
+                            cursor: "pointer",
+                            color: "var(--text-primary)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.backgroundColor =
+                              "var(--accent-glow)")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.backgroundColor =
+                              "transparent")
+                          }
+                        >
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              color: "var(--text-muted)",
+                              width: "14px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {cat.icon}
+                          </span>
+                          {cat.label}
+                        </div>
+                      ))}
+                      <div
+                        style={{
+                          height: "1px",
+                          backgroundColor: "var(--border)",
+                          margin: "4px 0",
+                        }}
+                      />
+                    </>
+                  )}
+                  <div
+                    onClick={handleDeleteClick}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      color: "var(--danger)",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor =
+                        "rgba(239, 68, 68, 0.1)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "transparent")
+                    }
+                  >
+                    Delete
+                  </div>
                 </>
               );
             })()}
-            <div
-              onClick={handleRenameClick}
-              style={{
-                padding: "8px 16px",
-                fontSize: "13px",
-                cursor: "pointer",
-                color: "var(--text-primary)",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = "var(--accent-glow)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = "transparent")
-              }
-            >
-              Rename
-            </div>
-            <div
-              onClick={handleDeleteClick}
-              style={{
-                padding: "8px 16px",
-                fontSize: "13px",
-                cursor: "pointer",
-                color: "var(--danger)",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor =
-                  "rgba(239, 68, 68, 0.1)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = "transparent")
-              }
-            >
-              Delete
-            </div>
           </div>,
           document.body,
         )}
@@ -1001,7 +1301,7 @@ export function HistoryPanel({
                   color: "var(--text-primary)",
                 }}
               >
-                确认删除
+                {"\u786e\u8ba4\u5220\u9664"}
               </div>
               <div
                 style={{
@@ -1011,7 +1311,7 @@ export function HistoryPanel({
                   lineHeight: 1.5,
                 }}
               >
-                此操作将同时删除录音记录和原始音频文件，且无法恢复。确定要删除吗？
+                {"\u6b64\u64cd\u4f5c\u5c06\u540c\u65f6\u5220\u9664\u5f55\u97f3\u8bb0\u5f55\u548c\u539f\u59cb\u97f3\u9891\u6587\u4ef6\uff0c\u4e14\u65e0\u6cd5\u6062\u590d\u3002\u786e\u5b9a\u8981\u5220\u9664\u5417\uff1f"}
               </div>
               <div
                 style={{
@@ -1032,7 +1332,7 @@ export function HistoryPanel({
                     cursor: "pointer",
                   }}
                 >
-                  取消
+                  {"\u53d6\u6d88"}
                 </button>
                 <button
                   onClick={handleConfirmDelete}
@@ -1046,7 +1346,7 @@ export function HistoryPanel({
                     cursor: "pointer",
                   }}
                 >
-                  删除
+                  {"\u5220\u9664"}
                 </button>
               </div>
             </div>
