@@ -31,6 +31,7 @@ export interface UpdateSessionFields {
   readonly endedAt?: string;
   readonly playbackPosition?: number;
   readonly category?: string;
+  readonly sortOrder?: number;
 }
 
 function initTables(db: Database.Database): void {
@@ -93,6 +94,15 @@ function initTables(db: Database.Database): void {
   try {
     db.exec(
       "ALTER TABLE sessions ADD COLUMN category TEXT NOT NULL DEFAULT 'recording'",
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migrate: add sort_order column for manual session ordering
+  try {
+    db.exec(
+      "ALTER TABLE sessions ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
     );
   } catch {
     // Column already exists — ignore
@@ -274,6 +284,7 @@ export interface SessionRow {
   readonly status: string;
   readonly playback_position: number | null;
   readonly category: string;
+  readonly sort_order: number;
 }
 
 export interface SegmentRow {
@@ -303,8 +314,23 @@ export function getSession(
 }
 
 export function listSessions(db: Database.Database): SessionRow[] {
-  const stmt = db.prepare("SELECT * FROM sessions ORDER BY started_at DESC");
+  const stmt = db.prepare(
+    "SELECT * FROM sessions ORDER BY sort_order DESC, started_at DESC",
+  );
   return stmt.all() as SessionRow[];
+}
+
+export function reorderSessions(
+  db: Database.Database,
+  sessionIds: readonly number[],
+): void {
+  const update = db.prepare("UPDATE sessions SET sort_order = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    for (let i = 0; i < sessionIds.length; i++) {
+      update.run(sessionIds.length - i, sessionIds[i]);
+    }
+  });
+  tx();
 }
 
 export function addSegment(
@@ -391,6 +417,10 @@ export function updateSession(
   if (fields.category !== undefined) {
     setClauses.push("category = ?");
     values.push(fields.category);
+  }
+  if (fields.sortOrder !== undefined) {
+    setClauses.push("sort_order = ?");
+    values.push(fields.sortOrder);
   }
 
   if (setClauses.length === 0) {

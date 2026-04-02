@@ -15,6 +15,7 @@ interface SessionSummary {
   readonly model_name: string;
   readonly status: string;
   readonly category: string;
+  readonly sort_order: number;
 }
 
 interface ModelInfo {

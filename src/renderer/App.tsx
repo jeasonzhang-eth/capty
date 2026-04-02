@@ -824,6 +824,18 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleReorderSessions = useCallback(
+    async (sessionIds: number[]) => {
+      try {
+        await window.capty.reorderSessions(sessionIds);
+        await store.loadSessions();
+      } catch (err) {
+        console.error("Failed to reorder sessions:", err);
+      }
+    },
+    [store],
+  );
+
   const handleRegenerateSubtitles = useCallback(
     async (sessionId: number) => {
       if (regeneratingSessionId !== null || store.isRecording) return;
@@ -2085,6 +2097,7 @@ function App(): React.JSX.Element {
           }
           aiRenamingSessionId={aiRenamingSessionId}
           onUpdateCategory={handleUpdateCategory}
+          onReorderSessions={handleReorderSessions}
         />
         <TranscriptArea
           segments={store.segments}

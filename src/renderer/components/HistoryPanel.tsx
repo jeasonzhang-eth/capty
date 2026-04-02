@@ -49,6 +49,7 @@ interface HistoryPanelProps {
   readonly onAiRename?: (id: number) => void;
   readonly aiRenamingSessionId?: number | null;
   readonly onUpdateCategory?: (id: number, category: string) => void;
+  readonly onReorderSessions?: (sessionIds: number[]) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -131,11 +132,11 @@ interface CategoryGroup {
   readonly totalCount: number;
 }
 
-function groupByCategory(
-  sessions: readonly SessionSummary[],
-): CategoryGroup[] {
+function groupByCategory(sessions: readonly SessionSummary[]): CategoryGroup[] {
   return SESSION_CATEGORIES.map((cat) => {
-    const filtered = sessions.filter((s) => (s.category || "recording") === cat.id);
+    const filtered = sessions.filter(
+      (s) => (s.category || "recording") === cat.id,
+    );
     return {
       category: cat,
       dateGroups: groupSessionsByDate(filtered),
@@ -160,6 +161,21 @@ if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
     }
     .session-row:hover .ai-rename-btn {
       opacity: 1 !important;
+    }
+    .session-row.dragging {
+      opacity: 0.4;
+    }
+    .drop-indicator-line {
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px;
+      margin: 0 16px;
+      pointer-events: none;
+    }
+    .category-drop-highlight {
+      background: rgba(245,166,35,0.12) !important;
+      outline: 1px dashed var(--accent);
+      outline-offset: -1px;
     }
   `;
   document.head.appendChild(style);
@@ -188,6 +204,7 @@ export function HistoryPanel({
   onAiRename,
   aiRenamingSessionId,
   onUpdateCategory,
+  onReorderSessions,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -226,6 +243,22 @@ export function HistoryPanel({
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [onWidthChange]);
+
+  // ── Drag & Drop state ──
+  const [dragSessionId, setDragSessionId] = useState<number | null>(null);
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(
+    null,
+  );
+  const [dropIndicator, setDropIndicator] = useState<{
+    categoryId: string;
+    insertBeforeSessionId: number | null; // null = append at end
+  } | null>(null);
+
+  const clearDndState = useCallback(() => {
+    setDragSessionId(null);
+    setDragOverCategoryId(null);
+    setDropIndicator(null);
+  }, []);
 
   // Recompute "today" string so grouping refreshes when the date rolls over
   const todayDateKey = useMemo(() => {
@@ -437,317 +470,395 @@ export function HistoryPanel({
     };
   }, [contextMenu.visible]);
 
+  // Helper: get all sessions within a category, in the order currently displayed
+  const getSessionsInCategory = useCallback(
+    (catId: string): SessionSummary[] => {
+      const catGroup = categoryGroups.find((cg) => cg.category.id === catId);
+      if (!catGroup) return [];
+      return catGroup.dateGroups.flatMap((dg) => [...dg.sessions]);
+    },
+    [categoryGroups],
+  );
+
   // Render a single session row
-  const renderSessionRow = (session: SessionSummary) => {
+  const renderSessionRow = (session: SessionSummary, categoryId: string) => {
     const isSelected = session.id === currentSessionId;
     const isPlaying = playingSessionId === session.id;
+    const isDragged = dragSessionId === session.id;
+    const showDropBefore =
+      dropIndicator !== null &&
+      dropIndicator.categoryId === categoryId &&
+      dropIndicator.insertBeforeSessionId === session.id;
     return (
-      <div
-        key={session.id}
-        className="session-row"
-        onClick={() => onSelectSession(session.id)}
-        onDoubleClick={() => {
-          if (playingSessionId === session.id) {
-            onStopPlayback();
-          } else if (!isRecording && session.status === "completed") {
-            onPlaySession(session.id);
-          }
-        }}
-        onContextMenu={(e) => handleContextMenu(e, session.id)}
-        onMouseEnter={(e) => {
-          if (!isSelected) {
-            e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
-            e.currentTarget.style.borderLeft = "3px solid var(--text-muted)";
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected) {
-            e.currentTarget.style.backgroundColor = "transparent";
-            e.currentTarget.style.borderLeft = "3px solid transparent";
-          }
-        }}
-        style={{
-          padding: "10px 16px 10px 28px",
-          cursor: "pointer",
-          marginBottom: "2px",
-          borderLeft: isSelected
-            ? "3px solid var(--accent)"
-            : "3px solid transparent",
-          backgroundColor: isSelected
-            ? "rgba(245, 166, 35, 0.06)"
-            : "transparent",
-          transition: "background-color 0.15s ease, border-left 0.15s ease",
-        }}
-      >
-        {renamingSessionId === session.id ? (
-          <input
-            ref={renameInputRef}
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleRenameConfirm();
-              } else if (e.key === "Escape") {
-                handleRenameCancel();
-              }
-              e.stopPropagation();
-            }}
-            onBlur={handleRenameConfirm}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              fontSize: "13px",
-              fontWeight: 500,
-              marginBottom: "4px",
-              width: "100%",
-              padding: "2px 4px",
-              border: "1px solid var(--accent)",
-              borderRadius: "3px",
-              backgroundColor: "var(--bg-primary)",
-              color: "var(--text-primary)",
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "var(--text-primary)",
-              marginBottom: "4px",
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: "4px",
-            }}
-          >
-            <span
-              style={{
-                overflow: "hidden",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                lineHeight: "1.4",
-                flex: 1,
-                minWidth: 0,
-                wordBreak: "break-all",
-              }}
-            >
-              {session.title}
-            </span>
-            {onAiRename &&
-              session.status === "completed" &&
-              (aiRenamingSessionId === session.id ? (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "18px",
-                    height: "18px",
-                    flexShrink: 0,
-                    animation: "spin 1s linear infinite",
-                  }}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="none"
-                  >
-                    <circle
-                      cx="7"
-                      cy="7"
-                      r="5.5"
-                      stroke="var(--accent)"
-                      strokeWidth="1.5"
-                      strokeDasharray="8 6"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </span>
-              ) : (
-                <button
-                  className="ai-rename-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAiRename(session.id);
-                  }}
-                  title="AI Rename"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: "0 2px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "18px",
-                    height: "18px",
-                    flexShrink: 0,
-                    opacity: 0,
-                    transition: "opacity 0.15s",
-                    color: "var(--text-muted)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "var(--accent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                  >
-                    <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
-                  </svg>
-                </button>
-              ))}
-          </div>
-        )}
+      <React.Fragment key={session.id}>
+        {showDropBefore && <div className="drop-indicator-line" />}
         <div
+          className={`session-row${isDragged ? " dragging" : ""}`}
+          draggable
+          onDragStart={(e) => {
+            setDragSessionId(session.id);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData(
+              "application/x-capty-session",
+              JSON.stringify({ id: session.id, category: categoryId }),
+            );
+          }}
+          onDragEnd={clearDndState}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (dragSessionId === null || dragSessionId === session.id) return;
+            // Only show drop indicator for same-category reorder
+            const draggedSession = sessions.find((s) => s.id === dragSessionId);
+            const dragFromCat = draggedSession?.category || "recording";
+            if (dragFromCat !== categoryId) return;
+            // Determine if cursor is in upper or lower half
+            const rect = e.currentTarget.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+              // Insert before this session
+              setDropIndicator({
+                categoryId,
+                insertBeforeSessionId: session.id,
+              });
+            } else {
+              // Insert after this session — find the next session in category
+              const catSessions = getSessionsInCategory(categoryId);
+              const idx = catSessions.findIndex((s) => s.id === session.id);
+              const nextSession = catSessions[idx + 1];
+              setDropIndicator({
+                categoryId,
+                insertBeforeSessionId: nextSession?.id ?? null,
+              });
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragSessionId === null) return;
+            const raw = e.dataTransfer.getData("application/x-capty-session");
+            if (!raw) return;
+            const { id: draggedId, category: fromCat } = JSON.parse(raw) as {
+              id: number;
+              category: string;
+            };
+            if (fromCat !== categoryId) {
+              // Cross-category move
+              onUpdateCategory?.(draggedId, categoryId);
+            } else if (onReorderSessions && dropIndicator) {
+              // Same-category reorder
+              const catSessions = getSessionsInCategory(categoryId);
+              const orderedIds = catSessions.map((s) => s.id);
+              // Remove dragged session from list
+              const filtered = orderedIds.filter((id) => id !== draggedId);
+              // Find insert position
+              const insertIdx =
+                dropIndicator.insertBeforeSessionId === null
+                  ? filtered.length
+                  : filtered.indexOf(dropIndicator.insertBeforeSessionId);
+              filtered.splice(
+                insertIdx === -1 ? filtered.length : insertIdx,
+                0,
+                draggedId,
+              );
+              onReorderSessions(filtered);
+            }
+            clearDndState();
+          }}
+          onClick={() => onSelectSession(session.id)}
+          onDoubleClick={() => {
+            if (playingSessionId === session.id) {
+              onStopPlayback();
+            } else if (!isRecording && session.status === "completed") {
+              onPlaySession(session.id);
+            }
+          }}
+          onContextMenu={(e) => handleContextMenu(e, session.id)}
+          onMouseEnter={(e) => {
+            if (!isSelected) {
+              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)";
+              e.currentTarget.style.borderLeft = "3px solid var(--text-muted)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isSelected) {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.borderLeft = "3px solid transparent";
+            }
+          }}
           style={{
-            fontSize: "11px",
-            color: "var(--text-muted)",
-            fontFamily: "'JetBrains Mono', monospace",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            padding: "10px 16px 10px 28px",
+            cursor: "pointer",
+            marginBottom: "2px",
+            borderLeft: isSelected
+              ? "3px solid var(--accent)"
+              : "3px solid transparent",
+            backgroundColor: isSelected
+              ? "rgba(245, 166, 35, 0.06)"
+              : "transparent",
+            transition: "background-color 0.15s ease, border-left 0.15s ease",
           }}
         >
-          <span>{formatDate(session.started_at)}</span>
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <span>{formatDuration(session.duration_seconds)}</span>
-            {session.status === "completed" && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (playingSessionId === session.id) {
-                    onStopPlayback();
-                  } else if (!isRecording) {
-                    onPlaySession(session.id);
-                  }
-                }}
-                disabled={isRecording && playingSessionId !== session.id}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: isPlaying ? "var(--accent)" : "var(--text-muted)",
-                  fontSize: "12px",
-                  cursor:
-                    isRecording && playingSessionId !== session.id
-                      ? "not-allowed"
-                      : "pointer",
-                  padding: "0 2px",
-                  opacity:
-                    isRecording && playingSessionId !== session.id ? 0.4 : 1,
-                  animation: isPlaying
-                    ? "breathe 1.5s ease-in-out infinite"
-                    : "none",
-                }}
-                title={
-                  playingSessionId === session.id
-                    ? "Stop"
-                    : isRecording
-                      ? "Cannot play while recording"
-                      : "Play"
+          {renamingSessionId === session.id ? (
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleRenameConfirm();
+                } else if (e.key === "Escape") {
+                  handleRenameCancel();
                 }
+                e.stopPropagation();
+              }}
+              onBlur={handleRenameConfirm}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                marginBottom: "4px",
+                width: "100%",
+                padding: "2px 4px",
+                border: "1px solid var(--accent)",
+                borderRadius: "3px",
+                backgroundColor: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                marginBottom: "4px",
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "4px",
+              }}
+            >
+              <span
+                style={{
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  lineHeight: "1.4",
+                  flex: 1,
+                  minWidth: 0,
+                  wordBreak: "break-all",
+                }}
               >
-                {playingSessionId === session.id ? "\u25A0" : "\u25B6"}
-              </button>
-            )}
-          </span>
-        </div>
-        {session.status === "recording" && (
-          <span
+                {session.title}
+              </span>
+              {onAiRename &&
+                session.status === "completed" &&
+                (aiRenamingSessionId === session.id ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "18px",
+                      height: "18px",
+                      flexShrink: 0,
+                      animation: "spin 1s linear infinite",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <circle
+                        cx="7"
+                        cy="7"
+                        r="5.5"
+                        stroke="var(--accent)"
+                        strokeWidth="1.5"
+                        strokeDasharray="8 6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </span>
+                ) : (
+                  <button
+                    className="ai-rename-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAiRename(session.id);
+                    }}
+                    title="AI Rename"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "0 2px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "18px",
+                      height: "18px",
+                      flexShrink: 0,
+                      opacity: 0,
+                      transition: "opacity 0.15s",
+                      color: "var(--text-muted)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "var(--accent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "var(--text-muted)";
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
+                      <path d="M8 0a1 1 0 0 1 .867.5l1.292 2.244 2.244 1.292a1 1 0 0 1 0 1.732L10.16 7.06 8.867 9.3a1 1 0 0 1-1.734 0L5.841 7.06 3.597 5.768a1 1 0 0 1 0-1.732L5.84 2.744 7.133.5A1 1 0 0 1 8 0zM3 9a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 3 9zm9 2a1 1 0 0 1 .867.5l.575 1 1 .575a1 1 0 0 1 0 1.732l-1 .575-.575 1a1 1 0 0 1-1.734 0l-.575-1-1-.575a1 1 0 0 1 0-1.732l1-.575.575-1A1 1 0 0 1 12 11z" />
+                    </svg>
+                  </button>
+                ))}
+            </div>
+          )}
+          <div
             style={{
-              display: "inline-block",
-              marginTop: "4px",
-              fontSize: "10px",
-              color: "var(--danger)",
-              fontWeight: 600,
-              backgroundColor: "rgba(239, 68, 68, 0.15)",
-              borderRadius: "10px",
-              padding: "1px 8px",
-              animation: "breathe 2s ease-in-out infinite",
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              fontFamily: "'JetBrains Mono', monospace",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            RECORDING
-          </span>
-        )}
-        {regeneratingSessionId === session.id && (
-          <div style={{ marginTop: "4px" }}>
-            <div
+            <span>{formatDate(session.started_at)}</span>
+            <span
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "3px",
+                gap: "6px",
               }}
             >
-              <span
-                style={{
-                  fontSize: "10px",
-                  color: "var(--accent)",
-                  fontWeight: 600,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
-                Regenerating... {regenerationProgress}%
-              </span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCancelRegeneration();
-                }}
-                style={{
-                  fontSize: "10px",
-                  color: "var(--danger)",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  padding: "0 4px",
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.opacity = "0.7")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.opacity = "1")
-                }
-              >
-                Cancel
-              </span>
-            </div>
-            <div
+              <span>{formatDuration(session.duration_seconds)}</span>
+              {session.status === "completed" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (playingSessionId === session.id) {
+                      onStopPlayback();
+                    } else if (!isRecording) {
+                      onPlaySession(session.id);
+                    }
+                  }}
+                  disabled={isRecording && playingSessionId !== session.id}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: isPlaying ? "var(--accent)" : "var(--text-muted)",
+                    fontSize: "12px",
+                    cursor:
+                      isRecording && playingSessionId !== session.id
+                        ? "not-allowed"
+                        : "pointer",
+                    padding: "0 2px",
+                    opacity:
+                      isRecording && playingSessionId !== session.id ? 0.4 : 1,
+                    animation: isPlaying
+                      ? "breathe 1.5s ease-in-out infinite"
+                      : "none",
+                  }}
+                  title={
+                    playingSessionId === session.id
+                      ? "Stop"
+                      : isRecording
+                        ? "Cannot play while recording"
+                        : "Play"
+                  }
+                >
+                  {playingSessionId === session.id ? "\u25A0" : "\u25B6"}
+                </button>
+              )}
+            </span>
+          </div>
+          {session.status === "recording" && (
+            <span
               style={{
-                height: "3px",
-                backgroundColor: "var(--border)",
-                borderRadius: "2px",
-                overflow: "hidden",
+                display: "inline-block",
+                marginTop: "4px",
+                fontSize: "10px",
+                color: "var(--danger)",
+                fontWeight: 600,
+                backgroundColor: "rgba(239, 68, 68, 0.15)",
+                borderRadius: "10px",
+                padding: "1px 8px",
+                animation: "breathe 2s ease-in-out infinite",
               }}
             >
+              RECORDING
+            </span>
+          )}
+          {regeneratingSessionId === session.id && (
+            <div style={{ marginTop: "4px" }}>
               <div
                 style={{
-                  height: "100%",
-                  width: `${regenerationProgress}%`,
-                  background:
-                    "linear-gradient(90deg, var(--accent), var(--accent-hover))",
-                  borderRadius: "2px",
-                  transition: "width 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "3px",
                 }}
-              />
+              >
+                <span
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--accent)",
+                    fontWeight: 600,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                >
+                  Regenerating... {regenerationProgress}%
+                </span>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancelRegeneration();
+                  }}
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--danger)",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    padding: "0 4px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                >
+                  Cancel
+                </span>
+              </div>
+              <div
+                style={{
+                  height: "3px",
+                  backgroundColor: "var(--border)",
+                  borderRadius: "2px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${regenerationProgress}%`,
+                    background:
+                      "linear-gradient(90deg, var(--accent), var(--accent-hover))",
+                    borderRadius: "2px",
+                    transition: "width 0.2s ease",
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </React.Fragment>
     );
   };
 
@@ -917,21 +1028,61 @@ export function HistoryPanel({
       {/* Session list with two-level grouping: category → date */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {categoryGroups.map((catGroup) => {
-          const isCatCollapsed = collapsedCategories.has(
-            catGroup.category.id,
-          );
+          const isCatCollapsed = collapsedCategories.has(catGroup.category.id);
           return (
             <div key={catGroup.category.id}>
               {/* Category header */}
               <div
                 onClick={() => toggleCategory(catGroup.category.id)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragSessionId === null) return;
+                  const draggedSession = sessions.find(
+                    (s) => s.id === dragSessionId,
+                  );
+                  const dragFromCat = draggedSession?.category || "recording";
+                  if (dragFromCat === catGroup.category.id) return;
+                  setDragOverCategoryId(catGroup.category.id);
+                }}
+                onDragLeave={(e) => {
+                  if (
+                    dragOverCategoryId === catGroup.category.id &&
+                    !e.currentTarget.contains(e.relatedTarget as Node)
+                  ) {
+                    setDragOverCategoryId(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const raw = e.dataTransfer.getData(
+                    "application/x-capty-session",
+                  );
+                  if (!raw) return;
+                  const { id: draggedId, category: fromCat } = JSON.parse(
+                    raw,
+                  ) as { id: number; category: string };
+                  if (fromCat !== catGroup.category.id) {
+                    onUpdateCategory?.(draggedId, catGroup.category.id);
+                  }
+                  clearDndState();
+                }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(255,255,255,0.03)";
+                  if (dragOverCategoryId !== catGroup.category.id) {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(255,255,255,0.03)";
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
+                  if (dragOverCategoryId !== catGroup.category.id) {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                  }
                 }}
+                className={
+                  dragOverCategoryId === catGroup.category.id
+                    ? "category-drop-highlight"
+                    : undefined
+                }
                 style={{
                   padding: "8px 16px 8px 10px",
                   cursor: "pointer",
@@ -991,6 +1142,40 @@ export function HistoryPanel({
                 <>
                   {catGroup.dateGroups.length === 0 ? (
                     <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragSessionId !== null) {
+                          setDragOverCategoryId(catGroup.category.id);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverCategoryId === catGroup.category.id) {
+                          setDragOverCategoryId(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const raw = e.dataTransfer.getData(
+                          "application/x-capty-session",
+                        );
+                        if (!raw) return;
+                        const { id: draggedId, category: fromCat } = JSON.parse(
+                          raw,
+                        ) as {
+                          id: number;
+                          category: string;
+                        };
+                        if (fromCat !== catGroup.category.id) {
+                          onUpdateCategory?.(draggedId, catGroup.category.id);
+                        }
+                        clearDndState();
+                      }}
+                      className={
+                        dragOverCategoryId === catGroup.category.id
+                          ? "category-drop-highlight"
+                          : undefined
+                      }
                       style={{
                         padding: "8px 16px 8px 40px",
                         fontSize: "11px",
@@ -1004,8 +1189,7 @@ export function HistoryPanel({
                   ) : (
                     catGroup.dateGroups.map((dateGroup) => {
                       const dateKey = `${catGroup.category.id}:${dateGroup.label}`;
-                      const isDateCollapsed =
-                        collapsedDateGroups.has(dateKey);
+                      const isDateCollapsed = collapsedDateGroups.has(dateKey);
                       return (
                         <div key={dateKey}>
                           {/* Date group header */}
@@ -1055,8 +1239,22 @@ export function HistoryPanel({
                             </span>
                           </div>
                           {/* Session items */}
-                          {!isDateCollapsed &&
-                            dateGroup.sessions.map(renderSessionRow)}
+                          {!isDateCollapsed && (
+                            <>
+                              {dateGroup.sessions.map((s) =>
+                                renderSessionRow(s, catGroup.category.id),
+                              )}
+                              {/* Drop indicator at end of last date group */}
+                              {dropIndicator !== null &&
+                                dropIndicator.categoryId ===
+                                  catGroup.category.id &&
+                                dropIndicator.insertBeforeSessionId === null &&
+                                dateKey ===
+                                  `${catGroup.category.id}:${catGroup.dateGroups[catGroup.dateGroups.length - 1]?.label}` && (
+                                  <div className="drop-indicator-line" />
+                                )}
+                            </>
+                          )}
                         </div>
                       );
                     })
@@ -1311,7 +1509,9 @@ export function HistoryPanel({
                   lineHeight: 1.5,
                 }}
               >
-                {"\u6b64\u64cd\u4f5c\u5c06\u540c\u65f6\u5220\u9664\u5f55\u97f3\u8bb0\u5f55\u548c\u539f\u59cb\u97f3\u9891\u6587\u4ef6\uff0c\u4e14\u65e0\u6cd5\u6062\u590d\u3002\u786e\u5b9a\u8981\u5220\u9664\u5417\uff1f"}
+                {
+                  "\u6b64\u64cd\u4f5c\u5c06\u540c\u65f6\u5220\u9664\u5f55\u97f3\u8bb0\u5f55\u548c\u539f\u59cb\u97f3\u9891\u6587\u4ef6\uff0c\u4e14\u65e0\u6cd5\u6062\u590d\u3002\u786e\u5b9a\u8981\u5220\u9664\u5417\uff1f"
+                }
               </div>
               <div
                 style={{

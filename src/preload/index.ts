@@ -13,6 +13,8 @@ const api = {
     ipcRenderer.invoke("session:rename", id, newTitle),
   updateSessionCategory: (id: number, category: string) =>
     ipcRenderer.invoke("session:update-category", id, category),
+  reorderSessions: (sessionIds: number[]) =>
+    ipcRenderer.invoke("session:reorder", sessionIds),
 
   // Segments
   addSegment: (opts: Record<string, unknown>) =>

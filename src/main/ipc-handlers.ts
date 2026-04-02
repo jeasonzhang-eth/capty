@@ -76,6 +76,7 @@ import {
   updateDownload,
   deleteDownload,
   listInterruptedDownloads,
+  reorderSessions,
 } from "./database";
 import {
   saveSegmentAudio,
@@ -845,6 +846,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       updateSession(db, id, { category });
     },
   );
+
+  ipcMain.handle("session:reorder", (_event, sessionIds: number[]) => {
+    reorderSessions(db, sessionIds);
+  });
 
   ipcMain.handle("session:list", () => {
     return listSessions(db);
