@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useRef, useState } from "react";
 import { ControlBar } from "./components/ControlBar";
-import { HistoryPanel } from "./components/HistoryPanel";
+import { HistoryPanel, SessionCategory } from "./components/HistoryPanel";
 import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
@@ -265,6 +265,11 @@ function App(): React.JSX.Element {
   const activePromptTypeRef = useRef(activePromptType);
   activePromptTypeRef.current = activePromptType;
 
+  // Session categories state
+  const [sessionCategories, setSessionCategories] = useState<SessionCategory[]>(
+    [],
+  );
+
   // Layout persistence state
   const DEFAULT_HISTORY_WIDTH = 240;
   const DEFAULT_SUMMARY_WIDTH = 320;
@@ -442,6 +447,14 @@ function App(): React.JSX.Element {
           setPromptTypes(types as PromptType[]);
         } catch {
           // Prompt types not available
+        }
+
+        // Load session categories
+        try {
+          const cats = await window.capty.listSessionCategories();
+          setSessionCategories(cats as SessionCategory[]);
+        } catch {
+          // Session categories not available
         }
 
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
@@ -831,6 +844,41 @@ function App(): React.JSX.Element {
         await store.loadSessions();
       } catch (err) {
         console.error("Failed to reorder sessions:", err);
+      }
+    },
+    [store],
+  );
+
+  const handleAddCategory = useCallback(
+    async (cat: { label: string; icon: string }) => {
+      try {
+        const id = `custom-${Date.now()}`;
+        const newCat: SessionCategory = {
+          id,
+          label: cat.label,
+          icon: cat.icon,
+          isBuiltin: false,
+        };
+        const updated = [...sessionCategories, newCat];
+        await window.capty.saveSessionCategories(updated);
+        const cats = await window.capty.listSessionCategories();
+        setSessionCategories(cats as SessionCategory[]);
+      } catch (err) {
+        console.error("Failed to add category:", err);
+      }
+    },
+    [sessionCategories],
+  );
+
+  const handleDeleteCategory = useCallback(
+    async (categoryId: string) => {
+      try {
+        await window.capty.deleteSessionCategory(categoryId);
+        const cats = await window.capty.listSessionCategories();
+        setSessionCategories(cats as SessionCategory[]);
+        await store.loadSessions(); // refresh since sessions moved to "recording"
+      } catch (err) {
+        console.error("Failed to delete category:", err);
       }
     },
     [store],
@@ -2098,6 +2146,9 @@ function App(): React.JSX.Element {
           aiRenamingSessionId={aiRenamingSessionId}
           onUpdateCategory={handleUpdateCategory}
           onReorderSessions={handleReorderSessions}
+          categories={sessionCategories}
+          onAddCategory={handleAddCategory}
+          onDeleteCategory={handleDeleteCategory}
         />
         <TranscriptArea
           segments={store.segments}

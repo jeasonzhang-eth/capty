@@ -412,6 +412,21 @@ const api = {
     ipcRenderer.invoke("summary:list", sessionId, promptType),
   deleteSummary: (summaryId: number) =>
     ipcRenderer.invoke("summary:delete", summaryId),
+  listSessionCategories: () =>
+    ipcRenderer.invoke("session-categories:list") as Promise<
+      Array<{ id: string; label: string; icon: string; isBuiltin: boolean }>
+    >,
+  saveSessionCategories: (
+    categories: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      isBuiltin: boolean;
+    }>,
+  ) => ipcRenderer.invoke("session-categories:save", categories),
+  deleteSessionCategory: (categoryId: string) =>
+    ipcRenderer.invoke("session-categories:delete", categoryId),
+
   listPromptTypes: () => ipcRenderer.invoke("prompt-types:list"),
   savePromptTypes: (
     types: {

@@ -94,7 +94,9 @@ import {
   LlmProvider,
   TtsProvider,
   PromptType,
+  SessionCategory,
   getEffectivePromptTypes,
+  getEffectiveCategories,
   DEFAULT_PROMPT_TYPES,
 } from "./config";
 import { pcmToWav } from "./audio-files";
@@ -840,8 +842,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(
     "session:update-category",
     (_event, id: number, category: string) => {
-      const valid = ["download", "recording", "meeting", "phone"];
-      if (!valid.includes(category))
+      const config = readConfig(configDir);
+      const validIds = getEffectiveCategories(config).map((c) => c.id);
+      if (!validIds.includes(category))
         throw new Error(`Invalid category: ${category}`);
       updateSession(db, id, { category });
     },
@@ -849,6 +852,33 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle("session:reorder", (_event, sessionIds: number[]) => {
     reorderSessions(db, sessionIds);
+  });
+
+  // Session categories (custom)
+  ipcMain.handle("session-categories:list", () => {
+    const config = readConfig(configDir);
+    return getEffectiveCategories(config);
+  });
+
+  ipcMain.handle(
+    "session-categories:save",
+    (_event, categories: SessionCategory[]) => {
+      const config = readConfig(configDir);
+      writeConfig(configDir, { ...config, sessionCategories: categories });
+    },
+  );
+
+  ipcMain.handle("session-categories:delete", (_event, categoryId: string) => {
+    // Move sessions in deleted category to "recording"
+    db.prepare(
+      "UPDATE sessions SET category = 'recording' WHERE category = ?",
+    ).run(categoryId);
+    // Remove from config
+    const config = readConfig(configDir);
+    const updated = (config.sessionCategories ?? []).filter(
+      (c) => c.id !== categoryId,
+    );
+    writeConfig(configDir, { ...config, sessionCategories: updated });
   });
 
   ipcMain.handle("session:list", () => {

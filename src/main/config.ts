@@ -37,6 +37,20 @@ export interface TtsProvider {
   readonly isSidecar: boolean;
 }
 
+export interface SessionCategory {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly isBuiltin: boolean;
+}
+
+export const BUILTIN_SESSION_CATEGORIES: readonly SessionCategory[] = [
+  { id: "download", label: "下载内容", icon: "↓", isBuiltin: true },
+  { id: "recording", label: "个人录音", icon: "●", isBuiltin: true },
+  { id: "meeting", label: "会议", icon: "◎", isBuiltin: true },
+  { id: "phone", label: "电话", icon: "☏", isBuiltin: true },
+];
+
 export interface PromptType {
   readonly id: string;
   readonly label: string;
@@ -81,6 +95,7 @@ export interface AppConfig {
   readonly selectedTranslateModel: { providerId: string; model: string } | null;
   readonly selectedRapidModel: { providerId: string; model: string } | null;
   readonly promptTypes: PromptType[];
+  readonly sessionCategories: SessionCategory[];
   readonly zoomFactor: number | null;
   readonly historyPanelWidth: number | null;
   readonly summaryPanelWidth: number | null;
@@ -111,6 +126,17 @@ export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
   return result;
 }
 
+export function getEffectiveCategories(config: AppConfig): SessionCategory[] {
+  const result: SessionCategory[] = [...BUILTIN_SESSION_CATEGORIES];
+  const user = config.sessionCategories ?? [];
+  for (const cat of user) {
+    if (!BUILTIN_SESSION_CATEGORIES.some((b) => b.id === cat.id)) {
+      result.push({ ...cat, isBuiltin: false });
+    }
+  }
+  return result;
+}
+
 const CONFIG_FILENAME = "config.json";
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -126,6 +152,7 @@ const DEFAULT_CONFIG: AppConfig = {
   selectedTranslateModel: null,
   selectedRapidModel: null,
   promptTypes: [],
+  sessionCategories: [],
   zoomFactor: null,
   historyPanelWidth: null,
   summaryPanelWidth: null,

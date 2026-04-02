@@ -19,12 +19,25 @@ interface SessionSummary {
 const HISTORY_MIN_WIDTH = 160;
 const HISTORY_MAX_WIDTH = 400;
 
-const SESSION_CATEGORIES = [
-  { id: "download", label: "\u4e0b\u8f7d\u5185\u5bb9", icon: "\u2193" },
-  { id: "recording", label: "\u4e2a\u4eba\u5f55\u97f3", icon: "\u25cf" },
-  { id: "meeting", label: "\u4f1a\u8bae", icon: "\u25ce" },
-  { id: "phone", label: "\u7535\u8bdd", icon: "\u260f" },
-] as const;
+export interface SessionCategory {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+  readonly isBuiltin: boolean;
+}
+
+const ICON_CHOICES = [
+  "📁",
+  "📝",
+  "🎵",
+  "🎤",
+  "📞",
+  "💼",
+  "🏠",
+  "🎯",
+  "📌",
+  "⭐",
+];
 
 interface HistoryPanelProps {
   readonly sessions: readonly SessionSummary[];
@@ -50,6 +63,9 @@ interface HistoryPanelProps {
   readonly aiRenamingSessionId?: number | null;
   readonly onUpdateCategory?: (id: number, category: string) => void;
   readonly onReorderSessions?: (sessionIds: number[]) => void;
+  readonly categories?: readonly SessionCategory[];
+  readonly onAddCategory?: (category: { label: string; icon: string }) => void;
+  readonly onDeleteCategory?: (categoryId: string) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -127,13 +143,16 @@ function groupSessionsByDate(
 }
 
 interface CategoryGroup {
-  readonly category: (typeof SESSION_CATEGORIES)[number];
+  readonly category: SessionCategory;
   readonly dateGroups: SessionGroup[];
   readonly totalCount: number;
 }
 
-function groupByCategory(sessions: readonly SessionSummary[]): CategoryGroup[] {
-  return SESSION_CATEGORIES.map((cat) => {
+function groupByCategory(
+  sessions: readonly SessionSummary[],
+  categories: readonly SessionCategory[],
+): CategoryGroup[] {
+  return categories.map((cat) => {
     const filtered = sessions.filter(
       (s) => (s.category || "recording") === cat.id,
     );
@@ -205,6 +224,9 @@ export function HistoryPanel({
   aiRenamingSessionId,
   onUpdateCategory,
   onReorderSessions,
+  categories,
+  onAddCategory,
+  onDeleteCategory,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -283,11 +305,25 @@ export function HistoryPanel({
     return () => clearTimeout(timer);
   });
 
+  // Fallback builtin categories when prop not provided
+  const effectiveCategories: readonly SessionCategory[] = useMemo(
+    () =>
+      categories && categories.length > 0
+        ? categories
+        : [
+            { id: "download", label: "下载内容", icon: "↓", isBuiltin: true },
+            { id: "recording", label: "个人录音", icon: "●", isBuiltin: true },
+            { id: "meeting", label: "会议", icon: "◎", isBuiltin: true },
+            { id: "phone", label: "电话", icon: "☏", isBuiltin: true },
+          ],
+    [categories],
+  );
+
   // Group sessions by category then by date
   const categoryGroups = useMemo(
-    () => groupByCategory(sessions),
+    () => groupByCategory(sessions, effectiveCategories),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessions, todayDateKey],
+    [sessions, todayDateKey, effectiveCategories],
   );
 
   // Collapsed state for categories — all start expanded
@@ -436,6 +472,93 @@ export function HistoryPanel({
   const handleCancelDelete = useCallback(() => {
     setConfirmDeleteId(null);
   }, []);
+
+  // ── Inline category creation state ──
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState(ICON_CHOICES[0]);
+  const newCategoryInputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartCreateCategory = useCallback(() => {
+    setIsCreatingCategory(true);
+    setNewCategoryName("");
+    setNewCategoryIcon(ICON_CHOICES[0]);
+  }, []);
+
+  const handleConfirmCreateCategory = useCallback(() => {
+    const trimmed = newCategoryName.trim();
+    if (trimmed && onAddCategory) {
+      onAddCategory({ label: trimmed, icon: newCategoryIcon });
+    }
+    setIsCreatingCategory(false);
+  }, [newCategoryName, newCategoryIcon, onAddCategory]);
+
+  const handleCancelCreateCategory = useCallback(() => {
+    setIsCreatingCategory(false);
+  }, []);
+
+  useEffect(() => {
+    if (isCreatingCategory && newCategoryInputRef.current) {
+      newCategoryInputRef.current.focus();
+    }
+  }, [isCreatingCategory]);
+
+  // ── Category header context menu state ──
+  const [catContextMenu, setCatContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    categoryId: string | null;
+    categoryLabel: string;
+  }>({ visible: false, x: 0, y: 0, categoryId: null, categoryLabel: "" });
+  const catMenuRef = useRef<HTMLDivElement>(null);
+
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<
+    string | null
+  >(null);
+  const confirmDeleteCategoryLabel = useMemo(() => {
+    if (!confirmDeleteCategoryId) return "";
+    return (
+      effectiveCategories.find((c) => c.id === confirmDeleteCategoryId)
+        ?.label ?? ""
+    );
+  }, [confirmDeleteCategoryId, effectiveCategories]);
+
+  const handleCategoryContextMenu = useCallback(
+    (
+      e: React.MouseEvent,
+      catId: string,
+      catLabel: string,
+      isBuiltin: boolean,
+    ) => {
+      if (isBuiltin) return; // builtin categories cannot be deleted
+      e.preventDefault();
+      e.stopPropagation();
+      setCatContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        categoryId: catId,
+        categoryLabel: catLabel,
+      });
+    },
+    [],
+  );
+
+  // Close category context menu on outside click
+  useEffect(() => {
+    if (!catContextMenu.visible) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        catMenuRef.current &&
+        !catMenuRef.current.contains(e.target as Node)
+      ) {
+        setCatContextMenu((prev) => ({ ...prev, visible: false }));
+      }
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [catContextMenu.visible]);
 
   const handleMoveTo = useCallback(
     (categoryId: string) => {
@@ -1034,6 +1157,14 @@ export function HistoryPanel({
               {/* Category header */}
               <div
                 onClick={() => toggleCategory(catGroup.category.id)}
+                onContextMenu={(e) =>
+                  handleCategoryContextMenu(
+                    e,
+                    catGroup.category.id,
+                    catGroup.category.label,
+                    catGroup.category.isBuiltin,
+                  )
+                }
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
@@ -1277,6 +1408,134 @@ export function HistoryPanel({
             No sessions yet
           </div>
         )}
+
+        {/* Inline category creation */}
+        {isCreatingCategory ? (
+          <div
+            style={{
+              padding: "8px 10px",
+              marginTop: "4px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+            }}
+          >
+            {/* Icon picker */}
+            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+              {ICON_CHOICES.map((icon) => (
+                <button
+                  key={icon}
+                  onClick={() => setNewCategoryIcon(icon)}
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    border:
+                      newCategoryIcon === icon
+                        ? "1px solid var(--accent)"
+                        : "1px solid var(--border)",
+                    borderRadius: "4px",
+                    background:
+                      newCategoryIcon === icon
+                        ? "rgba(245,166,35,0.12)"
+                        : "transparent",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+            {/* Name input + confirm/cancel */}
+            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <span style={{ fontSize: "14px", flexShrink: 0 }}>
+                {newCategoryIcon}
+              </span>
+              <input
+                ref={newCategoryInputRef}
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleConfirmCreateCategory();
+                  if (e.key === "Escape") handleCancelCreateCategory();
+                }}
+                placeholder="分类名称"
+                style={{
+                  flex: 1,
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  padding: "4px 8px",
+                  fontSize: "12px",
+                  color: "var(--text-primary)",
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={handleConfirmCreateCategory}
+                disabled={!newCategoryName.trim()}
+                style={{
+                  background: "var(--accent)",
+                  border: "none",
+                  borderRadius: "4px",
+                  color: "#000",
+                  padding: "4px 8px",
+                  fontSize: "11px",
+                  cursor: newCategoryName.trim() ? "pointer" : "not-allowed",
+                  opacity: newCategoryName.trim() ? 1 : 0.5,
+                }}
+              >
+                OK
+              </button>
+              <button
+                onClick={handleCancelCreateCategory}
+                style={{
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  color: "var(--text-muted)",
+                  padding: "4px 8px",
+                  fontSize: "11px",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          onAddCategory && (
+            <button
+              onClick={handleStartCreateCategory}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 10px",
+                margin: "4px 0",
+                width: "100%",
+                background: "transparent",
+                border: "none",
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.color = "var(--text-primary)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.color = "var(--text-muted)")
+              }
+            >
+              <span style={{ fontSize: "14px" }}>+</span>
+              新增分类
+            </button>
+          )
+        )}
       </div>
 
       {/* Context menu — portal to body to avoid overflow clipping */}
@@ -1389,43 +1648,43 @@ export function HistoryPanel({
                       >
                         Move to...
                       </div>
-                      {SESSION_CATEGORIES.filter(
-                        (cat) => cat.id !== currentCategory,
-                      ).map((cat) => (
-                        <div
-                          key={cat.id}
-                          onClick={() => handleMoveTo(cat.id)}
-                          style={{
-                            padding: "6px 16px 6px 24px",
-                            fontSize: "13px",
-                            cursor: "pointer",
-                            color: "var(--text-primary)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "var(--accent-glow)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.backgroundColor =
-                              "transparent")
-                          }
-                        >
-                          <span
+                      {effectiveCategories
+                        .filter((cat) => cat.id !== currentCategory)
+                        .map((cat) => (
+                          <div
+                            key={cat.id}
+                            onClick={() => handleMoveTo(cat.id)}
                             style={{
-                              fontSize: "12px",
-                              color: "var(--text-muted)",
-                              width: "14px",
-                              textAlign: "center",
+                              padding: "6px 16px 6px 24px",
+                              fontSize: "13px",
+                              cursor: "pointer",
+                              color: "var(--text-primary)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
                             }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                "var(--accent-glow)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                "transparent")
+                            }
                           >
-                            {cat.icon}
-                          </span>
-                          {cat.label}
-                        </div>
-                      ))}
+                            <span
+                              style={{
+                                fontSize: "12px",
+                                color: "var(--text-muted)",
+                                width: "14px",
+                                textAlign: "center",
+                              }}
+                            >
+                              {cat.icon}
+                            </span>
+                            {cat.label}
+                          </div>
+                        ))}
                       <div
                         style={{
                           height: "1px",
@@ -1547,6 +1806,149 @@ export function HistoryPanel({
                   }}
                 >
                   {"\u5220\u9664"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Category context menu (delete custom category) */}
+      {catContextMenu.visible &&
+        createPortal(
+          <div
+            ref={catMenuRef}
+            style={{
+              position: "fixed",
+              top: catContextMenu.y,
+              left: catContextMenu.x,
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              backgroundColor: "rgba(28, 28, 31, 0.92)",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              zIndex: 9000,
+              minWidth: "140px",
+              padding: "4px 0",
+            }}
+          >
+            <div
+              onClick={() => {
+                setConfirmDeleteCategoryId(catContextMenu.categoryId);
+                setCatContextMenu((prev) => ({ ...prev, visible: false }));
+              }}
+              style={{
+                padding: "8px 16px",
+                fontSize: "13px",
+                cursor: "pointer",
+                color: "var(--danger)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor =
+                  "rgba(239, 68, 68, 0.1)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+            >
+              删除分类
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Confirm delete category dialog */}
+      {confirmDeleteCategoryId !== null &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+            }}
+            onClick={() => setConfirmDeleteCategoryId(null)}
+          >
+            <div
+              style={{
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                backgroundColor: "rgba(28, 28, 31, 0.92)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "20px 24px",
+                maxWidth: "340px",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  color: "var(--text-primary)",
+                }}
+              >
+                删除分类
+              </div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  marginBottom: "20px",
+                  lineHeight: 1.5,
+                }}
+              >
+                确定删除分类「{confirmDeleteCategoryLabel}
+                」吗？该分类下的录音将移至「个人录音」。
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                <button
+                  onClick={() => setConfirmDeleteCategoryId(null)}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirmDeleteCategoryId && onDeleteCategory) {
+                      onDeleteCategory(confirmDeleteCategoryId);
+                    }
+                    setConfirmDeleteCategoryId(null);
+                  }}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "none",
+                    backgroundColor: "var(--danger)",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  删除
                 </button>
               </div>
             </div>
