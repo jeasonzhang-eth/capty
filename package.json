@@ -9,6 +9,10 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-rebuild --force",
     "sidecar": "cd sidecar && .venv/bin/capty-sidecar --port 8765",
+    "build:sidecar": "cd sidecar && bash build.sh",
+    "pack": "electron-vite build && electron-builder --dir",
+    "dist": "electron-vite build && electron-builder",
+    "dist:all": "npm run build:sidecar && npm run dist",
     "test": "npm rebuild better-sqlite3 && vitest run; EXIT=$?; electron-rebuild --force; exit $EXIT",
     "test:watch": "npm rebuild better-sqlite3 && vitest"
   },

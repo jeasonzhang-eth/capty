@@ -2,6 +2,14 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-03
+
+- feat: add macOS DMG packaging with electron-builder (arm64 only)
+- feat: add PyInstaller spec and build script for standalone sidecar binary
+- feat: add npm scripts for build:sidecar, pack, dist, dist:all
+- feat: support packaged sidecar path resolution in production builds
+- feat: add macOS entitlements for microphone access
+
 ## 2026-04-02
 
 - fix: category reorder not persisting across app restarts

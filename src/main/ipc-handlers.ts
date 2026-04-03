@@ -112,10 +112,22 @@ const activeDownloads = new Map<number, ChildProcess>();
 /** Managed sidecar child process (null when not started by us). */
 let sidecarProcess: ChildProcess | null = null;
 
-/** Find sidecar binary: dev venv first, then fallback to PATH. */
+/** Find sidecar binary: packaged app first, then dev venv, then PATH. */
 function findSidecarBin(): string {
+  // Production: extraResources copies sidecar/dist/ → Resources/sidecar/
+  if (app.isPackaged) {
+    const prodBin = path.join(
+      process.resourcesPath,
+      "sidecar",
+      "capty-sidecar",
+      "capty-sidecar",
+    );
+    if (fs.existsSync(prodBin)) return prodBin;
+  }
+  // Dev: venv binary
   const devBin = path.join(app.getAppPath(), "sidecar/.venv/bin/capty-sidecar");
   if (fs.existsSync(devBin)) return devBin;
+  // Fallback: PATH
   return "capty-sidecar";
 }
 

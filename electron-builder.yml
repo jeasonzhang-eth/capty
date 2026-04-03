@@ -16,6 +16,7 @@ extraResources:
       - "**/*"
 mac:
   category: public.app-category.productivity
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     NSMicrophoneUsageDescription: "Capty needs microphone access for real-time speech transcription."
@@ -23,14 +24,3 @@ mac:
     - target: dmg
       arch:
         - arm64
-        - x64
-win:
-  target:
-    - target: nsis
-      arch:
-        - x64
-linux:
-  target:
-    - target: AppImage
-      arch:
-        - x64
