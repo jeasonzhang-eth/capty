@@ -625,7 +625,7 @@ function App(): React.JSX.Element {
       }
     };
     init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [needsSetup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStart = useCallback(async () => {
     // Block recording during subtitle regeneration

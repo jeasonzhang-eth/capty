@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
+- fix: re-run init after SetupWizard completes so providers load on fresh install
 - chore: trim PyInstaller spec — exclude torch, pillow, phonemizer, sounddevice and other unused deps
 - fix: config:set now merges instead of replacing, preserving default providers on fresh install
 - feat: add default preset LLM providers (DeepSeek, OpenAI, OpenRouter) for fresh installs
