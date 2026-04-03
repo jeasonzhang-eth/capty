@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-02
 
+- fix: default all session categories to collapsed on app open
 - feat: add drag-and-drop reordering for session categories
 - feat: add sidecar process start/stop control from ControlBar
 - feat: add session category folders for sidebar grouping (download / recording / meeting / phone)

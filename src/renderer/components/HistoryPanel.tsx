@@ -346,10 +346,17 @@ export function HistoryPanel({
     [sessions, todayDateKey, effectiveCategories],
   );
 
-  // Collapsed state for categories — all start expanded
+  // Collapsed state for categories — all start collapsed
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
     () => new Set<string>(),
   );
+  const categoriesInitialised = useRef(false);
+  useEffect(() => {
+    if (categoriesInitialised.current) return;
+    if (effectiveCategories.length === 0) return;
+    categoriesInitialised.current = true;
+    setCollapsedCategories(new Set(effectiveCategories.map((c) => c.id)));
+  }, [effectiveCategories]);
 
   // Collapsed state for date groups within categories
   // Key format: "categoryId:dateLabel"
