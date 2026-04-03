@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-02
 
+- fix: category reorder not persisting across app restarts
 - fix: sidecar process auto-stopping due to unconsumed stdout pipe buffer
 - fix: default all session categories to collapsed on app open
 - feat: add drag-and-drop reordering for session categories

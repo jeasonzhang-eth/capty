@@ -127,13 +127,26 @@ export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
 }
 
 export function getEffectiveCategories(config: AppConfig): SessionCategory[] {
-  const result: SessionCategory[] = [...BUILTIN_SESSION_CATEGORIES];
-  const user = config.sessionCategories ?? [];
-  for (const cat of user) {
-    if (!BUILTIN_SESSION_CATEGORIES.some((b) => b.id === cat.id)) {
-      result.push({ ...cat, isBuiltin: false });
+  const saved = config.sessionCategories ?? [];
+  if (saved.length === 0) return [...BUILTIN_SESSION_CATEGORIES];
+
+  // Use saved order. For builtin IDs present in saved list, preserve their
+  // canonical label/icon but keep the saved position.
+  const builtinMap = new Map(BUILTIN_SESSION_CATEGORIES.map((b) => [b.id, b]));
+  const result: SessionCategory[] = saved.map((cat) => {
+    const builtin = builtinMap.get(cat.id);
+    if (builtin) return { ...builtin };
+    return { ...cat, isBuiltin: false };
+  });
+
+  // Append any builtin categories missing from the saved list (e.g. newly
+  // added builtins after an app update)
+  for (const b of BUILTIN_SESSION_CATEGORIES) {
+    if (!saved.some((s) => s.id === b.id)) {
+      result.push({ ...b });
     }
   }
+
   return result;
 }
 
