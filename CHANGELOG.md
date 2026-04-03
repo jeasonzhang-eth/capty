@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
+- fix: increase default window size from 900×670 to 1200×800 for better content display
 - feat: redesign SetupWizard as 2-step flow (Welcome + LLM API Key config)
 - feat: add default data directory (~/Documents/Capty) with change option
 - feat: add HuggingFace China mirror toggle in setup wizard

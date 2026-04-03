@@ -26,8 +26,8 @@ function createWindow(configDir: string): BrowserWindow {
   const saved = config.windowBounds;
 
   mainWindow = new BrowserWindow({
-    width: saved?.width ?? 900,
-    height: saved?.height ?? 670,
+    width: saved?.width ?? 1200,
+    height: saved?.height ?? 800,
     x: saved?.x,
     y: saved?.y,
     show: false,
