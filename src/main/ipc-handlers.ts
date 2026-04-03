@@ -1085,8 +1085,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return readConfig(configDir);
   });
 
-  ipcMain.handle("config:set", (_event, config: Record<string, unknown>) => {
-    writeConfig(configDir, config as any);
+  ipcMain.handle("config:set", (_event, partial: Record<string, unknown>) => {
+    const current = readConfig(configDir);
+    writeConfig(configDir, { ...current, ...partial });
   });
 
   // Sidecar
