@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
+- feat: redesign SetupWizard as 2-step flow (Welcome + LLM API Key config)
+- feat: add default data directory (~/Documents/Capty) with change option
+- feat: add HuggingFace China mirror toggle in setup wizard
+- feat: add LLM API Key configuration step (DeepSeek, OpenRouter, OpenAI) in setup wizard
 - fix: re-run init after SetupWizard completes so providers load on fresh install
 - chore: trim PyInstaller spec — exclude torch, pillow, phonemizer, sounddevice and other unused deps
 - fix: config:set now merges instead of replacing, preserving default providers on fresh install

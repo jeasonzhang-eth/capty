@@ -1603,6 +1603,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return getDataDir(configDir);
   });
 
+  ipcMain.handle("config:get-default-data-dir", () => {
+    return path.join(app.getPath("documents"), "Capty");
+  });
+
   ipcMain.handle("app:get-config-dir", () => {
     return configDir;
   });

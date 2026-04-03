@@ -1,10 +1,42 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 
 interface SetupWizardProps {
   readonly onComplete: (dataDir: string) => void;
 }
 
-const wizardButtonStyle: React.CSSProperties = {
+const PROVIDERS = [
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    placeholder: "sk-...",
+    url: "https://platform.deepseek.com/api_keys",
+    urlLabel: "platform.deepseek.com/api_keys",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    placeholder: "sk-or-...",
+    url: "https://openrouter.ai/settings/keys",
+    urlLabel: "openrouter.ai/settings/keys",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    placeholder: "sk-...",
+    url: "https://platform.openai.com/api-keys",
+    urlLabel: "platform.openai.com/api-keys",
+  },
+] as const;
+
+const cardStyle: React.CSSProperties = {
+  backgroundColor: "var(--bg-tertiary)",
+  borderRadius: "10px",
+  border: "1px solid var(--border)",
+  padding: "16px 20px",
+  width: "100%",
+};
+
+const primaryButtonStyle: React.CSSProperties = {
   backgroundColor: "var(--accent)",
   color: "#141416",
   border: "none",
@@ -17,31 +49,74 @@ const wizardButtonStyle: React.CSSProperties = {
   transition: "background-color 0.2s, transform 0.1s",
 };
 
+const secondaryButtonStyle: React.CSSProperties = {
+  ...primaryButtonStyle,
+  backgroundColor: "var(--bg-tertiary)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border)",
+};
+
 export function SetupWizard({
   onComplete,
 }: SetupWizardProps): React.ReactElement {
   const [step, setStep] = useState(0);
-  const [dataDir, setDataDir] = useState<string | null>(null);
-  const [isDownloading] = useState(false);
-  const [downloadProgress] = useState(0);
+  const [dataDir, setDataDir] = useState("");
+  const [useHfMirror, setUseHfMirror] = useState(false);
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
 
-  const handleSelectFolder = useCallback(async () => {
+  // Load default data dir on mount
+  useEffect(() => {
+    window.capty.getDefaultDataDir().then((dir) => setDataDir(dir));
+  }, []);
+
+  const handleChangeDir = useCallback(async () => {
     const dir = await window.capty.selectDirectory();
     if (dir) {
       setDataDir(dir);
-      await window.capty.setConfig({ dataDir: dir });
     }
   }, []);
 
-  const handleSkipDownload = useCallback(() => {
-    setStep(3);
-  }, []);
+  const handleGetStarted = useCallback(async () => {
+    const hfMirrorUrl = useHfMirror ? "https://hf-mirror.com" : null;
+    await window.capty.setConfig({ dataDir, hfMirrorUrl });
+    setStep(1);
+  }, [dataDir, useHfMirror]);
 
-  const handleFinish = useCallback(() => {
-    if (dataDir) {
+  const handleFinish = useCallback(
+    async (skipKeys: boolean) => {
+      if (!skipKeys) {
+        // Save API keys to existing LLM providers
+        const config = (await window.capty.getConfig()) as {
+          llmProviders?: Array<{
+            id: string;
+            name: string;
+            baseUrl: string;
+            apiKey: string;
+            model: string;
+            models: string[];
+            isPreset: boolean;
+          }>;
+        };
+        const providers = config.llmProviders ?? [];
+        const updated = providers.map((p) => {
+          const key = apiKeys[p.id];
+          if (key) {
+            return { ...p, apiKey: key };
+          }
+          return p;
+        });
+        await window.capty.setConfig({ llmProviders: updated });
+      }
       onComplete(dataDir);
-    }
-  }, [dataDir, onComplete]);
+    },
+    [apiKeys, dataDir, onComplete],
+  );
+
+  const handleKeyChange = useCallback((providerId: string, value: string) => {
+    setApiKeys((prev) => ({ ...prev, [providerId]: value }));
+  }, []);
+
+  const hasAnyKey = Object.values(apiKeys).some((k) => k.trim().length > 0);
 
   return (
     <div
@@ -51,187 +126,282 @@ export function SetupWizard({
         alignItems: "center",
         justifyContent: "center",
         height: "100vh",
-        gap: "24px",
         padding: "40px",
         backgroundColor: "var(--bg-primary)",
       }}
     >
-      {step === 0 && (
-        <>
-          <h1
-            style={{
-              fontSize: "32px",
-              fontWeight: 700,
-              fontFamily: "'DM Sans', sans-serif",
-              color: "var(--text-primary)",
-            }}
-          >
-            Welcome to{" "}
-            <span style={{ color: "var(--accent)" }}>Capty</span>
-          </h1>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              fontSize: "16px",
-              textAlign: "center",
-              fontFamily: "'DM Sans', sans-serif",
-              lineHeight: 1.6,
-            }}
-          >
-            Real-time speech-to-text transcription, powered by local AI models.
-          </p>
-          <button onClick={() => setStep(1)} style={wizardButtonStyle}>
-            Get Started
-          </button>
-        </>
-      )}
-
-      {step === 1 && (
-        <>
-          <h2
-            style={{
-              fontSize: "24px",
-              fontWeight: 600,
-              fontFamily: "'DM Sans', sans-serif",
-              color: "var(--text-primary)",
-            }}
-          >
-            Choose Data Folder
-          </h2>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              textAlign: "center",
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            Select where Capty stores recordings, transcripts, and models.
-          </p>
-          <button onClick={handleSelectFolder} style={wizardButtonStyle}>
-            Select Folder
-          </button>
-          {dataDir && (
-            <p
+      <div
+        style={{
+          maxWidth: "480px",
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "24px",
+        }}
+      >
+        {step === 0 && (
+          <>
+            <h1
               style={{
-                color: "var(--text-muted)",
-                fontSize: "13px",
-                fontFamily: "'JetBrains Mono', monospace",
-                padding: "8px 16px",
-                backgroundColor: "var(--bg-tertiary)",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
+                fontSize: "32px",
+                fontWeight: 700,
+                fontFamily: "'DM Sans', sans-serif",
+                color: "var(--text-primary)",
+                margin: 0,
               }}
             >
-              {dataDir}
+              Welcome to{" "}
+              <span style={{ color: "var(--accent)" }}>Capty</span>
+            </h1>
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "16px",
+                textAlign: "center",
+                fontFamily: "'DM Sans', sans-serif",
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
+              Real-time speech-to-text transcription, powered by local AI
+              models.
             </p>
-          )}
-          <button
-            onClick={() => setStep(2)}
-            disabled={!dataDir}
-            style={{ ...wizardButtonStyle, opacity: dataDir ? 1 : 0.5 }}
-          >
-            Next
-          </button>
-        </>
-      )}
 
-      {step === 2 && (
-        <>
-          <h2
-            style={{
-              fontSize: "24px",
-              fontWeight: 600,
-              fontFamily: "'DM Sans', sans-serif",
-              color: "var(--text-primary)",
-            }}
-          >
-            Download Model
-          </h2>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              textAlign: "center",
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            Download the ASR model for transcription. You can skip and do this
-            later.
-          </p>
-          {isDownloading ? (
-            <div style={{ width: "300px" }}>
+            {/* Data Folder */}
+            <div style={cardStyle}>
               <div
                 style={{
-                  height: "8px",
-                  backgroundColor: "var(--bg-surface)",
-                  borderRadius: "4px",
-                  overflow: "hidden",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "var(--text-secondary)",
+                  marginBottom: "8px",
+                  fontFamily: "'DM Sans', sans-serif",
                 }}
               >
+                Data Folder
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: "13px",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: "var(--text-primary)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {dataDir || "Loading..."}
+                </span>
+                <button
+                  onClick={handleChangeDir}
+                  style={{
+                    backgroundColor: "var(--bg-surface)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "4px 12px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    fontFamily: "'DM Sans', sans-serif",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+
+            {/* HuggingFace Mirror */}
+            <div style={cardStyle}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={useHfMirror}
+                  onChange={(e) => setUseHfMirror(e.target.checked)}
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    accentColor: "var(--accent)",
+                  }}
+                />
+                <div>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: 500,
+                      color: "var(--text-primary)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    Use China mirror for HuggingFace
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-muted)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    hf-mirror.com — recommended for users in China
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <button
+              onClick={handleGetStarted}
+              disabled={!dataDir}
+              style={{
+                ...primaryButtonStyle,
+                opacity: dataDir ? 1 : 0.5,
+                marginTop: "8px",
+              }}
+            >
+              Get Started
+            </button>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <h2
+              style={{
+                fontSize: "24px",
+                fontWeight: 600,
+                fontFamily: "'DM Sans', sans-serif",
+                color: "var(--text-primary)",
+                margin: 0,
+              }}
+            >
+              Configure AI Providers
+            </h2>
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "14px",
+                textAlign: "center",
+                fontFamily: "'DM Sans', sans-serif",
+                lineHeight: 1.5,
+                margin: 0,
+              }}
+            >
+              Optional — you can configure these later in Settings.
+            </p>
+
+            {PROVIDERS.map((provider) => (
+              <div key={provider.id} style={cardStyle}>
                 <div
                   style={{
-                    height: "100%",
-                    width: `${downloadProgress}%`,
-                    background:
-                      "linear-gradient(90deg, var(--accent), var(--accent-hover))",
-                    transition: "width 0.3s",
-                    borderRadius: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: 600,
+                      color: "var(--text-primary)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    {provider.name}
+                  </span>
+                  <a
+                    href={provider.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--accent)",
+                      textDecoration: "none",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    {provider.urlLabel} &#8599;
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  placeholder={provider.placeholder}
+                  value={apiKeys[provider.id] ?? ""}
+                  onChange={(e) =>
+                    handleKeyChange(provider.id, e.target.value)
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    backgroundColor: "var(--bg-surface)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    outline: "none",
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
-              <p
-                style={{
-                  fontSize: "12px",
-                  color: "var(--text-muted)",
-                  textAlign: "center",
-                  marginTop: "8px",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
-                {Math.round(downloadProgress)}%
-              </p>
-            </div>
-          ) : (
-            <button
-              onClick={handleSkipDownload}
+            ))}
+
+            <div
               style={{
-                ...wizardButtonStyle,
-                backgroundColor: "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border)",
+                display: "flex",
+                gap: "12px",
+                marginTop: "8px",
+                width: "100%",
+                justifyContent: "center",
               }}
             >
-              Skip for Now
-            </button>
-          )}
-        </>
-      )}
+              <button
+                onClick={() => handleFinish(true)}
+                style={secondaryButtonStyle}
+              >
+                Skip
+              </button>
+              <button
+                onClick={() => handleFinish(false)}
+                disabled={!hasAnyKey}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: hasAnyKey ? 1 : 0.5,
+                }}
+              >
+                Continue
+              </button>
+            </div>
 
-      {step === 3 && (
-        <>
-          <h2
-            style={{
-              fontSize: "24px",
-              fontWeight: 600,
-              fontFamily: "'DM Sans', sans-serif",
-              color: "var(--text-primary)",
-            }}
-          >
-            All Set!
-          </h2>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              textAlign: "center",
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            Capty is ready to use. Start recording to begin transcription.
-          </p>
-          <button onClick={handleFinish} style={wizardButtonStyle}>
-            Start Using Capty
-          </button>
-        </>
-      )}
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                textAlign: "center",
+                fontFamily: "'DM Sans', sans-serif",
+                margin: 0,
+              }}
+            >
+              ASR models can be downloaded in Settings &rarr; Models
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
