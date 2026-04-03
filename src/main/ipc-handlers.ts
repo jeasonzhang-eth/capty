@@ -1131,11 +1131,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       bin,
       ["--models-dir", modelsDir, "--port", String(port)],
       {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "ignore", "pipe"],
       },
     );
 
-    sidecarProcess.on("exit", () => {
+    // Drain stderr so the pipe buffer never fills and blocks the process
+    sidecarProcess.stderr?.on("data", (chunk: Buffer) => {
+      const line = chunk.toString().trim();
+      if (line) console.error("[sidecar]", line);
+    });
+
+    sidecarProcess.on("exit", (code) => {
+      console.log("[sidecar] exited with code", code);
       sidecarProcess = null;
     });
 
