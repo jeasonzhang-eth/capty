@@ -907,6 +907,22 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleReorderCategories = useCallback(
+    async (categoryIds: string[]) => {
+      try {
+        // Reorder categories array to match the new order
+        const reordered = categoryIds
+          .map((id) => sessionCategories.find((c) => c.id === id))
+          .filter(Boolean) as SessionCategory[];
+        setSessionCategories(reordered);
+        await window.capty.saveSessionCategories(reordered);
+      } catch (err) {
+        console.error("Failed to reorder categories:", err);
+      }
+    },
+    [sessionCategories],
+  );
+
   const handleRegenerateSubtitles = useCallback(
     async (sessionId: number) => {
       if (regeneratingSessionId !== null || store.isRecording) return;
@@ -2175,6 +2191,7 @@ function App(): React.JSX.Element {
           categories={sessionCategories}
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
+          onReorderCategories={handleReorderCategories}
         />
         <TranscriptArea
           segments={store.segments}

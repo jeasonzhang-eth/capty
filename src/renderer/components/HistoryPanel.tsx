@@ -66,6 +66,7 @@ interface HistoryPanelProps {
   readonly categories?: readonly SessionCategory[];
   readonly onAddCategory?: (category: { label: string; icon: string }) => void;
   readonly onDeleteCategory?: (categoryId: string) => void;
+  readonly onReorderCategories?: (categoryIds: string[]) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -196,6 +197,16 @@ if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
       outline: 1px dashed var(--accent);
       outline-offset: -1px;
     }
+    .category-header.dragging-cat {
+      opacity: 0.4;
+    }
+    .cat-drop-indicator-line {
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px;
+      margin: 0 8px;
+      pointer-events: none;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -227,6 +238,7 @@ export function HistoryPanel({
   categories,
   onAddCategory,
   onDeleteCategory,
+  onReorderCategories,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -276,10 +288,18 @@ export function HistoryPanel({
     insertBeforeSessionId: number | null; // null = append at end
   } | null>(null);
 
+  // Category reorder DnD
+  const [dragCategoryId, setDragCategoryId] = useState<string | null>(null);
+  const [catDropIndicator, setCatDropIndicator] = useState<{
+    beforeCategoryId: string | null; // null = append at end
+  } | null>(null);
+
   const clearDndState = useCallback(() => {
     setDragSessionId(null);
     setDragOverCategoryId(null);
     setDropIndicator(null);
+    setDragCategoryId(null);
+    setCatDropIndicator(null);
   }, []);
 
   // Recompute "today" string so grouping refreshes when the date rolls over
@@ -1150,12 +1170,32 @@ export function HistoryPanel({
 
       {/* Session list with two-level grouping: category → date */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {categoryGroups.map((catGroup) => {
+        {categoryGroups.map((catGroup, catIdx) => {
           const isCatCollapsed = collapsedCategories.has(catGroup.category.id);
           return (
             <div key={catGroup.category.id}>
+              {/* Category drop indicator (before this category) */}
+              {catDropIndicator &&
+                catDropIndicator.beforeCategoryId === catGroup.category.id && (
+                  <div className="cat-drop-indicator-line" />
+                )}
               {/* Category header */}
               <div
+                draggable
+                onDragStart={(e) => {
+                  // Only allow category drag when not already dragging a session
+                  if (dragSessionId !== null) {
+                    e.preventDefault();
+                    return;
+                  }
+                  setDragCategoryId(catGroup.category.id);
+                  e.dataTransfer.setData(
+                    "application/x-capty-category",
+                    catGroup.category.id,
+                  );
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => clearDndState()}
                 onClick={() => toggleCategory(catGroup.category.id)}
                 onContextMenu={(e) =>
                   handleCategoryContextMenu(
@@ -1168,6 +1208,30 @@ export function HistoryPanel({
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
+
+                  // Category reorder drag
+                  if (dragCategoryId !== null) {
+                    if (dragCategoryId === catGroup.category.id) {
+                      setCatDropIndicator(null);
+                      return;
+                    }
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    if (e.clientY < midY) {
+                      setCatDropIndicator({
+                        beforeCategoryId: catGroup.category.id,
+                      });
+                    } else {
+                      // Insert after this category = before the next one
+                      const nextCat = categoryGroups[catIdx + 1];
+                      setCatDropIndicator({
+                        beforeCategoryId: nextCat?.category.id ?? null,
+                      });
+                    }
+                    return;
+                  }
+
+                  // Session → category drop
                   if (dragSessionId === null) return;
                   const draggedSession = sessions.find(
                     (s) => s.id === dragSessionId,
@@ -1186,6 +1250,36 @@ export function HistoryPanel({
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
+
+                  // Handle category reorder drop
+                  const catData = e.dataTransfer.getData(
+                    "application/x-capty-category",
+                  );
+                  if (catData && onReorderCategories) {
+                    const ids = categoryGroups.map((g) => g.category.id);
+                    const fromIdx = ids.indexOf(catData);
+                    if (fromIdx === -1) {
+                      clearDndState();
+                      return;
+                    }
+                    const filtered = ids.filter((id) => id !== catData);
+                    const targetId = catDropIndicator?.beforeCategoryId;
+                    if (targetId === null || targetId === undefined) {
+                      filtered.push(catData);
+                    } else {
+                      const toIdx = filtered.indexOf(targetId);
+                      if (toIdx === -1) {
+                        filtered.push(catData);
+                      } else {
+                        filtered.splice(toIdx, 0, catData);
+                      }
+                    }
+                    onReorderCategories(filtered);
+                    clearDndState();
+                    return;
+                  }
+
+                  // Handle session → category drop
                   const raw = e.dataTransfer.getData(
                     "application/x-capty-session",
                   );
@@ -1210,9 +1304,16 @@ export function HistoryPanel({
                   }
                 }}
                 className={
-                  dragOverCategoryId === catGroup.category.id
-                    ? "category-drop-highlight"
-                    : undefined
+                  [
+                    dragOverCategoryId === catGroup.category.id
+                      ? "category-drop-highlight"
+                      : "",
+                    dragCategoryId === catGroup.category.id
+                      ? "category-header dragging-cat"
+                      : "category-header",
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
                 }
                 style={{
                   padding: "8px 16px 8px 10px",
@@ -1395,6 +1496,10 @@ export function HistoryPanel({
             </div>
           );
         })}
+        {/* Trailing drop indicator when dropping category at the end */}
+        {catDropIndicator && catDropIndicator.beforeCategoryId === null && (
+          <div className="cat-drop-indicator-line" />
+        )}
         {sessions.length === 0 && (
           <div
             style={{
