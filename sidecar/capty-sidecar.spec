@@ -2,36 +2,55 @@
 """PyInstaller spec for capty-sidecar (onedir, macOS arm64).
 
 Produces: dist/capty-sidecar/capty-sidecar
+
+Only collects packages that capty_sidecar actually imports at runtime.
+mlx-audio pulls in many optional/transitive deps (spacy, phonemizer,
+pillow, torch stubs, etc.) — we exclude everything not needed.
 """
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-# Packages that need full collection (data files, dynamic libs, etc.)
+# ── Only packages that capty_sidecar code actually uses at runtime ──
 _collect_packages = [
+    # Core ML
     "mlx",
     "mlx_audio",
+    "mlx_lm",
     "numpy",
+    # HuggingFace (model loading)
     "transformers",
     "tokenizers",
     "safetensors",
     "huggingface_hub",
     "sentencepiece",
+    # Audio processing
     "librosa",
     "soundfile",
     "soxr",
     "audioread",
-    "lazy_loader",
+    "numba",
+    "scipy",
+    # Web server
+    "fastapi",
+    "starlette",
     "pydantic",
     "pydantic_core",
     "uvicorn",
-    "fastapi",
-    "starlette",
     "anyio",
-    "sniffio",
     "httptools",
     "uvloop",
-    "websockets",
-    "click",
+    "h11",
+    # TTS text processing
+    "misaki",
+    "cn2an",
+    "pypinyin",
+    "jieba",
+    "num2words",
+    "spacy",
+    "thinc",
+    # STT
+    "tiktoken",
+    "mistral_common",
 ]
 
 datas = []
@@ -71,7 +90,20 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "PIL", "IPython", "jupyter"],
+    excludes=[
+        # GUI / display — not needed for headless server
+        "tkinter", "matplotlib", "PIL", "pillow", "IPython", "jupyter",
+        # PyTorch — we use MLX, not torch
+        "torch", "torchvision", "torchaudio",
+        # Kokoro TTS model needs espeakng_loader which we don't use
+        "espeakng_loader", "phonemizer",
+        "mlx_audio.tts.models.kokoro",
+        # Dev / test
+        "pytest", "pytest_asyncio",
+        # Unused heavy packages
+        "sounddevice", "miniaudio",
+        "websockets",
+    ],
     noarchive=False,
 )
 

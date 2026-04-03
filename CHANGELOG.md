@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
+- chore: trim PyInstaller spec — exclude torch, pillow, phonemizer, sounddevice and other unused deps
 - fix: config:set now merges instead of replacing, preserving default providers on fresh install
 - feat: add default preset LLM providers (DeepSeek, OpenAI, OpenRouter) for fresh installs
 - fix: improve sidecar spawn error handling with early-exit detection and descriptive messages
