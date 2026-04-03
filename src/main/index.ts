@@ -80,21 +80,15 @@ function createWindow(configDir: string): BrowserWindow {
   return mainWindow;
 }
 
-app.whenReady().then(() => {
-  // 1. Determine configDir
-  const configDir = app.getPath("userData");
-
-  // 2. Read config, determine dataDir
-  const config = readConfig(configDir);
-  const dataDir = config.dataDir ?? join(configDir, "data");
-
-  // 3. Ensure dataDir exists, then open database
+/** Initialize database and data directories for the given dataDir. */
+function initDataDir(dataDir: string, configDir: string): Database.Database {
+  // Ensure dataDir exists, then open database
   fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = join(dataDir, "capty.db");
-  db = createDatabase(dbPath);
+  const database = createDatabase(dbPath);
 
-  // 3b. Migrate old UTC timestamps to local time (one-time, guarded by user_version)
-  const audioRenames = migrateUtcToLocal(db);
+  // Migrate old UTC timestamps to local time (one-time, guarded by user_version)
+  const audioRenames = migrateUtcToLocal(database);
   const audioBaseDir = join(dataDir, "audio");
   for (const { oldPath, newPath } of audioRenames) {
     const oldDir = join(audioBaseDir, oldPath);
@@ -102,7 +96,6 @@ app.whenReady().then(() => {
     try {
       if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
         fs.renameSync(oldDir, newDir);
-        // Rename main WAV file inside the directory
         const oldWav = join(newDir, `${oldPath}.wav`);
         const newWav = join(newDir, `${newPath}.wav`);
         if (fs.existsSync(oldWav)) {
@@ -117,10 +110,10 @@ app.whenReady().then(() => {
     }
   }
 
-  // 3c. Repair WAV files left with placeholder headers from abnormal exits
+  // Repair WAV files left with placeholder headers from abnormal exits
   repairWavHeaders(audioBaseDir);
 
-  // 4. Ensure models directory exists; migrate flat structure to asr/tts split
+  // Ensure models directory exists; migrate flat structure to asr/tts split
   const modelsDir = join(dataDir, "models");
   fs.mkdirSync(modelsDir, { recursive: true });
   migrateModelsDir(dataDir);
@@ -133,11 +126,35 @@ app.whenReady().then(() => {
     }
   }
 
-  // 5. Register IPC handlers
+  return database;
+}
+
+app.whenReady().then(() => {
+  // 1. Determine configDir
+  const configDir = app.getPath("userData");
+
+  // 2. Read config, determine dataDir
+  const config = readConfig(configDir);
+  const dataDir = config.dataDir;
+
+  // 3. Only initialize DB if dataDir is configured (skip for fresh installs
+  //    where SetupWizard hasn't run yet — the app will relaunch after wizard)
+  if (dataDir) {
+    db = initDataDir(dataDir, configDir);
+  }
+
+  // 4. Register IPC handlers (db may be null during setup wizard)
   registerIpcHandlers({
-    db,
+    db: db!,
     configDir,
     getMainWindow: () => mainWindow,
+  });
+
+  // 5. Handle post-wizard relaunch: SetupWizard saves dataDir to config,
+  //    then calls this IPC to relaunch the app so DB initializes correctly.
+  ipcMain.handle("app:relaunch", () => {
+    app.relaunch();
+    app.quit();
   });
 
   // 6. Zoom IPC handlers

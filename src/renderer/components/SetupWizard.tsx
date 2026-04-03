@@ -56,9 +56,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
 };
 
-export function SetupWizard({
-  onComplete,
-}: SetupWizardProps): React.ReactElement {
+export function SetupWizard(_props: SetupWizardProps): React.ReactElement {
   const [step, setStep] = useState(0);
   const [dataDir, setDataDir] = useState("");
   const [useHfMirror, setUseHfMirror] = useState(false);
@@ -107,9 +105,10 @@ export function SetupWizard({
         });
         await window.capty.setConfig({ llmProviders: updated });
       }
-      onComplete(dataDir);
+      // Relaunch the app so the main process initializes DB with the new dataDir
+      await window.capty.relaunch();
     },
-    [apiKeys, dataDir, onComplete],
+    [apiKeys, dataDir],
   );
 
   const handleKeyChange = useCallback((providerId: string, value: string) => {
@@ -151,8 +150,7 @@ export function SetupWizard({
                 margin: 0,
               }}
             >
-              Welcome to{" "}
-              <span style={{ color: "var(--accent)" }}>Capty</span>
+              Welcome to <span style={{ color: "var(--accent)" }}>Capty</span>
             </h1>
             <p
               style={{
@@ -342,9 +340,7 @@ export function SetupWizard({
                   type="password"
                   placeholder={provider.placeholder}
                   value={apiKeys[provider.id] ?? ""}
-                  onChange={(e) =>
-                    handleKeyChange(provider.id, e.target.value)
-                  }
+                  onChange={(e) => handleKeyChange(provider.id, e.target.value)}
                   style={{
                     width: "100%",
                     padding: "8px 12px",
