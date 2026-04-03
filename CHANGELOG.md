@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
+- feat: add default preset LLM providers (DeepSeek, OpenAI, OpenRouter) for fresh installs
 - fix: improve sidecar spawn error handling with early-exit detection and descriptive messages
 - fix: use __dirname-based project root for dev mode sidecar path resolution
 - feat: add macOS DMG packaging with electron-builder (arm64 only)
