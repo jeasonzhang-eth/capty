@@ -124,8 +124,11 @@ function findSidecarBin(): string {
     );
     if (fs.existsSync(prodBin)) return prodBin;
   }
-  // Dev: venv binary
-  const devBin = path.join(app.getAppPath(), "sidecar/.venv/bin/capty-sidecar");
+  // Dev: __dirname is out/main/, project root is 2 levels up
+  const projectRoot = app.isPackaged
+    ? app.getAppPath()
+    : path.join(__dirname, "../..");
+  const devBin = path.join(projectRoot, "sidecar/.venv/bin/capty-sidecar");
   if (fs.existsSync(devBin)) return devBin;
   // Fallback: PATH
   return "capty-sidecar";
@@ -1139,31 +1142,72 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const dataDir = config.dataDir ?? join(configDir, "data");
     const modelsDir = join(dataDir, "models", "asr");
 
+    console.log("[sidecar] binary:", bin, "exists:", fs.existsSync(bin));
+    console.log("[sidecar] port:", port, "modelsDir:", modelsDir);
+
     sidecarProcess = spawn(
       bin,
       ["--models-dir", modelsDir, "--port", String(port)],
       {
-        stdio: ["ignore", "ignore", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
 
-    // Drain stderr so the pipe buffer never fills and blocks the process
-    sidecarProcess.stderr?.on("data", (chunk: Buffer) => {
+    // Drain stdout so the pipe buffer never fills
+    sidecarProcess.stdout?.on("data", (chunk: Buffer) => {
       const line = chunk.toString().trim();
-      if (line) console.error("[sidecar]", line);
+      if (line) console.log("[sidecar:out]", line);
     });
 
-    sidecarProcess.on("exit", (code) => {
+    // Wait for either early exit/error or successful health check
+    const spawnOk = await new Promise<boolean>((resolve) => {
+      let resolved = false;
+      sidecarProcess!.on("error", (err) => {
+        console.error("[sidecar] spawn error:", err.message);
+        sidecarProcess = null;
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      });
+      sidecarProcess!.on("exit", (code) => {
+        console.log("[sidecar] exited early with code", code);
+        sidecarProcess = null;
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      });
+      // Drain stderr so the pipe buffer never fills
+      sidecarProcess!.stderr?.on("data", (chunk: Buffer) => {
+        const line = chunk.toString().trim();
+        if (line) console.error("[sidecar]", line);
+      });
+      // Give a short grace period for spawn errors
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(true);
+        }
+      }, 500);
+    });
+
+    if (!spawnOk) {
+      throw new Error(
+        `Sidecar binary failed to launch: ${bin}` +
+          (app.isPackaged
+            ? " (packaged mode — run 'npm run dist:all' to include sidecar binary)"
+            : " (dev mode — ensure sidecar venv is set up: cd sidecar && uv sync)"),
+      );
+    }
+
+    // Re-attach exit handler for after the grace period
+    sidecarProcess?.on("exit", (code) => {
       console.log("[sidecar] exited with code", code);
       sidecarProcess = null;
     });
 
-    sidecarProcess.on("error", (err) => {
-      console.error("[sidecar] spawn error:", err.message);
-      sidecarProcess = null;
-    });
-
-    await waitForHealth(baseUrl, 15000);
+    await waitForHealth(baseUrl, 30000);
     return { ok: true };
   });
 
