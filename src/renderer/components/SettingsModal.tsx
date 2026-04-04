@@ -1593,65 +1593,35 @@ function SpeechTab({
 
   const handleTestProvider = useCallback(
     async (provider: AsrProviderConfig) => {
-      if (provider.isSidecar) {
-        // Test sidecar health
-        setTestingId(provider.id);
-        try {
-          const result = await window.capty.checkSidecarHealth();
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: {
-              ok: result.online,
-              message: result.online
-                ? "Sidecar is online"
-                : "Sidecar is offline",
-            },
-          }));
-        } catch {
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: { ok: false, message: "Sidecar is offline" },
-          }));
-        } finally {
-          setTestingId(null);
-          setTimeout(() => {
-            setTestResults((prev) => {
-              const next = { ...prev };
-              delete next[provider.id];
-              return next;
-            });
-          }, 5000);
-        }
-      } else {
-        // Test external ASR
-        if (!provider.baseUrl || !provider.model) return;
-        setTestingId(provider.id);
-        try {
-          await window.capty.asrTest({
-            baseUrl: provider.baseUrl,
-            apiKey: provider.apiKey,
-            model: provider.model,
+      // Both sidecar and external use the same real ASR test (440Hz sine wave)
+      if (!provider.isSidecar && (!provider.baseUrl || !provider.model)) return;
+      setTestingId(provider.id);
+      try {
+        await window.capty.asrTest({
+          baseUrl: provider.baseUrl ?? "",
+          apiKey: provider.apiKey ?? "",
+          model: provider.model ?? "",
+          isSidecar: provider.isSidecar,
+        });
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: { ok: true, message: "ASR test passed" },
+        }));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Connection failed";
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: { ok: false, message: msg },
+        }));
+      } finally {
+        setTestingId(null);
+        setTimeout(() => {
+          setTestResults((prev) => {
+            const next = { ...prev };
+            delete next[provider.id];
+            return next;
           });
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: { ok: true, message: "Connection OK" },
-          }));
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "Connection failed";
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: { ok: false, message: msg },
-          }));
-        } finally {
-          setTestingId(null);
-          setTimeout(() => {
-            setTestResults((prev) => {
-              const next = { ...prev };
-              delete next[provider.id];
-              return next;
-            });
-          }, 5000);
-        }
+        }, 5000);
       }
     },
     [],
@@ -2406,67 +2376,38 @@ function TtsTab({
 
   const handleTestProvider = useCallback(
     async (provider: TtsProviderConfig) => {
-      if (provider.isSidecar) {
-        setTestingId(provider.id);
-        try {
-          const result = await window.capty.checkSidecarHealth();
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: {
-              ok: result.online,
-              message: result.online
-                ? "Sidecar is online"
-                : "Sidecar is offline",
-            },
-          }));
-        } catch {
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: { ok: false, message: "Sidecar is offline" },
-          }));
-        } finally {
-          setTestingId(null);
-          setTimeout(() => {
-            setTestResults((prev) => {
-              const next = { ...prev };
-              delete next[provider.id];
-              return next;
-            });
-          }, 5000);
-        }
-      } else {
-        // Test external TTS provider
-        if (!provider.baseUrl) return;
-        setTestingId(provider.id);
-        try {
-          const result = await window.capty.ttsTest({
-            baseUrl: provider.baseUrl,
-            apiKey: provider.apiKey,
-            model: provider.model,
+      // Both sidecar and external use the same real TTS test (send "Hello", verify audio)
+      if (!provider.isSidecar && !provider.baseUrl) return;
+      setTestingId(provider.id);
+      try {
+        const result = await window.capty.ttsTest({
+          baseUrl: provider.baseUrl ?? "",
+          apiKey: provider.apiKey ?? "",
+          model: provider.model ?? "",
+          isSidecar: provider.isSidecar,
+        });
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: {
+            ok: true,
+            message: `TTS test passed (${Math.round(result.bytes / 1024)}KB)`,
+          },
+        }));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Connection failed";
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: { ok: false, message: msg },
+        }));
+      } finally {
+        setTestingId(null);
+        setTimeout(() => {
+          setTestResults((prev) => {
+            const next = { ...prev };
+            delete next[provider.id];
+            return next;
           });
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: {
-              ok: true,
-              message: `TTS working (${Math.round(result.bytes / 1024)}KB)`,
-            },
-          }));
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "Connection failed";
-          setTestResults((prev) => ({
-            ...prev,
-            [provider.id]: { ok: false, message: msg },
-          }));
-        } finally {
-          setTestingId(null);
-          setTimeout(() => {
-            setTestResults((prev) => {
-              const next = { ...prev };
-              delete next[provider.id];
-              return next;
-            });
-          }, 5000);
-        }
+        }, 5000);
       }
     },
     [],

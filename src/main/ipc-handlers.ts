@@ -1394,13 +1394,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     },
   );
 
-  // External ASR connectivity test (send 1s 440Hz sine wave)
+  // ASR connectivity test (send 1s 440Hz sine wave, verify transcription)
   ipcMain.handle(
     "asr:test",
     async (
       _event,
-      provider: { baseUrl: string; apiKey: string; model: string },
+      provider: {
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+        isSidecar?: boolean;
+      },
     ) => {
+      const baseUrl = provider.isSidecar
+        ? getSidecarBaseUrl(configDir)
+        : provider.baseUrl;
+      const resolvedUrl = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+
       // Generate 1 second of 440Hz sine wave at 16kHz 16bit mono
       const sampleRate = 16000;
       const duration = 1; // seconds
@@ -1423,8 +1433,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       );
       formData.append("model", provider.model);
 
-      const baseUrl = provider.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
-      const resp = await net.fetch(`${baseUrl}/v1/audio/transcriptions`, {
+      const resp = await net.fetch(`${resolvedUrl}/v1/audio/transcriptions`, {
         method: "POST",
         headers: {
           ...(provider.apiKey
@@ -1450,11 +1459,31 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     "tts:test",
     async (
       _event,
-      provider: { baseUrl: string; apiKey: string; model: string },
+      provider: {
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+        isSidecar?: boolean;
+      },
     ) => {
-      const baseUrl = normalizeTtsUrl(provider.baseUrl);
+      const rawUrl = provider.isSidecar
+        ? getSidecarBaseUrl(configDir)
+        : provider.baseUrl;
+      const baseUrl = normalizeTtsUrl(rawUrl);
+
+      // Resolve model: sidecar uses local path, external uses provider.model
+      let modelValue = provider.model ?? "";
+      if (provider.isSidecar) {
+        const config = readConfig(configDir);
+        const ttsModelId = config.selectedTtsModelId;
+        if (ttsModelId) {
+          const dataDir = config.dataDir ?? join(configDir, "data");
+          modelValue = join(dataDir, "models", "tts", ttsModelId);
+        }
+      }
+
       const body: Record<string, unknown> = { input: "Hello" };
-      if (provider.model) body.model = provider.model;
+      if (modelValue) body.model = modelValue;
 
       const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
         method: "POST",

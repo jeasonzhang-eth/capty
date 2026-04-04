@@ -67,7 +67,12 @@ const api = {
     ipcRenderer.invoke("asr:transcribe", pcmData, provider) as Promise<{
       text: string;
     }>,
-  asrTest: (provider: { baseUrl: string; apiKey: string; model: string }) =>
+  asrTest: (provider: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    isSidecar?: boolean;
+  }) =>
     ipcRenderer.invoke("asr:test", provider) as Promise<{ success: boolean }>,
   asrFetchModels: (provider: { baseUrl: string; apiKey: string }) =>
     ipcRenderer.invoke("asr:fetch-models", provider) as Promise<
@@ -221,7 +226,12 @@ const api = {
       ready: boolean;
       reason: string;
     }>,
-  ttsTest: (provider: { baseUrl: string; apiKey: string; model: string }) =>
+  ttsTest: (provider: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    isSidecar?: boolean;
+  }) =>
     ipcRenderer.invoke("tts:test", provider) as Promise<{
       success: boolean;
       bytes: number;
