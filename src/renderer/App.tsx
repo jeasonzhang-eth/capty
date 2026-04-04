@@ -67,15 +67,21 @@ function App(): React.JSX.Element {
   const handleStartSidecar = useCallback(async () => {
     store.setSidecarStarting(true);
     try {
-      await window.capty.startSidecar();
-      const health = await window.capty.checkSidecarHealth();
-      store.setSidecarReady(health.online);
-      // Also check TTS immediately (instead of waiting for 10s poll)
-      try {
-        const tts = await window.capty.checkTtsProvider();
-        store.setTtsProviderReady(tts.ready);
-      } catch {
-        // TTS check is best-effort
+      const result = (await window.capty.startSidecar()) as {
+        ok: boolean;
+        error?: string;
+      };
+      if (result.ok) {
+        const health = await window.capty.checkSidecarHealth();
+        store.setSidecarReady(health.online);
+        try {
+          const tts = await window.capty.checkTtsProvider();
+          store.setTtsProviderReady(tts.ready);
+        } catch {
+          // TTS check is best-effort
+        }
+      } else {
+        console.warn("[sidecar] start failed:", result.error);
       }
     } catch (err) {
       console.error("Failed to start sidecar:", err);
@@ -566,17 +572,24 @@ function App(): React.JSX.Element {
         if (sidecarCfg?.autoStart !== false && !sidecarOnline) {
           store.setSidecarStarting(true);
           try {
-            await window.capty.startSidecar();
-            const h = await window.capty.checkSidecarHealth();
-            store.setSidecarReady(h.online);
-            try {
-              const tts = await window.capty.checkTtsProvider();
-              store.setTtsProviderReady(tts.ready);
-            } catch {
-              /* best-effort */
+            const result = (await window.capty.startSidecar()) as {
+              ok: boolean;
+              error?: string;
+            };
+            if (result.ok) {
+              const h = await window.capty.checkSidecarHealth();
+              store.setSidecarReady(h.online);
+              try {
+                const tts = await window.capty.checkTtsProvider();
+                store.setTtsProviderReady(tts.ready);
+              } catch {
+                /* best-effort */
+              }
+            } else {
+              console.warn("[sidecar] auto-start failed:", result.error);
             }
           } catch {
-            /* silent */
+            /* silent — IPC transport error */
           } finally {
             store.setSidecarStarting(false);
           }

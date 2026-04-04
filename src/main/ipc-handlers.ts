@@ -1227,12 +1227,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         const data = (await resp.json()) as Record<string, unknown>;
         if (data.status === "ok") return { ok: true };
         // Port is occupied by a non-sidecar service
-        throw new Error(
-          `Port ${port} is in use by another service. Change the sidecar port in Settings → General.`,
-        );
+        const msg = `Port ${port} is in use by another service. Change the sidecar port in Settings → General.`;
+        console.warn("[sidecar]", msg);
+        return { ok: false, error: msg };
       }
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("Port")) throw err;
+    } catch {
       // not running — proceed to spawn
     }
 
@@ -1295,12 +1294,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     });
 
     if (!spawnOk) {
-      throw new Error(
+      const msg =
         `Sidecar binary failed to launch: ${bin}` +
-          (app.isPackaged
-            ? " (packaged mode — run 'npm run dist:all' to include sidecar binary)"
-            : " (dev mode — ensure sidecar venv is set up: cd sidecar && uv sync)"),
-      );
+        (app.isPackaged
+          ? " (packaged mode — run 'npm run dist:all' to include sidecar binary)"
+          : " (dev mode — ensure sidecar venv is set up: cd sidecar && uv sync)");
+      console.warn("[sidecar]", msg);
+      return { ok: false, error: msg };
     }
 
     // Re-attach exit handler for after the grace period
@@ -1310,7 +1310,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       _sidecarPid = null;
     });
 
-    await waitForHealth(baseUrl, 30000);
+    try {
+      await waitForHealth(baseUrl, 30000);
+    } catch {
+      console.warn("[sidecar] health check timed out after launch");
+      return { ok: false, error: "Sidecar started but health check timed out" };
+    }
     return { ok: true };
   });
 
