@@ -1973,16 +1973,21 @@ function App(): React.JSX.Element {
 
   // Sidecar health polling (every 10s, unconditional — sidecar is independent)
   useEffect(() => {
+    let ignore = false;
     const poll = async (): Promise<void> => {
       try {
         const health = await window.capty.checkSidecarHealth();
-        store.setSidecarReady(health.online);
+        if (!ignore) store.setSidecarReady(health.online);
       } catch {
-        store.setSidecarReady(false);
+        if (!ignore) store.setSidecarReady(false);
       }
     };
+    poll(); // check immediately on mount
     const timer = setInterval(poll, 10000);
-    return () => clearInterval(timer);
+    return () => {
+      ignore = true;
+      clearInterval(timer);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // TTS provider health polling (every 10s when a TTS provider is selected)

@@ -225,43 +225,60 @@ export class ModelDownloadTask {
     console.log(`[model-download] Cancelled: ${this.repo}`);
   }
 
-  /** Fetch the HuggingFace file list for this repo. */
+  /** Fetch the HuggingFace file list for this repo (retries up to 3 times). */
   private async fetchFileList(): Promise<string[]> {
     const apiUrl = `${this.baseUrl}/api/models/${this.repo}`;
-    console.log(`[model-download] Fetching file list: ${apiUrl}`);
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15_000);
-      const response = await fetch(apiUrl, {
-        signal: controller.signal,
-        headers: { "User-Agent": "capty/1.0" },
-      });
-      clearTimeout(timer);
-      if (response.ok) {
-        const info = (await response.json()) as HFModelInfo;
-        return info.siblings
-          .map((s) => s.rfilename)
-          .filter((f) => !SKIP_FILES.has(f));
-      }
-    } catch (err) {
-      console.error(
-        `[model-download] Failed to fetch file list for ${this.repo}:`,
-        err,
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.log(
+        `[model-download] Fetching file list (attempt ${attempt}/3): ${apiUrl}`,
       );
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15_000);
+        const response = await fetch(apiUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": "capty/1.0" },
+        });
+        clearTimeout(timer);
+
+        if (response.ok) {
+          const info = (await response.json()) as HFModelInfo;
+          const files = info.siblings
+            .map((s) => s.rfilename)
+            .filter((f) => !SKIP_FILES.has(f));
+          if (files.length === 0) {
+            throw new Error(`No downloadable files found in ${this.repo}`);
+          }
+          return files;
+        }
+
+        // 4xx client errors are deterministic — don't retry
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(
+            `Cannot access ${this.repo}: HTTP ${response.status} ${response.statusText}`,
+          );
+        }
+      } catch (err) {
+        // Propagate deterministic errors immediately
+        if (
+          err instanceof Error &&
+          (err.message.startsWith("Cannot access") ||
+            err.message.startsWith("No downloadable"))
+        ) {
+          throw err;
+        }
+
+        console.error(`[model-download] Attempt ${attempt}/3 failed:`, err);
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        }
+      }
     }
 
-    // Fallback: common model files
-    return [
-      "config.json",
-      "generation_config.json",
-      "model.safetensors",
-      "tokenizer_config.json",
-      "tokenizer.json",
-      "vocab.json",
-      "merges.txt",
-      "preprocessor_config.json",
-      "chat_template.json",
-    ];
+    throw new Error(
+      `Failed to fetch file list for ${this.repo} after 3 attempts`,
+    );
   }
 
   /** HEAD request all files to determine total download size. */

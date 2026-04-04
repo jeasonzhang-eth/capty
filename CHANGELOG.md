@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: remove hardcoded ASR fallback file list in model download — retry HF API 3 times with exponential backoff instead
+- fix: skip retry for deterministic HTTP 4xx errors (404/403/401/410) during file download
+- fix: resolve AbortSignal MaxListenersExceededWarning by using per-file AbortController instead of per-retry listener registration
+- fix: add StrictMode race protection to sidecar health polling useEffect
 - refactor: inline Model Market into ASR/TTS sidecar provider expand area (no more separate modal popup)
 - fix: TTS search results incorrectly showing "ASR" badge — add category-aware TypeTag with TTS-specific type inference
 - feat: add model type badges for Qwen TTS, Spark TTS, OuteTTS, Chatterbox, Voxtral

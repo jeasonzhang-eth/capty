@@ -14,16 +14,29 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent": "capty/1.0 (Electron; https://github.com/capty)",
 };
 
-/** Fetch with timeout via AbortController. */
+/** Fetch with timeout via AbortController. Chains an optional external signal. */
 async function fetchWithTimeout(
   url: string,
   opts: RequestInit & { signal?: AbortSignal } = {},
   timeoutMs = REQUEST_TIMEOUT,
 ): Promise<{ response: Response; controller: AbortController }> {
   const controller = new AbortController();
+  const externalSignal = opts.signal;
+
+  // Link external abort signal (if provided)
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+      throw new Error("Download cancelled");
+    }
+    externalSignal.addEventListener("abort", () => controller.abort(), {
+      once: true,
+    });
+  }
+
   const mergedOpts: RequestInit = {
     ...opts,
-    signal: controller.signal,
+    signal: controller.signal, // use internal controller
     redirect: "follow",
     headers: {
       ...DEFAULT_HEADERS,
@@ -73,6 +86,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** HTTP 4xx client errors should not be retried (except 408 Request Timeout and 429 Too Many Requests). */
+function isNonRetryableError(message: string): boolean {
+  const match = message.match(/HTTP (\d{3})/);
+  if (!match) return false;
+  const status = parseInt(match[1], 10);
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export interface FileDownloadOptions {
   /** URL to download from. */
   readonly url: string;
@@ -92,17 +113,30 @@ export interface FileDownloadOptions {
 export async function downloadFile(opts: FileDownloadOptions): Promise<number> {
   const { url, filePath, abortSignal, onData } = opts;
 
+  // Per-file AbortController: all retries share one, linked to external signal once
+  const fileController = new AbortController();
+  if (abortSignal) {
+    if (abortSignal.aborted) throw new Error("Download cancelled");
+    abortSignal.addEventListener("abort", () => fileController.abort(), {
+      once: true,
+    });
+  }
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      // Check external abort before starting
-      if (abortSignal?.aborted) {
+      if (fileController.signal.aborted) {
         throw new Error("Download cancelled");
       }
 
-      const result = await downloadFileOnce(url, filePath, abortSignal, onData);
+      const result = await downloadFileOnce(
+        url,
+        filePath,
+        fileController.signal,
+        onData,
+      );
       return result;
     } catch (err) {
-      if (abortSignal?.aborted) {
+      if (fileController.signal.aborted) {
         throw new Error("Download cancelled");
       }
 
@@ -110,6 +144,11 @@ export async function downloadFile(opts: FileDownloadOptions): Promise<number> {
       console.warn(
         `[file-download] Attempt ${attempt}/${MAX_RETRIES} failed for ${filePath}: ${msg}`,
       );
+
+      // 404/403/401/410 etc. are deterministic — don't retry
+      if (isNonRetryableError(msg)) {
+        throw err;
+      }
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAY_BASE * attempt;
@@ -148,20 +187,9 @@ async function downloadFileOnce(
 
   const { response, controller } = await fetchWithTimeout(
     url,
-    { headers },
+    { headers, signal: abortSignal },
     60_000,
   );
-
-  // Link external abort signal to our controller
-  if (abortSignal) {
-    if (abortSignal.aborted) {
-      controller.abort();
-      throw new Error("Download cancelled");
-    }
-    abortSignal.addEventListener("abort", () => controller.abort(), {
-      once: true,
-    });
-  }
 
   if (response.status === 416) {
     // File already complete
