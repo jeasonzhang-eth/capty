@@ -2,6 +2,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -87,8 +88,15 @@ function TranslateMenu({
         onClose();
       }
     };
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [onClose]);
 
   const itemStyle: React.CSSProperties = {
@@ -453,9 +461,14 @@ function ExportMenu({
         onClose();
       }
     };
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
 
@@ -600,6 +613,10 @@ export function TranscriptArea({
   onChangeTranslateModel,
 }: TranscriptAreaProps): React.ReactElement {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lrcRef = useRef<HTMLDivElement>(null);
+  const activeLineIndexRef = useRef(-1);
+  const lastScrollCorrectionKeyRef = useRef("");
+  const lrcAutoScrollRef = useRef(true);
   const isNearBottomRef = useRef(true);
   const prevSegmentCountRef = useRef(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -700,6 +717,7 @@ export function TranscriptArea({
 
   const lineRenderer = useCallback(
     ({ index, active }: { index: number; active: boolean; line: LrcLine }) => {
+      if (active) activeLineIndexRef.current = index;
       const segment = segments[index];
       if (!segment) return null;
       return (
@@ -763,6 +781,51 @@ export function TranscriptArea({
     },
     [segments, onSeekToTime, translations, showTranslations],
   );
+
+  // Track react-lrc autoScroll state to avoid overriding user manual scroll
+  const handleAutoScrollChange = useCallback(
+    ({ autoScroll }: { autoScroll: boolean }) => {
+      lrcAutoScrollRef.current = autoScroll;
+    },
+    [],
+  );
+
+  // Correct react-lrc scroll when translations change line heights.
+  // react-lrc caches line offsetTop/height in an internal indexMap that only
+  // recalculates when `lines` changes or root resizes.  When translations are
+  // shown, individual line heights increase but neither trigger fires, so the
+  // cached positions are stale.  This layout effect runs AFTER react-lrc's own
+  // layout effect (child effects before parent) and applies fresh measurements.
+  useLayoutEffect(() => {
+    if (!showTranslations || !hasTranslations) return;
+    if (!isPlayback || isRecording || isTranscribing) return;
+    if (!lrcAutoScrollRef.current) return;
+
+    const root = lrcRef.current;
+    if (!root) return;
+
+    const activeIndex = activeLineIndexRef.current;
+    if (activeIndex < 0) return;
+
+    // Only scroll when active line or translation visibility changes
+    const key = `${activeIndex}:${showTranslations}`;
+    if (key === lastScrollCorrectionKeyRef.current) return;
+    lastScrollCorrectionKeyRef.current = key;
+
+    const lineEls = root.querySelectorAll(".react-lrc-line");
+    const lineEl = lineEls[activeIndex] as HTMLElement | undefined;
+    if (!lineEl) return;
+
+    root.scrollTop =
+      lineEl.offsetTop - root.clientHeight / 2 + lineEl.clientHeight / 2;
+  }, [
+    currentMillisecond,
+    showTranslations,
+    hasTranslations,
+    isPlayback,
+    isRecording,
+    isTranscribing,
+  ]);
 
   // Track whether user is near the bottom of the scroll container
   const handleScroll = useCallback(() => {
@@ -1001,11 +1064,13 @@ export function TranscriptArea({
         !isTranscribing &&
         segments.length > 0 ? (
           <Lrc
+            ref={lrcRef}
             lrc={lrcString}
             currentMillisecond={currentMillisecond}
             lineRenderer={lineRenderer}
             verticalSpace
             recoverAutoScrollInterval={5000}
+            onAutoScrollChange={handleAutoScrollChange}
             style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}
           />
         ) : (

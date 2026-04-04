@@ -72,8 +72,15 @@ function SidecarPopover({
         onClose();
       }
     };
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [onClose, triggerRef, sidecarStarting]);
 
   const isRunning = sidecarReady && !sidecarStarting;

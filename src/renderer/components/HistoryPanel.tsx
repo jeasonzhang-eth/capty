@@ -500,6 +500,16 @@ export function HistoryPanel({
     setConfirmDeleteId(null);
   }, []);
 
+  // ESC to dismiss delete confirmation dialogs
+  useEffect(() => {
+    if (confirmDeleteId === null) return;
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setConfirmDeleteId(null);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [confirmDeleteId]);
+
   // ── Inline category creation state ──
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -550,6 +560,16 @@ export function HistoryPanel({
         ?.label ?? ""
     );
   }, [confirmDeleteCategoryId, effectiveCategories]);
+
+  // ESC to dismiss category delete confirmation
+  useEffect(() => {
+    if (confirmDeleteCategoryId === null) return;
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setConfirmDeleteCategoryId(null);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [confirmDeleteCategoryId]);
 
   const handleCategoryContextMenu = useCallback(
     (

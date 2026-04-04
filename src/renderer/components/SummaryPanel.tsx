@@ -1149,15 +1149,22 @@ function ExportMenu({
 }): React.ReactElement {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  // Close on outside click or ESC
   useEffect(() => {
     const handleClick = (e: MouseEvent): void => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [onClose]);
 
   const handleCopyText = useCallback(async () => {

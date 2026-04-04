@@ -2549,6 +2549,14 @@ function FetchModelsDialog({
   );
   const existingSet = new Set(existingModels);
 
+  useEffect(() => {
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
+
   // Filter by search
   const filtered = search
     ? fetchedModels.filter(
@@ -4330,6 +4338,14 @@ export function SettingsModal({
     },
     [onTabChange],
   );
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
