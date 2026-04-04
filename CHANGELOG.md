@@ -4,7 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
-- fix: remove browser focus outline on all interactive elements after mouse click/ESC (global `*:focus:not(:focus-visible)` rule; keyboard Tab still shows outlines for accessibility)
+- fix: remove browser focus outline globally — covers ESC-to-close and all keyboard/mouse interactions (Electron desktop app, no Tab-navigation needed)
 - fix: prevent duplicate sidecar spawns from concurrent start calls (React StrictMode double-invoke)
 - fix: sidecar start recovers from port conflict by reusing existing instance instead of failing
 - fix: sidecar start errors no longer spam Electron console — return `{ ok, error }` instead of throwing from IPC handler
