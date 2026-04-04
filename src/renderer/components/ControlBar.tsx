@@ -36,6 +36,7 @@ function SidecarPopover({
   ttsProviderReady,
   ttsProviderName,
   sidecarPort,
+  triggerRef,
   onStartSidecar,
   onStopSidecar,
   onClose,
@@ -45,6 +46,7 @@ function SidecarPopover({
   readonly ttsProviderReady: boolean;
   readonly ttsProviderName: string | null;
   readonly sidecarPort?: number;
+  readonly triggerRef: React.RefObject<HTMLDivElement | null>;
   readonly onStartSidecar?: () => void;
   readonly onStopSidecar?: () => void;
   readonly onClose: () => void;
@@ -53,16 +55,16 @@ function SidecarPopover({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      // Ignore clicks on the trigger (let the trigger's onClick handle toggle)
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current && !popoverRef.current.contains(target)) {
         onClose();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   const isRunning = sidecarReady && !sidecarStarting;
   const toggleOn = sidecarReady || (sidecarStarting ?? false);
@@ -262,6 +264,7 @@ export function ControlBar({
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const needsDownload = selectedModel && !selectedModel.downloaded;
   const [showPopover, setShowPopover] = useState(false);
+  const indicatorRef = useRef<HTMLDivElement>(null);
 
   // Derive indicator state
   let indicatorColor: string;
@@ -328,8 +331,6 @@ export function ControlBar({
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          position: "relative",
-          zIndex: 100,
         }}
       >
         <span
@@ -343,6 +344,7 @@ export function ControlBar({
           Capty
         </span>
         <div
+          ref={indicatorRef}
           role={indicatorClickable ? "button" : undefined}
           tabIndex={indicatorClickable ? 0 : undefined}
           onClick={
@@ -368,6 +370,8 @@ export function ControlBar({
             padding: "2px 6px",
             borderRadius: "4px",
             transition: "background-color 0.15s",
+            position: "relative",
+            zIndex: 100,
             ...(indicatorClickable
               ? {
                   backgroundColor: showPopover
@@ -403,21 +407,22 @@ export function ControlBar({
           >
             {indicatorLabel}
           </span>
-        </div>
 
-        {/* Sidecar popover */}
-        {showPopover && isSidecarActive && (
-          <SidecarPopover
-            sidecarReady={sidecarReady}
-            sidecarStarting={sidecarStarting}
-            ttsProviderReady={ttsProviderReady}
-            ttsProviderName={ttsProviderName}
-            sidecarPort={sidecarPort}
-            onStartSidecar={onStartSidecar}
-            onStopSidecar={onStopSidecar}
-            onClose={() => setShowPopover(false)}
-          />
-        )}
+          {/* Sidecar popover — anchored to indicator so left edge aligns with dot */}
+          {showPopover && isSidecarActive && (
+            <SidecarPopover
+              sidecarReady={sidecarReady}
+              sidecarStarting={sidecarStarting}
+              ttsProviderReady={ttsProviderReady}
+              ttsProviderName={ttsProviderName}
+              sidecarPort={sidecarPort}
+              triggerRef={indicatorRef}
+              onStartSidecar={onStartSidecar}
+              onStopSidecar={onStopSidecar}
+              onClose={() => setShowPopover(false)}
+            />
+          )}
+        </div>
       </div>
 
       <div style={{ flex: 1 }} />
