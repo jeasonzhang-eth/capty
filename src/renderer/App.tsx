@@ -44,6 +44,7 @@ function App(): React.JSX.Element {
     "active" | "failed" | null
   >(null);
   const [sidecarStarting, setSidecarStarting] = useState(false);
+  const [autoStartSidecar, setAutoStartSidecar] = useState(true);
 
   const computeDownloadBadge = useCallback(
     (list: readonly DownloadItem[]): "active" | "failed" | null => {
@@ -539,12 +540,43 @@ function App(): React.JSX.Element {
           setSelectedTtsVoice(savedTtsVoice);
         }
 
-        // Check sidecar health
+        // Restore autoStartSidecar setting
+        const cfgAutoStart = config.autoStartSidecar as boolean | undefined;
+        if (cfgAutoStart !== undefined) {
+          setAutoStartSidecar(cfgAutoStart);
+        }
+
+        // Check sidecar health + auto-start if configured
+        const hasSidecar = (
+          config.asrProviders as Array<{ isSidecar?: boolean }> | undefined
+        )?.some((p) => p.isSidecar);
+        let sidecarOnline = false;
         try {
           const health = await window.capty.checkSidecarHealth();
+          sidecarOnline = health.online;
           store.setSidecarReady(health.online);
         } catch {
           store.setSidecarReady(false);
+        }
+
+        // Auto-start sidecar if configured and not already running
+        if (cfgAutoStart !== false && hasSidecar && !sidecarOnline) {
+          setSidecarStarting(true);
+          try {
+            await window.capty.startSidecar();
+            const h = await window.capty.checkSidecarHealth();
+            store.setSidecarReady(h.online);
+            try {
+              const tts = await window.capty.checkTtsProvider();
+              store.setTtsProviderReady(tts.ready);
+            } catch {
+              /* best-effort */
+            }
+          } catch {
+            /* silent */
+          } finally {
+            setSidecarStarting(false);
+          }
         }
 
         // Load ASR models and restore selected model
@@ -1282,6 +1314,12 @@ function App(): React.JSX.Element {
   const handleSearchModels = useCallback(async (query: string) => {
     const results = await window.capty.searchModels(query);
     return results as Parameters<typeof store.setModels>[0];
+  }, []);
+
+  const handleChangeAutoStartSidecar = useCallback(async (value: boolean) => {
+    setAutoStartSidecar(value);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({ ...config, autoStartSidecar: value });
   }, []);
 
   const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
@@ -2410,6 +2448,8 @@ function App(): React.JSX.Element {
           onChangeTranslateModel={handleChangeTranslateModel}
           translatePrompt={translatePrompt}
           onChangeTranslatePrompt={handleChangeTranslatePrompt}
+          autoStartSidecar={autoStartSidecar}
+          onChangeAutoStartSidecar={handleChangeAutoStartSidecar}
           onClose={() => setShowSettings(false)}
         />
       )}

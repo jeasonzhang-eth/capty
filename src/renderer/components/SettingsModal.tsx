@@ -134,6 +134,8 @@ interface SettingsModalProps {
   }) => void;
   readonly translatePrompt: string;
   readonly onChangeTranslatePrompt: (prompt: string) => void;
+  readonly autoStartSidecar: boolean;
+  readonly onChangeAutoStartSidecar: (value: boolean) => void;
   readonly onClose: () => void;
 }
 
@@ -1362,6 +1364,8 @@ function SpeechTab({
   hfMirrorUrl,
   defaultHfUrl,
   downloads,
+  autoStartSidecar,
+  onChangeAutoStartSidecar,
   onSaveAsrSettings,
   onSelectModel,
   onDownloadModel,
@@ -1395,6 +1399,8 @@ function SpeechTab({
       error?: string;
     }
   >;
+  readonly autoStartSidecar: boolean;
+  readonly onChangeAutoStartSidecar: (value: boolean) => void;
   readonly onSaveAsrSettings: (settings: {
     asrProviders: AsrProviderConfig[];
     selectedAsrProviderId: string | null;
@@ -1914,6 +1920,71 @@ function SpeechTab({
                             Save
                           </button>
                         </div>
+                      </div>
+
+                      {/* Auto-start Engine */}
+                      <div
+                        style={{
+                          marginTop: "16px",
+                          borderTop: "1px solid var(--border)",
+                          paddingTop: "12px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "13px",
+                              fontWeight: 500,
+                              color: "var(--text-primary)",
+                            }}
+                          >
+                            Auto-start engine
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Start sidecar automatically when app launches
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            onChangeAutoStartSidecar(!autoStartSidecar)
+                          }
+                          style={{
+                            position: "relative",
+                            width: "36px",
+                            height: "20px",
+                            borderRadius: "10px",
+                            border: "none",
+                            backgroundColor: autoStartSidecar
+                              ? "var(--accent)"
+                              : "var(--bg-surface)",
+                            cursor: "pointer",
+                            transition: "background-color 0.2s",
+                            flexShrink: 0,
+                            padding: 0,
+                          }}
+                        >
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: "2px",
+                              left: autoStartSidecar ? "18px" : "2px",
+                              width: "16px",
+                              height: "16px",
+                              borderRadius: "50%",
+                              backgroundColor: "#fff",
+                              transition: "left 0.2s",
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                            }}
+                          />
+                        </button>
                       </div>
 
                       {/* Model Market Entry */}
@@ -4596,6 +4667,8 @@ export function SettingsModal({
   onChangeTranslateModel,
   translatePrompt,
   onChangeTranslatePrompt,
+  autoStartSidecar,
+  onChangeAutoStartSidecar,
   onClose,
 }: SettingsModalProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabId>("general");
@@ -4799,6 +4872,8 @@ export function SettingsModal({
                 hfMirrorUrl={hfMirrorUrl}
                 defaultHfUrl={defaultHfUrl}
                 downloads={downloads}
+                autoStartSidecar={autoStartSidecar}
+                onChangeAutoStartSidecar={onChangeAutoStartSidecar}
                 onSaveAsrSettings={onSaveAsrSettings}
                 onSelectModel={onSelectModel}
                 onDownloadModel={onDownloadModel}
