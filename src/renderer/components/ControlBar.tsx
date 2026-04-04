@@ -434,6 +434,7 @@ export function ControlBar({
             cursor: indicatorClickable ? "pointer" : "default",
             padding: "2px 6px",
             borderRadius: "4px",
+            outline: "none",
             transition: "background-color 0.15s",
             position: "relative",
             zIndex: 100,

@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: remove white focus outline on sidecar indicator after ESC closes popover
 - fix: prevent duplicate sidecar spawns from concurrent start calls (React StrictMode double-invoke)
 - fix: sidecar start recovers from port conflict by reusing existing instance instead of failing
 - fix: sidecar start errors no longer spam Electron console — return `{ ok, error }` instead of throwing from IPC handler
