@@ -684,7 +684,7 @@ function ModelCard({
               Active
             </span>
           )}
-          {model.downloaded && !isSelected && onDelete && (
+          {model.downloaded && onDelete && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -851,13 +851,9 @@ function InlineModelMarket({
   const installed = models.filter((m) => m.downloaded);
   const recommended = models.filter((m) => !m.downloaded);
 
-  const handleDeleteModel = useCallback(
-    (modelId: string) => {
-      if (modelId === selectedModelId) return;
-      setConfirmDeleteId(modelId);
-    },
-    [selectedModelId],
-  );
+  const handleDeleteModel = useCallback((modelId: string) => {
+    setConfirmDeleteId(modelId);
+  }, []);
 
   const confirmDelete = useCallback(() => {
     if (confirmDeleteId) {

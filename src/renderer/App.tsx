@@ -1294,14 +1294,12 @@ function App(): React.JSX.Element {
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
 
-        // If deleted model was selected, switch to first usable model
+        // If deleted model was selected, switch to first usable model or clear
         if (store.selectedModelId === modelId) {
           const firstUsable = (
             models as { id: string; downloaded: boolean; supported?: boolean }[]
           ).find((m) => m.downloaded && m.supported !== false);
-          if (firstUsable) {
-            store.setSelectedModelId(firstUsable.id);
-          }
+          store.setSelectedModelId(firstUsable ? firstUsable.id : "");
         }
       } catch (err) {
         console.error("Failed to delete model:", err);
@@ -1807,7 +1805,12 @@ function App(): React.JSX.Element {
           const firstDownloaded = (
             ttsList as Array<{ id: string; downloaded: boolean }>
           ).find((m) => m.downloaded);
-          if (firstDownloaded) setSelectedTtsModelId(firstDownloaded.id);
+          const newId = firstDownloaded ? firstDownloaded.id : "";
+          setSelectedTtsModelId(newId);
+          await window.capty.setConfig({
+            ...(await window.capty.getConfig()),
+            selectedTtsModelId: newId || null,
+          });
         }
       } catch (err) {
         console.error("Failed to delete TTS model:", err);
