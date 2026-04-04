@@ -5,6 +5,8 @@ All notable changes to Capty are documented in this file.
 ## 2026-04-04
 
 - refactor: unify ASR/TTS test logic — sidecar and external providers use the same real test (sine wave for ASR, "Hello" for TTS) instead of health-check shortcut
+- fix: disable Test button when no model is loaded for sidecar ASR/TTS providers
+- refactor: remove redundant "Engine URL / Port" display from sidecar ASR provider settings
 - feat: auto-start sidecar engine on app launch (configurable via Settings → General)
 - refactor: decouple sidecar auto-start from ASR provider list — sidecar is an independent engine
 - refactor: remove sidecar toggle from SetupWizard to simplify onboarding

@@ -1827,7 +1827,10 @@ function SpeechTab({
                       e.stopPropagation();
                       handleTestProvider(provider);
                     }}
-                    disabled={testingId === provider.id}
+                    disabled={
+                      testingId === provider.id ||
+                      (provider.isSidecar && !selectedModelId)
+                    }
                     style={{
                       ...secondaryBtnStyle,
                       height: "28px",
@@ -1835,9 +1838,21 @@ function SpeechTab({
                       fontSize: "11px",
                       color: "var(--text-secondary)",
                       cursor:
-                        testingId === provider.id ? "not-allowed" : "pointer",
-                      opacity: testingId === provider.id ? 0.6 : 1,
+                        testingId === provider.id ||
+                        (provider.isSidecar && !selectedModelId)
+                          ? "not-allowed"
+                          : "pointer",
+                      opacity:
+                        testingId === provider.id ||
+                        (provider.isSidecar && !selectedModelId)
+                          ? 0.4
+                          : 1,
                     }}
+                    title={
+                      provider.isSidecar && !selectedModelId
+                        ? "Select an ASR model first"
+                        : undefined
+                    }
                   >
                     {testingId === provider.id ? "Testing..." : "Test"}
                   </button>
@@ -1911,46 +1926,6 @@ function SpeechTab({
                 >
                   {provider.isSidecar ? (
                     <>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
-                        }}
-                      >
-                        <div>
-                          <div style={labelStyle}>Engine URL</div>
-                          <div
-                            style={{
-                              ...inputStyle,
-                              backgroundColor: "var(--bg-surface)",
-                              color: "var(--text-muted)",
-                              fontFamily: "'JetBrains Mono', monospace",
-                              cursor: "default",
-                              userSelect: "text",
-                            }}
-                          >
-                            Using local engine on port{" "}
-                            {(() => {
-                              try {
-                                return new URL(editForm.baseUrl).port || "8765";
-                              } catch {
-                                return "8765";
-                              }
-                            })()}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                              marginTop: "4px",
-                            }}
-                          >
-                            Port is managed in General tab
-                          </div>
-                        </div>
-                      </div>
-
                       {/* Model Market Entry */}
                       <div
                         style={{
@@ -2605,7 +2580,10 @@ function TtsTab({
                       e.stopPropagation();
                       handleTestProvider(provider);
                     }}
-                    disabled={testingId === provider.id}
+                    disabled={
+                      testingId === provider.id ||
+                      (provider.isSidecar && !selectedTtsModelId)
+                    }
                     style={{
                       ...secondaryBtnStyle,
                       height: "28px",
@@ -2613,9 +2591,21 @@ function TtsTab({
                       fontSize: "11px",
                       color: "var(--text-secondary)",
                       cursor:
-                        testingId === provider.id ? "not-allowed" : "pointer",
-                      opacity: testingId === provider.id ? 0.6 : 1,
+                        testingId === provider.id ||
+                        (provider.isSidecar && !selectedTtsModelId)
+                          ? "not-allowed"
+                          : "pointer",
+                      opacity:
+                        testingId === provider.id ||
+                        (provider.isSidecar && !selectedTtsModelId)
+                          ? 0.4
+                          : 1,
                     }}
+                    title={
+                      provider.isSidecar && !selectedTtsModelId
+                        ? "Select a TTS model first"
+                        : undefined
+                    }
                   >
                     {testingId === provider.id ? "Testing..." : "Test"}
                   </button>
