@@ -62,6 +62,7 @@ export function SetupWizard({
   const [step, setStep] = useState(0);
   const [dataDir, setDataDir] = useState("");
   const [useHfMirror, setUseHfMirror] = useState(false);
+  const [useSidecar, setUseSidecar] = useState(true);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
 
   // Load default data dir on mount
@@ -78,9 +79,19 @@ export function SetupWizard({
 
   const handleGetStarted = useCallback(async () => {
     const hfMirrorUrl = useHfMirror ? "https://hf-mirror.com" : null;
-    await window.capty.setConfig({ dataDir, hfMirrorUrl });
+    const configUpdate: Record<string, unknown> = { dataDir, hfMirrorUrl };
+
+    // If user opts out of sidecar, clear the default sidecar providers
+    if (!useSidecar) {
+      configUpdate.asrProviders = [];
+      configUpdate.selectedAsrProviderId = null;
+      configUpdate.ttsProviders = [];
+      configUpdate.selectedTtsProviderId = null;
+    }
+
+    await window.capty.setConfig(configUpdate);
     setStep(1);
-  }, [dataDir, useHfMirror]);
+  }, [dataDir, useHfMirror, useSidecar]);
 
   const handleFinish = useCallback(
     async (skipKeys: boolean) => {
@@ -219,6 +230,55 @@ export function SetupWizard({
                   Change
                 </button>
               </div>
+            </div>
+
+            {/* Local Sidecar */}
+            <div style={cardStyle}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={useSidecar}
+                  onChange={(e) => setUseSidecar(e.target.checked)}
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    accentColor: "var(--accent)",
+                    marginTop: "2px",
+                    flexShrink: 0,
+                  }}
+                />
+                <div>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: 500,
+                      color: "var(--text-primary)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    Enable local ASR/TTS engine (Sidecar)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-muted)",
+                      fontFamily: "'DM Sans', sans-serif",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Runs speech recognition and text-to-speech locally on your
+                    machine. No internet required, fully private. Disable if you
+                    only use cloud API providers.
+                  </div>
+                </div>
+              </label>
             </div>
 
             {/* HuggingFace Mirror */}

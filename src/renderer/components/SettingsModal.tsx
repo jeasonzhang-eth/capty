@@ -1895,33 +1895,6 @@ function SpeechTab({
                         </div>
                         <div
                           style={{
-                            padding: "10px 12px",
-                            backgroundColor: "var(--bg-primary)",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                            color: "var(--text-muted)",
-                            lineHeight: "18px",
-                          }}
-                        >
-                          <div style={{ marginBottom: "4px", fontWeight: 600 }}>
-                            Start command:
-                          </div>
-                          <code
-                            style={{
-                              display: "block",
-                              padding: "6px 8px",
-                              backgroundColor: "var(--bg-tertiary)",
-                              borderRadius: "4px",
-                              fontFamily: "'JetBrains Mono', monospace",
-                              fontSize: "11px",
-                              wordBreak: "break-all",
-                            }}
-                          >
-                            capty-sidecar --models-dir {modelsDir} --port 8765
-                          </code>
-                        </div>
-                        <div
-                          style={{
                             display: "flex",
                             justifyContent: "flex-end",
                             marginTop: "4px",
