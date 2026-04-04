@@ -137,33 +137,40 @@ function SidecarPopover({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-          <span
-            style={{
-              width: "5px",
-              height: "5px",
-              borderRadius: "50%",
-              backgroundColor: sidecarStarting
-                ? "#f59e0b"
-                : isRunning
-                  ? "#4ADE80"
-                  : "var(--text-muted)",
-              display: "inline-block",
-              boxShadow: sidecarStarting
-                ? "0 0 4px rgba(245, 158, 11, 0.5)"
-                : isRunning
+          {sidecarStarting ? (
+            /* Spinner during startup */
+            <span
+              style={{
+                width: "10px",
+                height: "10px",
+                border: "1.5px solid rgba(245, 158, 11, 0.25)",
+                borderTopColor: "#f59e0b",
+                borderRadius: "50%",
+                display: "inline-block",
+                animation: "spin 0.8s linear infinite",
+                flexShrink: 0,
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                width: "5px",
+                height: "5px",
+                borderRadius: "50%",
+                backgroundColor: isRunning ? "#4ADE80" : "var(--text-muted)",
+                display: "inline-block",
+                boxShadow: isRunning
                   ? "0 0 4px rgba(74, 222, 128, 0.4)"
                   : "none",
-              animation: sidecarStarting
-                ? "breathe 1.5s ease-in-out infinite"
-                : undefined,
-              flexShrink: 0,
-            }}
-          />
+                flexShrink: 0,
+              }}
+            />
+          )}
           <span
             style={{
               fontSize: "11px",
               fontWeight: 600,
-              color: "var(--text-primary)",
+              color: sidecarStarting ? "#f59e0b" : "var(--text-primary)",
             }}
           >
             {sidecarStarting ? "Starting…" : isRunning ? "Running" : "Stopped"}
