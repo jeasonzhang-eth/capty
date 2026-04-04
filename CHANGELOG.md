@@ -4,7 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-04
 
-- feat: auto-start sidecar engine on app launch (configurable via Settings → Speech)
+- feat: auto-start sidecar engine on app launch (configurable via Settings → General)
+- refactor: decouple sidecar auto-start from ASR provider list — sidecar is an independent engine
 - refactor: remove sidecar toggle from SetupWizard to simplify onboarding
 - refactor: replace ControlBar ASR/TTS status indicators with unified Sidecar popover (toggle, ASR/TTS status, port)
 - fix: sidecar popover hidden behind content panels (z-index)

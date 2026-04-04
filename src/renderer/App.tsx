@@ -546,10 +546,7 @@ function App(): React.JSX.Element {
           setAutoStartSidecar(cfgAutoStart);
         }
 
-        // Check sidecar health + auto-start if configured
-        const hasSidecar = (
-          config.asrProviders as Array<{ isSidecar?: boolean }> | undefined
-        )?.some((p) => p.isSidecar);
+        // Check sidecar health
         let sidecarOnline = false;
         try {
           const health = await window.capty.checkSidecarHealth();
@@ -560,7 +557,7 @@ function App(): React.JSX.Element {
         }
 
         // Auto-start sidecar if configured and not already running
-        if (cfgAutoStart !== false && hasSidecar && !sidecarOnline) {
+        if (cfgAutoStart !== false && !sidecarOnline) {
           setSidecarStarting(true);
           try {
             await window.capty.startSidecar();
