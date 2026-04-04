@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- refactor: inline Model Market into ASR/TTS sidecar provider expand area (no more separate modal popup)
 - refactor: LLM Provider uses expand/collapse mode with chevron (matches ASR/TTS pattern), remove Edit button
 - fix: LLM Test button always visible, disabled when no API key or no models (with tooltip hints)
 - fix: LLM Test uses first model from models list instead of legacy `provider.model`

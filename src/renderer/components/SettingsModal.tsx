@@ -693,29 +693,9 @@ function ModelCard({
   );
 }
 
-/* ─── Model Market Modal ─── */
+/* ─── Inline Model Market (used inside provider expand areas) ─── */
 
-function ModelMarketModal({
-  models,
-  selectedModelId,
-  isDownloading,
-  downloadingModelId,
-  downloadProgress,
-  downloadError,
-  isRecording,
-  hfMirrorUrl,
-  defaultHfUrl,
-  downloads,
-  onSelectModel,
-  onDownloadModel,
-  onDeleteModel,
-  onSearchModels,
-  onChangeHfMirrorUrl,
-  onPauseDownload,
-  onResumeDownload,
-  onCancelDownload,
-  onClose,
-}: {
+interface InlineModelMarketProps {
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
@@ -743,8 +723,28 @@ function ModelMarketModal({
   readonly onPauseDownload: (modelId: string) => void;
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
-  readonly onClose: () => void;
-}): React.ReactElement {
+}
+
+function InlineModelMarket({
+  models,
+  selectedModelId,
+  isDownloading,
+  downloadingModelId,
+  downloadProgress,
+  downloadError,
+  isRecording,
+  hfMirrorUrl,
+  defaultHfUrl,
+  downloads,
+  onSelectModel,
+  onDownloadModel,
+  onDeleteModel,
+  onSearchModels,
+  onChangeHfMirrorUrl,
+  onPauseDownload,
+  onResumeDownload,
+  onCancelDownload,
+}: InlineModelMarketProps): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -835,212 +835,173 @@ function ModelMarketModal({
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0,0,0,0.7)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 4000,
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Search */}
+      <div style={{ display: "flex", gap: "6px" }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="Search models on HuggingFace..."
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <button
+          onClick={handleSearch}
+          disabled={isSearching || !searchQuery.trim()}
+          style={{
+            ...primaryBtnStyle,
+            cursor:
+              isSearching || !searchQuery.trim() ? "not-allowed" : "pointer",
+            opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
+          }}
+        >
+          {isSearching ? "Searching..." : "Search"}
+        </button>
+      </div>
+
+      {/* HuggingFace Mirror URL */}
       <div
         style={{
-          backgroundColor: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-          borderRadius: "12px",
-          width: "720px",
-          maxWidth: "90vw",
-          maxHeight: "90vh",
           display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
-          overflow: "hidden",
+          alignItems: "center",
+          gap: "6px",
         }}
       >
-        {/* Header */}
+        <span
+          style={{
+            fontSize: "11px",
+            color: "var(--text-muted)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          HuggingFace Mirror:
+        </span>
+        <input
+          type="text"
+          value={editingHfUrl}
+          onChange={(e) => setEditingHfUrl(e.target.value)}
+          placeholder={defaultHfUrl}
+          style={{
+            ...inputStyle,
+            flex: 1,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: "11px",
+          }}
+        />
+        {hfUrlChanged && (
+          <button
+            onClick={handleSaveHfUrl}
+            style={{ ...primaryBtnStyle, fontSize: "11px" }}
+          >
+            Save
+          </button>
+        )}
+        {!hfUrlChanged && hfUrlSaved && (
+          <span
+            style={{
+              fontSize: "11px",
+              color: "#4ADE80",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Saved
+          </span>
+        )}
+        <button
+          onClick={handleResetHfUrl}
+          disabled={editingHfUrl === defaultHfUrl}
+          style={{
+            ...secondaryBtnStyle,
+            fontSize: "11px",
+            padding: "0 8px",
+            color: "var(--text-muted)",
+            cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+            opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
+          }}
+          title="Reset to default"
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Download error */}
+      {downloadError && (
+        <div
+          style={{
+            padding: "8px 12px",
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "6px",
+            fontSize: "12px",
+            color: "#EF4444",
+            lineHeight: "18px",
+          }}
+        >
+          {downloadError}
+        </div>
+      )}
+
+      {/* Installed */}
+      <div>
+        <div style={sectionHeaderStyle}>Installed ({installed.length})</div>
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "16px 20px",
-            borderBottom: "1px solid var(--border)",
-            flexShrink: 0,
+            flexDirection: "column",
+            gap: "8px",
           }}
         >
-          <h2
-            style={{
-              fontSize: "16px",
-              fontWeight: 700,
-              margin: 0,
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            Model Market
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              fontSize: "18px",
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderRadius: "4px",
-            }}
-          >
-            &times;
-          </button>
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
-          {/* Search */}
-          <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search models on HuggingFace..."
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <button
-              onClick={handleSearch}
-              disabled={isSearching || !searchQuery.trim()}
-              style={{
-                ...primaryBtnStyle,
-                cursor:
-                  isSearching || !searchQuery.trim()
-                    ? "not-allowed"
-                    : "pointer",
-                opacity: isSearching || !searchQuery.trim() ? 0.5 : 1,
-              }}
-            >
-              {isSearching ? "Searching..." : "Search"}
-            </button>
-          </div>
-
-          {/* HuggingFace Mirror URL */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              marginBottom: "16px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              HuggingFace Mirror:
-            </span>
-            <input
-              type="text"
-              value={editingHfUrl}
-              onChange={(e) => setEditingHfUrl(e.target.value)}
-              placeholder={defaultHfUrl}
-              style={{
-                ...inputStyle,
-                flex: 1,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: "11px",
-              }}
-            />
-            {hfUrlChanged && (
-              <button
-                onClick={handleSaveHfUrl}
-                style={{ ...primaryBtnStyle, fontSize: "11px" }}
-              >
-                Save
-              </button>
-            )}
-            {!hfUrlChanged && hfUrlSaved && (
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "#4ADE80",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Saved
-              </span>
-            )}
-            <button
-              onClick={handleResetHfUrl}
-              disabled={editingHfUrl === defaultHfUrl}
-              style={{
-                ...secondaryBtnStyle,
-                fontSize: "11px",
-                padding: "0 8px",
-                color: "var(--text-muted)",
-                cursor:
-                  editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
-                opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
-              }}
-              title="Reset to default"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Download error */}
-          {downloadError && (
+          {installed.length === 0 && (
             <div
               style={{
-                padding: "8px 12px",
-                marginBottom: "12px",
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                borderRadius: "6px",
+                padding: "12px",
+                textAlign: "center",
+                color: "var(--text-muted)",
                 fontSize: "12px",
-                color: "#EF4444",
-                lineHeight: "18px",
               }}
             >
-              {downloadError}
+              No models installed yet.
             </div>
           )}
+          {installed.map((model) => (
+            <ModelCard
+              key={model.id}
+              model={model}
+              isSelected={model.id === selectedModelId}
+              isThisDownloading={
+                isDownloading && downloadingModelId === model.id
+              }
+              downloadProgress={
+                downloads[model.id]?.percent ?? downloadProgress
+              }
+              downloadStatus={downloads[model.id]?.status ?? null}
+              downloadError={downloads[model.id]?.error ?? null}
+              isRecording={isRecording}
+              isDownloading={isDownloading}
+              onDownloadModel={onDownloadModel}
+              onSelectModel={onSelectModel}
+              onDelete={handleDeleteModel}
+              onPause={onPauseDownload}
+              onResume={onResumeDownload}
+              onCancel={onCancelDownload}
+            />
+          ))}
+        </div>
+      </div>
 
-          {/* Installed */}
-          <div style={sectionHeaderStyle}>Installed ({installed.length})</div>
+      {/* Recommended */}
+      {recommended.length > 0 && (
+        <div>
+          <div style={sectionHeaderStyle}>Recommended</div>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               gap: "8px",
-              marginBottom: "20px",
             }}
           >
-            {installed.length === 0 && (
-              <div
-                style={{
-                  padding: "12px",
-                  textAlign: "center",
-                  color: "var(--text-muted)",
-                  fontSize: "12px",
-                }}
-              >
-                No models installed yet.
-              </div>
-            )}
-            {installed.map((model) => (
+            {recommended.map((model) => (
               <ModelCard
                 key={model.id}
                 model={model}
@@ -1057,104 +1018,65 @@ function ModelMarketModal({
                 isDownloading={isDownloading}
                 onDownloadModel={onDownloadModel}
                 onSelectModel={onSelectModel}
-                onDelete={handleDeleteModel}
+                onDelete={null}
                 onPause={onPauseDownload}
                 onResume={onResumeDownload}
                 onCancel={onCancelDownload}
               />
             ))}
           </div>
-
-          {/* Recommended */}
-          {recommended.length > 0 && (
-            <>
-              <div style={sectionHeaderStyle}>Recommended</div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  marginBottom: "20px",
-                }}
-              >
-                {recommended.map((model) => (
-                  <ModelCard
-                    key={model.id}
-                    model={model}
-                    isSelected={model.id === selectedModelId}
-                    isThisDownloading={
-                      isDownloading && downloadingModelId === model.id
-                    }
-                    downloadProgress={
-                      downloads[model.id]?.percent ?? downloadProgress
-                    }
-                    downloadStatus={downloads[model.id]?.status ?? null}
-                    downloadError={downloads[model.id]?.error ?? null}
-                    isRecording={isRecording}
-                    isDownloading={isDownloading}
-                    onDownloadModel={onDownloadModel}
-                    onSelectModel={onSelectModel}
-                    onDelete={null}
-                    onPause={onPauseDownload}
-                    onResume={onResumeDownload}
-                    onCancel={onCancelDownload}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Search Results */}
-          {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
-            <>
-              <div style={sectionHeaderStyle}>Search Results</div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                }}
-              >
-                {searchResults.map((model) => (
-                  <ModelCard
-                    key={model.id}
-                    model={model}
-                    isSelected={model.id === selectedModelId}
-                    isThisDownloading={
-                      isDownloading && downloadingModelId === model.id
-                    }
-                    downloadProgress={
-                      downloads[model.id]?.percent ?? downloadProgress
-                    }
-                    downloadStatus={downloads[model.id]?.status ?? null}
-                    downloadError={downloads[model.id]?.error ?? null}
-                    isRecording={isRecording}
-                    isDownloading={isDownloading}
-                    onDownloadModel={onDownloadModel}
-                    onSelectModel={onSelectModel}
-                    onDelete={null}
-                    onPause={onPauseDownload}
-                    onResume={onResumeDownload}
-                    onCancel={onCancelDownload}
-                  />
-                ))}
-                {hasSearched && !isSearching && searchResults.length === 0 && (
-                  <div
-                    style={{
-                      padding: "12px",
-                      textAlign: "center",
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                    }}
-                  >
-                    No models found. Try different keywords.
-                  </div>
-                )}
-              </div>
-            </>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* Search Results */}
+      {(searchResults.length > 0 || (hasSearched && !isSearching)) && (
+        <div>
+          <div style={sectionHeaderStyle}>Search Results</div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+            }}
+          >
+            {searchResults.map((model) => (
+              <ModelCard
+                key={model.id}
+                model={model}
+                isSelected={model.id === selectedModelId}
+                isThisDownloading={
+                  isDownloading && downloadingModelId === model.id
+                }
+                downloadProgress={
+                  downloads[model.id]?.percent ?? downloadProgress
+                }
+                downloadStatus={downloads[model.id]?.status ?? null}
+                downloadError={downloads[model.id]?.error ?? null}
+                isRecording={isRecording}
+                isDownloading={isDownloading}
+                onDownloadModel={onDownloadModel}
+                onSelectModel={onSelectModel}
+                onDelete={null}
+                onPause={onPauseDownload}
+                onResume={onResumeDownload}
+                onCancel={onCancelDownload}
+              />
+            ))}
+            {hasSearched && !isSearching && searchResults.length === 0 && (
+              <div
+                style={{
+                  padding: "12px",
+                  textAlign: "center",
+                  color: "var(--text-muted)",
+                  fontSize: "12px",
+                }}
+              >
+                No models found. Try different keywords.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation dialog */}
       {confirmDeleteId !== null && (
@@ -1506,9 +1428,6 @@ function SpeechTab({
   const [useCustomModel, setUseCustomModel] = useState<Record<string, boolean>>(
     {},
   );
-
-  // Model Market modal state
-  const [showModelMarket, setShowModelMarket] = useState(false);
 
   const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
 
@@ -1925,43 +1844,26 @@ function SpeechTab({
                   }}
                 >
                   {provider.isSidecar ? (
-                    <>
-                      {/* Model Market Entry */}
-                      <div
-                        style={{
-                          marginTop: "16px",
-                          borderTop: "1px solid var(--border)",
-                          paddingTop: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
-                          <div>
-                            <div style={sectionTitleStyle}>Model Market</div>
-                            <div
-                              style={{
-                                fontSize: "12px",
-                                color: "var(--text-muted)",
-                              }}
-                            >
-                              {models.filter((m) => m.downloaded).length}{" "}
-                              model(s) installed
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setShowModelMarket(true)}
-                            style={primaryBtnStyle}
-                          >
-                            Browse
-                          </button>
-                        </div>
-                      </div>
-                    </>
+                    <InlineModelMarket
+                      models={models}
+                      selectedModelId={selectedModelId}
+                      isDownloading={isDownloading}
+                      downloadingModelId={downloadingModelId}
+                      downloadProgress={downloadProgress}
+                      downloadError={downloadError}
+                      isRecording={isRecording}
+                      hfMirrorUrl={hfMirrorUrl}
+                      defaultHfUrl={defaultHfUrl}
+                      downloads={downloads}
+                      onSelectModel={onSelectModel}
+                      onDownloadModel={onDownloadModel}
+                      onDeleteModel={onDeleteModel}
+                      onSearchModels={onSearchModels}
+                      onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                      onPauseDownload={onPauseDownload}
+                      onResumeDownload={onResumeDownload}
+                      onCancelDownload={onCancelDownload}
+                    />
                   ) : (
                     <>
                       <div
@@ -2151,31 +2053,6 @@ function SpeechTab({
           );
         })}
       </div>
-
-      {/* Model Market Modal */}
-      {showModelMarket && (
-        <ModelMarketModal
-          models={models}
-          selectedModelId={selectedModelId}
-          isDownloading={isDownloading}
-          downloadingModelId={downloadingModelId}
-          downloadProgress={downloadProgress}
-          downloadError={downloadError}
-          isRecording={isRecording}
-          hfMirrorUrl={hfMirrorUrl}
-          defaultHfUrl={defaultHfUrl}
-          downloads={downloads}
-          onSelectModel={onSelectModel}
-          onDownloadModel={onDownloadModel}
-          onDeleteModel={onDeleteModel}
-          onSearchModels={onSearchModels}
-          onChangeHfMirrorUrl={onChangeHfMirrorUrl}
-          onPauseDownload={onPauseDownload}
-          onResumeDownload={onResumeDownload}
-          onCancelDownload={onCancelDownload}
-          onClose={() => setShowModelMarket(false)}
-        />
-      )}
     </>
   );
 }
@@ -2255,7 +2132,6 @@ function TtsTab({
     model: "",
     voice: "auto",
   });
-  const [showModelMarket, setShowModelMarket] = useState(false);
   const [testResults, setTestResults] = useState<
     Record<string, { ok: boolean; message: string }>
   >({});
@@ -2638,18 +2514,26 @@ function TtsTab({
                   }}
                 >
                   {provider.isSidecar ? (
-                    <>
-                      <div style={sectionDescStyle}>
-                        TTS models are managed by the local sidecar. Use the TTS
-                        Model Market to download models.
-                      </div>
-                      <button
-                        onClick={() => setShowModelMarket(true)}
-                        style={{ ...primaryBtnStyle, marginBottom: "8px" }}
-                      >
-                        Open TTS Model Market
-                      </button>
-                    </>
+                    <InlineModelMarket
+                      models={ttsModels}
+                      selectedModelId={selectedTtsModelId}
+                      isDownloading={isTtsDownloading}
+                      downloadingModelId={ttsDownloadingModelId}
+                      downloadProgress={ttsDownloadProgress}
+                      downloadError={ttsDownloadError}
+                      isRecording={isRecording}
+                      hfMirrorUrl={hfMirrorUrl}
+                      defaultHfUrl={defaultHfUrl}
+                      downloads={downloads}
+                      onSelectModel={onSelectTtsModel}
+                      onDownloadModel={onDownloadTtsModel}
+                      onDeleteModel={onDeleteTtsModel}
+                      onSearchModels={onSearchTtsModels}
+                      onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                      onPauseDownload={onPauseDownload}
+                      onResumeDownload={onResumeDownload}
+                      onCancelDownload={onCancelDownload}
+                    />
                   ) : (
                     <>
                       <div
@@ -2773,31 +2657,6 @@ function TtsTab({
           );
         })}
       </div>
-
-      {/* TTS Model Market Modal */}
-      {showModelMarket && (
-        <ModelMarketModal
-          models={ttsModels}
-          selectedModelId={selectedTtsModelId}
-          isDownloading={isTtsDownloading}
-          downloadingModelId={ttsDownloadingModelId}
-          downloadProgress={ttsDownloadProgress}
-          downloadError={ttsDownloadError}
-          isRecording={isRecording}
-          hfMirrorUrl={hfMirrorUrl}
-          defaultHfUrl={defaultHfUrl}
-          downloads={downloads}
-          onSelectModel={onSelectTtsModel}
-          onDownloadModel={onDownloadTtsModel}
-          onDeleteModel={onDeleteTtsModel}
-          onSearchModels={onSearchTtsModels}
-          onChangeHfMirrorUrl={onChangeHfMirrorUrl}
-          onPauseDownload={onPauseDownload}
-          onResumeDownload={onResumeDownload}
-          onCancelDownload={onCancelDownload}
-          onClose={() => setShowModelMarket(false)}
-        />
-      )}
     </>
   );
 }
