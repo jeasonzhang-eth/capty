@@ -1988,7 +1988,10 @@ function SpeechTab({
             <ProviderCard
               key={provider.id}
               provider={provider}
-              isActive={selectedId === provider.id}
+              isActive={
+                selectedId === provider.id &&
+                (!provider.isSidecar || !!selectedModelId)
+              }
               isExpanded={expandedId === provider.id}
               isRecording={isRecording}
               sidecarReady={sidecarReady}
@@ -2377,7 +2380,10 @@ function TtsTab({
           <ProviderCard
             key={provider.id}
             provider={provider}
-            isActive={selectedId === provider.id}
+            isActive={
+              selectedId === provider.id &&
+              (!provider.isSidecar || !!selectedTtsModelId)
+            }
             isExpanded={expandedId === provider.id}
             isRecording={isRecording}
             sidecarReady={sidecarReady}

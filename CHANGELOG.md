@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: hide "Active" badge on sidecar ASR/TTS provider when no model is selected
 - refactor: move HuggingFace Mirror URL config from ASR/TTS model markets to General tab (single source of truth)
 - fix: suppress noisy transformers warnings (tokenizer model_type mismatch, Mistral regex) during TTS model loading
 - fix: allow deleting the last/active model in ASR/TTS provider (delete button no longer hidden for selected model)
