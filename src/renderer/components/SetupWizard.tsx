@@ -56,7 +56,9 @@ const secondaryButtonStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
 };
 
-export function SetupWizard(_props: SetupWizardProps): React.ReactElement {
+export function SetupWizard({
+  onComplete,
+}: SetupWizardProps): React.ReactElement {
   const [step, setStep] = useState(0);
   const [dataDir, setDataDir] = useState("");
   const [useHfMirror, setUseHfMirror] = useState(false);
@@ -105,10 +107,11 @@ export function SetupWizard(_props: SetupWizardProps): React.ReactElement {
         });
         await window.capty.setConfig({ llmProviders: updated });
       }
-      // Relaunch the app so the main process initializes DB with the new dataDir
-      await window.capty.relaunch();
+      // Initialize DB in-process (no relaunch needed)
+      await window.capty.initDataDir(dataDir);
+      onComplete(dataDir);
     },
-    [apiKeys, dataDir],
+    [apiKeys, dataDir, onComplete],
   );
 
   const handleKeyChange = useCallback((providerId: string, value: string) => {

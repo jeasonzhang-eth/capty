@@ -21,6 +21,19 @@ import Database from "better-sqlite3";
 let mainWindow: BrowserWindow | null = null;
 let db: Database.Database | null = null;
 
+/**
+ * Proxy that forwards all property access to the real `db` instance.
+ * This allows IPC handlers to capture a stable reference at registration
+ * time while the actual database is initialized later (after SetupWizard).
+ */
+const dbProxy = new Proxy({} as Database.Database, {
+  get(_target, prop, receiver) {
+    if (!db) throw new Error("Database not initialized yet");
+    const value = Reflect.get(db, prop, receiver);
+    return typeof value === "function" ? value.bind(db) : value;
+  },
+});
+
 function createWindow(configDir: string): BrowserWindow {
   const config = readConfig(configDir);
   const saved = config.windowBounds;
@@ -137,24 +150,26 @@ app.whenReady().then(() => {
   const config = readConfig(configDir);
   const dataDir = config.dataDir;
 
-  // 3. Only initialize DB if dataDir is configured (skip for fresh installs
-  //    where SetupWizard hasn't run yet — the app will relaunch after wizard)
+  // 3. Initialize DB only if dataDir is already configured.
+  //    For fresh installs, DB stays null until SetupWizard calls app:init-data-dir.
   if (dataDir) {
     db = initDataDir(dataDir, configDir);
   }
 
-  // 4. Register IPC handlers (db may be null during setup wizard)
+  // 4. Register IPC handlers with dbProxy — a lazy proxy that forwards to
+  //    the real `db` once initialized. This lets handlers be registered once
+  //    and work regardless of whether DB is ready at registration time.
   registerIpcHandlers({
-    db: db!,
+    db: dbProxy,
     configDir,
     getMainWindow: () => mainWindow,
   });
 
-  // 5. Handle post-wizard relaunch: SetupWizard saves dataDir to config,
-  //    then calls this IPC to relaunch the app so DB initializes correctly.
-  ipcMain.handle("app:relaunch", () => {
-    app.relaunch();
-    app.quit();
+  // 5. Called by SetupWizard after saving dataDir to config.
+  //    Initializes DB in-process without relaunch.
+  ipcMain.handle("app:init-data-dir", (_event, newDataDir: string) => {
+    if (db) return; // already initialized
+    db = initDataDir(newDataDir, configDir);
   });
 
   // 6. Zoom IPC handlers

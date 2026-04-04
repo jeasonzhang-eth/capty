@@ -4,7 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-03
 
-- fix: defer DB initialization until dataDir is configured, relaunch app after SetupWizard
+- fix: defer DB initialization until dataDir is configured via lazy proxy (no relaunch)
 - fix: increase default window size from 900×670 to 1200×800 for better content display
 - feat: redesign SetupWizard as 2-step flow (Welcome + LLM API Key config)
 - feat: add default data directory (~/Documents/Capty) with change option
