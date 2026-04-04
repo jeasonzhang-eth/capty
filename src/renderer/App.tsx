@@ -9,6 +9,7 @@ import {
   SettingsModal,
   LlmProvider,
   TtsProviderConfig,
+  TabId,
 } from "./components/SettingsModal";
 import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
@@ -38,6 +39,9 @@ function App(): React.JSX.Element {
 
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    TabId | undefined
+  >(undefined);
   const [showDownloadManager, setShowDownloadManager] = useState(false);
   const [audioDownloads, setAudioDownloads] = useState<DownloadItem[]>([]);
   const [downloadBadge, setDownloadBadge] = useState<
@@ -2198,7 +2202,14 @@ function App(): React.JSX.Element {
         models={store.models}
         selectedModelId={store.selectedModelId}
         onModelChange={handleSelectModel}
-        onSettings={() => setShowSettings(true)}
+        onSettings={() => {
+          setSettingsInitialTab(undefined);
+          setShowSettings(true);
+        }}
+        onOpenSettingsTab={(tab) => {
+          setSettingsInitialTab(tab as TabId);
+          setShowSettings(true);
+        }}
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
         onDownloadModel={handleDownloadModel}
@@ -2447,6 +2458,7 @@ function App(): React.JSX.Element {
           onChangeTranslatePrompt={handleChangeTranslatePrompt}
           autoStartSidecar={autoStartSidecar}
           onChangeAutoStartSidecar={handleChangeAutoStartSidecar}
+          initialTab={settingsInitialTab}
           onClose={() => setShowSettings(false)}
         />
       )}

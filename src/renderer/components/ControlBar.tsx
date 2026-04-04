@@ -19,6 +19,7 @@ interface ControlBarProps {
   readonly selectedModelId: string;
   readonly onModelChange: (modelId: string) => void;
   readonly onSettings: () => void;
+  readonly onOpenSettingsTab?: (tab: string) => void;
   readonly isDownloading: boolean;
   readonly downloadProgress: number;
   readonly onDownloadModel: () => void;
@@ -42,6 +43,7 @@ function SidecarPopover({
   triggerRef,
   onStartSidecar,
   onStopSidecar,
+  onOpenSettingsTab,
   onClose,
 }: {
   readonly sidecarReady: boolean;
@@ -54,6 +56,7 @@ function SidecarPopover({
   readonly triggerRef: React.RefObject<HTMLDivElement | null>;
   readonly onStartSidecar?: () => void;
   readonly onStopSidecar?: () => void;
+  readonly onOpenSettingsTab?: (tab: string) => void;
   readonly onClose: () => void;
 }): React.ReactElement {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -225,7 +228,20 @@ function SidecarPopover({
       </div>
 
       {/* Detail rows */}
-      <div style={rowStyle}>
+      <div
+        style={{ ...rowStyle, cursor: "pointer", borderRadius: "4px" }}
+        onClick={() => {
+          onOpenSettingsTab?.("speech");
+          onClose();
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+        }}
+        title="Open ASR settings"
+      >
         <span style={labelStyle}>ASR</span>
         <span style={valueStyle}>
           <span style={dotStyle(isRunning && hasAsrModel)} />
@@ -234,7 +250,20 @@ function SidecarPopover({
       </div>
 
       {ttsProviderName && (
-        <div style={rowStyle}>
+        <div
+          style={{ ...rowStyle, cursor: "pointer", borderRadius: "4px" }}
+          onClick={() => {
+            onOpenSettingsTab?.("tts");
+            onClose();
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }}
+          title="Open TTS settings"
+        >
           <span style={labelStyle}>TTS</span>
           <span style={valueStyle}>
             <span style={dotStyle(ttsProviderReady && hasTtsModel)} />
@@ -267,6 +296,7 @@ export function ControlBar({
   selectedModelId,
   onModelChange,
   onSettings,
+  onOpenSettingsTab,
   isDownloading,
   downloadProgress,
   onDownloadModel,
@@ -451,6 +481,7 @@ export function ControlBar({
               triggerRef={indicatorRef}
               onStartSidecar={onStartSidecar}
               onStopSidecar={onStopSidecar}
+              onOpenSettingsTab={onOpenSettingsTab}
               onClose={() => setShowPopover(false)}
             />
           )}

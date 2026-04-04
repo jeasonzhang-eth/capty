@@ -178,6 +178,7 @@ interface SettingsModalProps {
   readonly onChangeTranslatePrompt: (prompt: string) => void;
   readonly autoStartSidecar: boolean;
   readonly onChangeAutoStartSidecar: (value: boolean) => void;
+  readonly initialTab?: TabId;
   readonly onClose: () => void;
 }
 
@@ -271,7 +272,7 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-type TabId =
+export type TabId =
   | "general"
   | "default-models"
   | "speech"
@@ -4321,9 +4322,10 @@ export function SettingsModal({
   onChangeTranslatePrompt,
   autoStartSidecar,
   onChangeAutoStartSidecar,
+  initialTab,
   onClose,
 }: SettingsModalProps): React.ReactElement {
-  const [activeTab, setActiveTab] = useState<TabId>("general");
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? "general");
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
