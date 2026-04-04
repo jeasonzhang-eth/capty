@@ -2090,6 +2090,7 @@ function App(): React.JSX.Element {
 
   // Load download list on mount + crash recovery
   useEffect(() => {
+    if (needsSetup !== false) return; // DB not ready during setup wizard
     window.capty.getAudioDownloads().then((list) => {
       setAudioDownloads(list);
       setDownloadBadge(computeDownloadBadge(list));
@@ -2098,7 +2099,7 @@ function App(): React.JSX.Element {
       );
       if (hasInterrupted) setShowDownloadManager(true);
     });
-  }, [computeDownloadBadge]);
+  }, [computeDownloadBadge, needsSetup]);
 
   // Listen for retry trigger from main process
   useEffect(() => {
