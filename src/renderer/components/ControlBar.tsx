@@ -410,7 +410,9 @@ export function ControlBar({
           }}
           title={
             indicatorClickable
-              ? "Click to manage sidecar"
+              ? showPopover
+                ? undefined
+                : "Click to manage sidecar"
               : `Provider: ${activeProviderName ?? "None"}`
           }
         >
