@@ -1458,51 +1458,75 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         isSidecar?: boolean;
       },
     ) => {
-      const baseUrl = provider.isSidecar
-        ? getSidecarBaseUrl(configDir)
-        : provider.baseUrl;
-      const resolvedUrl = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+      try {
+        const baseUrl = provider.isSidecar
+          ? getSidecarBaseUrl(configDir)
+          : provider.baseUrl;
+        const resolvedUrl = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 
-      // Generate 1 second of 440Hz sine wave at 16kHz 16bit mono
-      const sampleRate = 16000;
-      const duration = 1; // seconds
-      const frequency = 440; // Hz
-      const numSamples = sampleRate * duration;
-      const pcmBuffer = Buffer.alloc(numSamples * 2); // 16bit = 2 bytes per sample
-      for (let i = 0; i < numSamples; i++) {
-        const sample = Math.round(
-          Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 16000,
+        // Resolve model: sidecar uses local path, external uses provider.model
+        let modelValue = provider.model ?? "";
+        if (provider.isSidecar) {
+          const config = readConfig(configDir);
+          const asrModelId = config.selectedModelId;
+          if (asrModelId) {
+            const dataDir = config.dataDir ?? join(configDir, "data");
+            modelValue = join(dataDir, "models", "asr", asrModelId);
+          }
+        }
+
+        if (!modelValue) {
+          return { success: false, error: "No ASR model selected" };
+        }
+
+        // Generate 1 second of 440Hz sine wave at 16kHz 16bit mono
+        const sampleRate = 16000;
+        const duration = 1; // seconds
+        const frequency = 440; // Hz
+        const numSamples = sampleRate * duration;
+        const pcmBuffer = Buffer.alloc(numSamples * 2); // 16bit = 2 bytes per sample
+        for (let i = 0; i < numSamples; i++) {
+          const sample = Math.round(
+            Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 16000,
+          );
+          pcmBuffer.writeInt16LE(sample, i * 2);
+        }
+        const wavBuffer = pcmToWav(pcmBuffer, sampleRate, 1, 16);
+
+        const formData = new FormData();
+        formData.append(
+          "file",
+          new Blob([wavBuffer], { type: "audio/wav" }),
+          "test.wav",
         );
-        pcmBuffer.writeInt16LE(sample, i * 2);
+        formData.append("model", modelValue);
+
+        // Sidecar may lazy-load the ASR model on first request
+        const timeoutMs = provider.isSidecar ? 120_000 : 30_000;
+        const resp = await net.fetch(`${resolvedUrl}/v1/audio/transcriptions`, {
+          method: "POST",
+          headers: {
+            ...(provider.apiKey
+              ? { Authorization: `Bearer ${provider.apiKey}` }
+              : {}),
+          },
+          body: formData,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, error: `HTTP ${resp.status}: ${errBody}` };
+        }
+
+        const result = (await resp.json()) as { text?: string };
+        return { success: true, text: result.text ?? "" };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
-      const wavBuffer = pcmToWav(pcmBuffer, sampleRate, 1, 16);
-
-      const formData = new FormData();
-      formData.append(
-        "file",
-        new Blob([wavBuffer], { type: "audio/wav" }),
-        "test.wav",
-      );
-      formData.append("model", provider.model);
-
-      const resp = await net.fetch(`${resolvedUrl}/v1/audio/transcriptions`, {
-        method: "POST",
-        headers: {
-          ...(provider.apiKey
-            ? { Authorization: `Bearer ${provider.apiKey}` }
-            : {}),
-        },
-        body: formData,
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${errBody}`);
-      }
-
-      const result = (await resp.json()) as { text?: string };
-      return { success: true, text: result.text ?? "" };
     },
   );
 
@@ -1518,51 +1542,63 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         isSidecar?: boolean;
       },
     ) => {
-      const rawUrl = provider.isSidecar
-        ? getSidecarBaseUrl(configDir)
-        : provider.baseUrl;
-      const baseUrl = normalizeTtsUrl(rawUrl);
+      try {
+        const rawUrl = provider.isSidecar
+          ? getSidecarBaseUrl(configDir)
+          : provider.baseUrl;
+        const baseUrl = normalizeTtsUrl(rawUrl);
 
-      // Resolve model: sidecar uses local path, external uses provider.model
-      let modelValue = provider.model ?? "";
-      if (provider.isSidecar) {
-        const config = readConfig(configDir);
-        const ttsModelId = config.selectedTtsModelId;
-        if (ttsModelId) {
-          const dataDir = config.dataDir ?? join(configDir, "data");
-          modelValue = join(dataDir, "models", "tts", ttsModelId);
+        // Resolve model: sidecar uses local path, external uses provider.model
+        let modelValue = provider.model ?? "";
+        if (provider.isSidecar) {
+          const config = readConfig(configDir);
+          const ttsModelId = config.selectedTtsModelId;
+          if (ttsModelId) {
+            const dataDir = config.dataDir ?? join(configDir, "data");
+            modelValue = join(dataDir, "models", "tts", ttsModelId);
+          }
         }
+
+        if (!modelValue) {
+          return { success: false, error: "No TTS model selected" };
+        }
+
+        const body: Record<string, unknown> = { input: "Hello" };
+        body.model = modelValue;
+
+        // Sidecar may lazy-load the TTS model on first request (can take 60s+)
+        const timeoutMs = provider.isSidecar ? 120_000 : 30_000;
+        const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(provider.apiKey
+              ? { Authorization: `Bearer ${provider.apiKey}` }
+              : {}),
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!resp.ok) {
+          const errBody = await resp.text();
+          return { success: false, error: `HTTP ${resp.status}: ${errBody}` };
+        }
+
+        const buffer = await resp.arrayBuffer();
+        if (buffer.byteLength < 100) {
+          return {
+            success: false,
+            error: `TTS returned too little data (${buffer.byteLength} bytes)`,
+          };
+        }
+        return { success: true, bytes: buffer.byteLength };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
-
-      const body: Record<string, unknown> = { input: "Hello" };
-      if (modelValue) body.model = modelValue;
-
-      // Sidecar may lazy-load the TTS model on first request (can take 60s+)
-      const timeoutMs = provider.isSidecar ? 120_000 : 30_000;
-      const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(provider.apiKey
-            ? { Authorization: `Bearer ${provider.apiKey}` }
-            : {}),
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${errBody}`);
-      }
-
-      const buffer = await resp.arrayBuffer();
-      if (buffer.byteLength < 100) {
-        throw new Error(
-          `TTS returned too little data (${buffer.byteLength} bytes)`,
-        );
-      }
-      return { success: true, bytes: buffer.byteLength };
     },
   );
 

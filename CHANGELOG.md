@@ -4,6 +4,9 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: sidecar ASR test resolves local model path from config (was sending empty model → 400 "No ASR model loaded")
+- fix: ASR/TTS test handlers return `{ success, error }` instead of throwing — no more Electron console spam
+- fix: early-return "No model selected" when no ASR/TTS model is configured instead of sending request
 - fix: remove browser focus outline globally — covers ESC-to-close and all keyboard/mouse interactions (Electron desktop app, no Tab-navigation needed)
 - fix: prevent duplicate sidecar spawns from concurrent start calls (React StrictMode double-invoke)
 - fix: sidecar start recovers from port conflict by reusing existing instance instead of failing

@@ -1864,12 +1864,15 @@ function SpeechTab({
     }),
     canTest: (p) => p.isSidecar || (!!p.baseUrl && !!p.model),
     testProvider: async (p) => {
-      await window.capty.asrTest({
+      const result = (await window.capty.asrTest({
         baseUrl: p.baseUrl ?? "",
         apiKey: p.apiKey ?? "",
         model: p.model ?? "",
         isSidecar: p.isSidecar,
-      });
+      })) as { success: boolean; error?: string };
+      if (!result.success) {
+        return { ok: false, message: result.error ?? "ASR test failed" };
+      }
       return { ok: true, message: "ASR test passed" };
     },
   };
@@ -2284,15 +2287,18 @@ function TtsTab({
     }),
     canTest: (p) => p.isSidecar || !!p.baseUrl,
     testProvider: async (p) => {
-      const result = await window.capty.ttsTest({
+      const result = (await window.capty.ttsTest({
         baseUrl: p.baseUrl ?? "",
         apiKey: p.apiKey ?? "",
         model: p.model ?? "",
         isSidecar: p.isSidecar,
-      });
+      })) as { success: boolean; error?: string; bytes?: number };
+      if (!result.success) {
+        return { ok: false, message: result.error ?? "TTS test failed" };
+      }
       return {
         ok: true,
-        message: `TTS test passed (${Math.round(result.bytes / 1024)}KB)`,
+        message: `TTS test passed (${Math.round((result.bytes ?? 0) / 1024)}KB)`,
       };
     },
   };
