@@ -769,7 +769,7 @@ interface HFTreeFile {
 /** Files to exclude when computing download size (matching model-downloader). */
 const SIZE_SKIP_FILES = new Set([".gitattributes", "README.md"]);
 
-/** Infer model type label from HuggingFace tags / model ID (for UI display only). */
+/** Infer ASR model type label from HuggingFace tags / model ID (for UI display only). */
 function inferModelType(hfModel: HFSearchResult): string {
   const id = hfModel.id.toLowerCase();
   const tags = hfModel.tags.map((t) => t.toLowerCase());
@@ -777,7 +777,19 @@ function inferModelType(hfModel: HFSearchResult): string {
   if (tags.includes("whisper") || id.includes("whisper")) return "whisper";
   if (tags.includes("qwen") || id.includes("qwen")) return "qwen-asr";
   if (tags.includes("parakeet") || id.includes("parakeet")) return "parakeet";
-  return "auto";
+  return "asr";
+}
+
+/** Infer TTS model type label from HuggingFace tags / model ID (for UI display only). */
+function inferTtsModelType(hfModel: HFSearchResult): string {
+  const id = hfModel.id.toLowerCase();
+  if (id.includes("qwen3-tts") || id.includes("qwen-tts")) return "qwen3-tts";
+  if (id.includes("kokoro")) return "kokoro";
+  if (id.includes("spark-tts") || id.includes("sparktts")) return "spark-tts";
+  if (id.includes("outetts")) return "outetts";
+  if (id.includes("chatterbox")) return "chatterbox";
+  if (id.includes("voxtral")) return "voxtral";
+  return "tts";
 }
 
 /** Keywords in model ID / HF tags that indicate a supported STT architecture. */
@@ -1643,7 +1655,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const entry = hfModelToEntry(r, sizes[i]);
       return {
         ...entry,
-        type: "tts",
+        type: inferTtsModelType(r),
         downloaded: isModelDownloaded(ttsModelsDir, entry.id),
         supported: inferTtsSupportFromHF(r),
       };

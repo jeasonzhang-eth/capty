@@ -5,6 +5,9 @@ All notable changes to Capty are documented in this file.
 ## 2026-04-05
 
 - refactor: inline Model Market into ASR/TTS sidecar provider expand area (no more separate modal popup)
+- fix: TTS search results incorrectly showing "ASR" badge — add category-aware TypeTag with TTS-specific type inference
+- feat: add model type badges for Qwen TTS, Spark TTS, OuteTTS, Chatterbox, Voxtral
+- fix: update recommended TTS models list (6 models: Qwen3-TTS 0.6B/1.7B variants + Spark-TTS)
 - refactor: LLM Provider uses expand/collapse mode with chevron (matches ASR/TTS pattern), remove Edit button
 - fix: LLM Test button always visible, disabled when no API key or no models (with tooltip hints)
 - fix: LLM Test uses first model from models list instead of legacy `provider.model`

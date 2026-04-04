@@ -250,10 +250,11 @@ const TABS: readonly {
 
 /* ─── Small reusable components ─── */
 
-const TYPE_STYLES: Record<
+const MODEL_TYPE_STYLES: Record<
   string,
   { bg: string; color: string; label: string }
 > = {
+  // ASR types
   whisper: {
     bg: "rgba(74, 222, 128, 0.12)",
     color: "#4ADE80",
@@ -262,38 +263,67 @@ const TYPE_STYLES: Record<
   "qwen-asr": {
     bg: "rgba(245, 166, 35, 0.12)",
     color: "#F5A623",
-    label: "Qwen",
+    label: "Qwen ASR",
   },
   parakeet: {
     bg: "rgba(96, 165, 250, 0.12)",
     color: "#60A5FA",
     label: "Parakeet",
   },
-};
-const DEFAULT_TYPE_STYLE = {
-  bg: "rgba(148, 163, 184, 0.12)",
-  color: "#94A3B8",
-  label: "ASR",
-};
-
-const TTS_TYPE_STYLES: Record<
-  string,
-  { bg: string; color: string; label: string }
-> = {
+  // TTS types
+  "qwen3-tts": {
+    bg: "rgba(245, 166, 35, 0.12)",
+    color: "#F5A623",
+    label: "Qwen TTS",
+  },
   kokoro: {
     bg: "rgba(168, 85, 247, 0.12)",
     color: "#A855F7",
     label: "Kokoro",
   },
+  "spark-tts": {
+    bg: "rgba(251, 146, 60, 0.12)",
+    color: "#FB923C",
+    label: "Spark TTS",
+  },
+  outetts: {
+    bg: "rgba(34, 211, 238, 0.12)",
+    color: "#22D3EE",
+    label: "OuteTTS",
+  },
+  chatterbox: {
+    bg: "rgba(244, 114, 182, 0.12)",
+    color: "#F472B6",
+    label: "Chatterbox",
+  },
+  voxtral: {
+    bg: "rgba(129, 140, 248, 0.12)",
+    color: "#818CF8",
+    label: "Voxtral",
+  },
 };
-const DEFAULT_TTS_TYPE_STYLE = {
+
+const DEFAULT_ASR_STYLE = {
+  bg: "rgba(148, 163, 184, 0.12)",
+  color: "#94A3B8",
+  label: "ASR",
+};
+
+const DEFAULT_TTS_STYLE = {
   bg: "rgba(148, 163, 184, 0.12)",
   color: "#94A3B8",
   label: "TTS",
 };
 
-function TypeTag({ type }: { readonly type: string }): React.ReactElement {
-  const s = TYPE_STYLES[type] ?? DEFAULT_TYPE_STYLE;
+function TypeTag({
+  type,
+  category,
+}: {
+  readonly type: string;
+  readonly category: "asr" | "tts";
+}): React.ReactElement {
+  const fallback = category === "tts" ? DEFAULT_TTS_STYLE : DEFAULT_ASR_STYLE;
+  const s = MODEL_TYPE_STYLES[type] ?? fallback;
   return (
     <span style={{ ...tagStyle, backgroundColor: s.bg, color: s.color }}>
       {s.label}
@@ -326,6 +356,7 @@ function LanguageTags({
 
 function ModelCard({
   model,
+  category,
   isSelected,
   isThisDownloading,
   downloadProgress,
@@ -341,6 +372,7 @@ function ModelCard({
   onCancel,
 }: {
   readonly model: ModelInfo;
+  readonly category: "asr" | "tts";
   readonly isSelected: boolean;
   readonly isThisDownloading: boolean;
   readonly downloadProgress: number;
@@ -398,7 +430,7 @@ function ModelCard({
             >
               {model.name}
             </span>
-            <TypeTag type={model.type} />
+            <TypeTag type={model.type} category={category} />
           </div>
           <div
             style={{
@@ -696,6 +728,7 @@ function ModelCard({
 /* ─── Inline Model Market (used inside provider expand areas) ─── */
 
 interface InlineModelMarketProps {
+  readonly category: "asr" | "tts";
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
@@ -726,6 +759,7 @@ interface InlineModelMarketProps {
 }
 
 function InlineModelMarket({
+  category,
   models,
   selectedModelId,
   isDownloading,
@@ -968,6 +1002,7 @@ function InlineModelMarket({
             <ModelCard
               key={model.id}
               model={model}
+              category={category}
               isSelected={model.id === selectedModelId}
               isThisDownloading={
                 isDownloading && downloadingModelId === model.id
@@ -1845,6 +1880,7 @@ function SpeechTab({
                 >
                   {provider.isSidecar ? (
                     <InlineModelMarket
+                      category="asr"
                       models={models}
                       selectedModelId={selectedModelId}
                       isDownloading={isDownloading}
@@ -2515,6 +2551,7 @@ function TtsTab({
                 >
                   {provider.isSidecar ? (
                     <InlineModelMarket
+                      category="tts"
                       models={ttsModels}
                       selectedModelId={selectedTtsModelId}
                       isDownloading={isTtsDownloading}
