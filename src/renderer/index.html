@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Capty</title>
+    <style>
+      /* Remove default browser focus outline on mouse/touch interaction.
+         Keyboard users (Tab) still see :focus-visible outlines for accessibility. */
+      *:focus:not(:focus-visible) {
+        outline: none;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
