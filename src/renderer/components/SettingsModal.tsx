@@ -179,6 +179,7 @@ interface SettingsModalProps {
   readonly autoStartSidecar: boolean;
   readonly onChangeAutoStartSidecar: (value: boolean) => void;
   readonly initialTab?: TabId;
+  readonly onTabChange?: (tab: TabId) => void;
   readonly onClose: () => void;
 }
 
@@ -4318,9 +4319,17 @@ export function SettingsModal({
   autoStartSidecar,
   onChangeAutoStartSidecar,
   initialTab,
+  onTabChange,
   onClose,
 }: SettingsModalProps): React.ReactElement {
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? "general");
+  const [activeTab, setActiveTabRaw] = useState<TabId>(initialTab ?? "general");
+  const setActiveTab = useCallback(
+    (tab: TabId) => {
+      setActiveTabRaw(tab);
+      onTabChange?.(tab);
+    },
+    [onTabChange],
+  );
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {

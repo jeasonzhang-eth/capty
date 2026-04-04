@@ -2202,10 +2202,7 @@ function App(): React.JSX.Element {
         models={store.models}
         selectedModelId={store.selectedModelId}
         onModelChange={handleSelectModel}
-        onSettings={() => {
-          setSettingsInitialTab(undefined);
-          setShowSettings(true);
-        }}
+        onSettings={() => setShowSettings(true)}
         onOpenSettingsTab={(tab) => {
           setSettingsInitialTab(tab as TabId);
           setShowSettings(true);
@@ -2459,6 +2456,7 @@ function App(): React.JSX.Element {
           autoStartSidecar={autoStartSidecar}
           onChangeAutoStartSidecar={handleChangeAutoStartSidecar}
           initialTab={settingsInitialTab}
+          onTabChange={setSettingsInitialTab}
           onClose={() => setShowSettings(false)}
         />
       )}
