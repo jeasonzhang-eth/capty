@@ -76,53 +76,108 @@ function SidecarPopover({
     }
   };
 
+  const rowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: "22px",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: "11px",
+    color: "var(--text-muted)",
+  };
+  const valueStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: "11px",
+    color: "var(--text-secondary)",
+  };
+  const dotStyle = (on: boolean): React.CSSProperties => ({
+    width: "5px",
+    height: "5px",
+    borderRadius: "50%",
+    backgroundColor: on ? "#4ADE80" : "var(--text-muted)",
+    display: "inline-block",
+    flexShrink: 0,
+  });
+
   return (
     <div
       ref={popoverRef}
       style={{
         position: "absolute",
-        top: "calc(100% + 6px)",
+        top: "calc(100% + 4px)",
         left: 0,
         zIndex: 100,
-        backgroundColor: "rgba(38, 38, 42, 0.98)",
-        border: "1px solid var(--border)",
-        borderRadius: "10px",
-        padding: "14px 16px",
-        minWidth: "220px",
-        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(36, 36, 40, 0.96)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: "8px",
+        padding: "8px 10px",
+        width: "180px",
+        boxShadow:
+          "0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255,255,255,0.05)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
       }}
     >
-      {/* Header + Toggle */}
+      {/* Header row: title + toggle */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: "12px",
+          marginBottom: "6px",
+          paddingBottom: "6px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
         }}
       >
-        <span
-          style={{
-            fontSize: "13px",
-            fontWeight: 600,
-            color: "var(--text-primary)",
-          }}
-        >
-          Local Engine
-        </span>
-        {/* CSS Toggle Switch */}
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <span
+            style={{
+              width: "5px",
+              height: "5px",
+              borderRadius: "50%",
+              backgroundColor: sidecarStarting
+                ? "#f59e0b"
+                : isRunning
+                  ? "#4ADE80"
+                  : "var(--text-muted)",
+              display: "inline-block",
+              boxShadow: sidecarStarting
+                ? "0 0 4px rgba(245, 158, 11, 0.5)"
+                : isRunning
+                  ? "0 0 4px rgba(74, 222, 128, 0.4)"
+                  : "none",
+              animation: sidecarStarting
+                ? "breathe 1.5s ease-in-out infinite"
+                : undefined,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+            }}
+          >
+            {sidecarStarting ? "Starting…" : isRunning ? "Running" : "Stopped"}
+          </span>
+        </div>
+        {/* Mini toggle */}
         <button
           onClick={handleToggle}
           style={{
             position: "relative",
-            width: "36px",
-            height: "20px",
-            borderRadius: "10px",
+            width: "28px",
+            height: "16px",
+            borderRadius: "8px",
             border: "none",
             cursor: sidecarStarting ? "wait" : "pointer",
-            backgroundColor: toggleOn ? "var(--accent)" : "var(--bg-tertiary)",
+            backgroundColor: toggleOn
+              ? "var(--accent)"
+              : "rgba(255,255,255,0.1)",
             transition: "background-color 0.2s",
             padding: 0,
             flexShrink: 0,
@@ -131,140 +186,53 @@ function SidecarPopover({
             sidecarStarting
               ? "Starting..."
               : isRunning
-                ? "Stop sidecar"
-                : "Start sidecar"
+                ? "Stop engine"
+                : "Start engine"
           }
         >
           <span
             style={{
               position: "absolute",
               top: "2px",
-              left: toggleOn ? "18px" : "2px",
-              width: "16px",
-              height: "16px",
+              left: toggleOn ? "14px" : "2px",
+              width: "12px",
+              height: "12px",
               borderRadius: "50%",
               backgroundColor: "#fff",
               transition: "left 0.2s",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
             }}
           />
         </button>
       </div>
 
-      {/* Status line */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          marginBottom: "10px",
-          paddingBottom: "10px",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <span
-          style={{
-            width: "6px",
-            height: "6px",
-            borderRadius: "50%",
-            backgroundColor: sidecarStarting
-              ? "#f59e0b"
-              : isRunning
-                ? "#4ADE80"
-                : "var(--text-muted)",
-            display: "inline-block",
-            boxShadow: sidecarStarting
-              ? "0 0 6px rgba(245, 158, 11, 0.6)"
-              : isRunning
-                ? "0 0 6px rgba(74, 222, 128, 0.5)"
-                : "none",
-            animation: sidecarStarting
-              ? "breathe 1.5s ease-in-out infinite"
-              : undefined,
-          }}
-        />
-        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-          {sidecarStarting ? "Starting…" : isRunning ? "Running" : "Stopped"}
+      {/* Detail rows */}
+      <div style={rowStyle}>
+        <span style={labelStyle}>ASR</span>
+        <span style={valueStyle}>
+          <span style={dotStyle(isRunning)} />
+          {isRunning ? "Ready" : "Offline"}
         </span>
       </div>
 
-      {/* Detail rows */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-            ASR
+      {ttsProviderName && (
+        <div style={rowStyle}>
+          <span style={labelStyle}>TTS</span>
+          <span style={valueStyle}>
+            <span style={dotStyle(ttsProviderReady)} />
+            {ttsProviderReady ? "Ready" : "Offline"}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <span
-              style={{
-                width: "5px",
-                height: "5px",
-                borderRadius: "50%",
-                backgroundColor: isRunning ? "#4ADE80" : "var(--text-muted)",
-                display: "inline-block",
-              }}
-            />
-            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-              {isRunning ? "Ready" : "Offline"}
-            </span>
-          </div>
         </div>
+      )}
 
-        {ttsProviderName && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-              TTS
-            </span>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <span
-                style={{
-                  width: "5px",
-                  height: "5px",
-                  borderRadius: "50%",
-                  backgroundColor: ttsProviderReady
-                    ? "#4ADE80"
-                    : "var(--text-muted)",
-                  display: "inline-block",
-                }}
-              />
-              <span
-                style={{ fontSize: "12px", color: "var(--text-secondary)" }}
-              >
-                {ttsProviderReady ? "Ready" : "Offline"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {sidecarPort != null && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-              Port
-            </span>
-            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-              {sidecarPort}
-            </span>
-          </div>
-        )}
-      </div>
+      {sidecarPort != null && (
+        <div style={rowStyle}>
+          <span style={labelStyle}>Port</span>
+          <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+            {sidecarPort}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
