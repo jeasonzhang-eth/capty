@@ -41,6 +41,48 @@ export interface TtsProviderConfig {
   readonly isSidecar: boolean;
 }
 
+/** Shared base for ASR/TTS provider configs */
+interface BaseProviderConfig {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly isSidecar: boolean;
+}
+
+interface BaseEditForm {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+interface TtsEditForm extends BaseEditForm {
+  voice: string;
+}
+
+interface ProviderCategoryConfig<
+  P extends BaseProviderConfig,
+  F extends BaseEditForm,
+> {
+  readonly category: "asr" | "tts";
+  readonly sidecarColor: string;
+  readonly sidecarBg: string;
+  readonly categoryLabel: string;
+  readonly idPrefix: string;
+  readonly defaultName: string;
+  readonly fallbackName: string;
+  readonly createBlankForm: () => F;
+  readonly providerToForm: (provider: P) => F;
+  readonly applyForm: (provider: P, form: F) => P;
+  readonly createNewProvider: (id: string) => P;
+  readonly testProvider: (
+    provider: P,
+  ) => Promise<{ ok: boolean; message: string }>;
+  readonly canTest: (provider: P) => boolean;
+}
+
 interface SettingsModalProps {
   readonly dataDir: string | null;
   readonly configDir: string | null;
@@ -1375,6 +1417,370 @@ function GeneralTab({
   );
 }
 
+/* ─── Shared Provider Hook ─── */
+
+function useProviderManagement<
+  P extends BaseProviderConfig,
+  F extends BaseEditForm,
+>(
+  initialProviders: readonly P[],
+  initialSelectedId: string | null,
+  config: ProviderCategoryConfig<P, F>,
+  onSave: (providers: P[], selectedId: string | null) => void,
+) {
+  const [providers, setProviders] = useState<P[]>([...initialProviders]);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialSelectedId,
+  );
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<F>(config.createBlankForm());
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; message: string }>
+  >({});
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const saveProviders = useCallback(
+    (next: P[], nextSelectedId: string | null) => {
+      setProviders(next);
+      setSelectedId(nextSelectedId);
+      onSave(next, nextSelectedId);
+    },
+    [onSave],
+  );
+
+  const handleAddProvider = useCallback(() => {
+    const id = `${config.idPrefix}-${Date.now()}`;
+    const newProvider = config.createNewProvider(id);
+    const next = [...providers, newProvider];
+    saveProviders(next, selectedId);
+    setExpandedId(id);
+    setEditForm(config.createBlankForm());
+  }, [providers, selectedId, saveProviders, config]);
+
+  const handleUseProvider = useCallback(
+    (providerId: string) => {
+      saveProviders([...providers], providerId);
+    },
+    [providers, saveProviders],
+  );
+
+  const handleToggleExpand = useCallback(
+    (provider: P) => {
+      if (expandedId === provider.id) {
+        setExpandedId(null);
+        return;
+      }
+      setExpandedId(provider.id);
+      setEditForm(config.providerToForm(provider));
+    },
+    [expandedId, config],
+  );
+
+  const handleSaveEdit = useCallback(() => {
+    if (!expandedId) return;
+    const next = providers.map((p) =>
+      p.id === expandedId ? config.applyForm(p, editForm) : p,
+    );
+    saveProviders(next, selectedId);
+  }, [expandedId, editForm, providers, selectedId, saveProviders, config]);
+
+  const handleDeleteProvider = useCallback(
+    (providerId: string) => {
+      const next = providers.filter((p) => p.id !== providerId);
+      const nextSelectedId =
+        selectedId === providerId ? (next[0]?.id ?? null) : selectedId;
+      saveProviders(next, nextSelectedId);
+      if (expandedId === providerId) setExpandedId(null);
+    },
+    [providers, selectedId, expandedId, saveProviders],
+  );
+
+  const handleTestProvider = useCallback(
+    async (provider: P) => {
+      if (!config.canTest(provider)) return;
+      setTestingId(provider.id);
+      try {
+        const result = await config.testProvider(provider);
+        setTestResults((prev) => ({ ...prev, [provider.id]: result }));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Connection failed";
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: { ok: false, message: msg },
+        }));
+      } finally {
+        setTestingId(null);
+        setTimeout(() => {
+          setTestResults((prev) => {
+            const copy = { ...prev };
+            delete copy[provider.id];
+            return copy;
+          });
+        }, 5000);
+      }
+    },
+    [config],
+  );
+
+  return {
+    providers,
+    selectedId,
+    expandedId,
+    editForm,
+    setEditForm,
+    testResults,
+    testingId,
+    handleAddProvider,
+    handleUseProvider,
+    handleToggleExpand,
+    handleSaveEdit,
+    handleDeleteProvider,
+    handleTestProvider,
+  };
+}
+
+/* ─── Shared Provider Card ─── */
+
+function ProviderCard({
+  provider,
+  isActive,
+  isExpanded,
+  isRecording,
+  sidecarReady,
+  sidecarColor,
+  sidecarBg,
+  testingId,
+  testResult,
+  sidecarTestDisabled,
+  sidecarTestDisabledTitle,
+  onToggleExpand,
+  onUseProvider,
+  onDeleteProvider,
+  onTestProvider,
+  renderExpandedContent,
+}: {
+  readonly provider: BaseProviderConfig;
+  readonly isActive: boolean;
+  readonly isExpanded: boolean;
+  readonly isRecording: boolean;
+  readonly sidecarReady: boolean;
+  readonly sidecarColor: string;
+  readonly sidecarBg: string;
+  readonly testingId: string | null;
+  readonly testResult: { ok: boolean; message: string } | undefined;
+  readonly sidecarTestDisabled: boolean;
+  readonly sidecarTestDisabledTitle: string;
+  readonly onToggleExpand: () => void;
+  readonly onUseProvider: () => void;
+  readonly onDeleteProvider: () => void;
+  readonly onTestProvider: () => void;
+  readonly renderExpandedContent: () => React.ReactNode;
+}): React.ReactElement {
+  const isTesting = testingId === provider.id;
+  const testDisabled = isTesting || (provider.isSidecar && sidecarTestDisabled);
+
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        marginBottom: "0",
+        borderColor: isActive ? "var(--accent)" : "var(--border)",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+          onClick={onToggleExpand}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span
+              style={{
+                fontSize: "10px",
+                color: "var(--text-muted)",
+                display: "inline-block",
+                transition: "transform 0.2s",
+                transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                width: "12px",
+                textAlign: "center" as const,
+              }}
+            >
+              &#9660;
+            </span>
+            <span
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--text-primary)",
+              }}
+            >
+              {provider.name}
+            </span>
+            {provider.isSidecar && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: sidecarBg,
+                  color: sidecarColor,
+                }}
+              >
+                Sidecar
+              </span>
+            )}
+            {isActive && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: "rgba(74, 222, 128, 0.12)",
+                  color: "#4ADE80",
+                }}
+              >
+                Active
+              </span>
+            )}
+            {provider.isSidecar && (
+              <span
+                style={{
+                  ...tagStyle,
+                  backgroundColor: sidecarReady
+                    ? "rgba(74, 222, 128, 0.12)"
+                    : "rgba(239, 68, 68, 0.12)",
+                  color: sidecarReady ? "#4ADE80" : "#EF4444",
+                }}
+              >
+                {sidecarReady ? "Online" : "Offline"}
+              </span>
+            )}
+          </div>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              marginTop: "4px",
+              paddingLeft: "18px",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {provider.baseUrl || "No URL set"}
+            </span>
+            {!provider.isSidecar && provider.model
+              ? ` \u00b7 ${provider.model}`
+              : ""}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "6px",
+            alignItems: "center",
+            flexShrink: 0,
+            marginLeft: "12px",
+          }}
+        >
+          {testResult && (
+            <span
+              style={{
+                fontSize: "11px",
+                color: testResult.ok ? "#4ADE80" : "#EF4444",
+                maxWidth: "140px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {testResult.message}
+            </span>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTestProvider();
+            }}
+            disabled={testDisabled}
+            style={{
+              ...secondaryBtnStyle,
+              height: "28px",
+              padding: "0 10px",
+              fontSize: "11px",
+              color: "var(--text-secondary)",
+              cursor: testDisabled ? "not-allowed" : "pointer",
+              opacity: testDisabled ? 0.4 : 1,
+            }}
+            title={
+              provider.isSidecar && sidecarTestDisabled
+                ? sidecarTestDisabledTitle
+                : undefined
+            }
+          >
+            {isTesting ? "Testing..." : "Test"}
+          </button>
+          {!isActive && (
+            <button
+              onClick={onUseProvider}
+              disabled={isRecording}
+              style={{
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 10px",
+                fontSize: "11px",
+                borderColor: "var(--accent)",
+                color: "var(--accent)",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                opacity: isRecording ? 0.5 : 1,
+              }}
+            >
+              Use
+            </button>
+          )}
+          {!provider.isSidecar && (
+            <button
+              onClick={onDeleteProvider}
+              disabled={isRecording}
+              style={{
+                ...secondaryBtnStyle,
+                height: "28px",
+                padding: "0 8px",
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                opacity: isRecording ? 0.5 : 1,
+              }}
+              title="Delete provider"
+            >
+              &times;
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div
+          style={{
+            marginTop: "12px",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "12px",
+          }}
+        >
+          {renderExpandedContent()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Page: Speech (Provider list + Local Models) ─── */
 
 function SpeechTab({
@@ -1382,7 +1788,6 @@ function SpeechTab({
   selectedAsrProviderId: initialSelectedId,
   sidecarReady,
   isRecording,
-  dataDir,
   models,
   selectedModelId,
   isDownloading,
@@ -1406,7 +1811,6 @@ function SpeechTab({
   readonly selectedAsrProviderId: string | null;
   readonly sidecarReady: boolean;
   readonly isRecording: boolean;
-  readonly dataDir: string | null;
   readonly models: readonly ModelInfo[];
   readonly selectedModelId: string;
   readonly isDownloading: boolean;
@@ -1438,147 +1842,85 @@ function SpeechTab({
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
 }): React.ReactElement {
-  // Provider list state
-  const [providers, setProviders] = useState<AsrProviderConfig[]>([
-    ...initialProviders,
-  ]);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialSelectedId,
-  );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    baseUrl: "",
-    apiKey: "",
-    model: "",
-  });
-  const [testResults, setTestResults] = useState<
-    Record<string, { ok: boolean; message: string }>
-  >({});
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [fetchedModels, setFetchedModels] = useState<
-    Record<string, Array<{ id: string; name: string }>>
-  >({});
-  const [modelsFetchingId, setModelsFetchingId] = useState<string | null>(null);
-  const [useCustomModel, setUseCustomModel] = useState<Record<string, boolean>>(
-    {},
-  );
-
-  const modelsDir = dataDir ? `${dataDir}/models` : "<dataDir>/models";
-
-  const saveProviders = useCallback(
-    (next: AsrProviderConfig[], nextSelectedId: string | null) => {
-      setProviders(next);
-      setSelectedId(nextSelectedId);
-      onSaveAsrSettings({
-        asrProviders: next,
-        selectedAsrProviderId: nextSelectedId,
-      });
-    },
-    [onSaveAsrSettings],
-  );
-
-  const handleAddProvider = useCallback(() => {
-    const id = `ext-${Date.now()}`;
-    const newProvider: AsrProviderConfig = {
+  const asrConfig: ProviderCategoryConfig<AsrProviderConfig, BaseEditForm> = {
+    category: "asr",
+    sidecarColor: "#F5A623",
+    sidecarBg: "rgba(245, 166, 35, 0.12)",
+    categoryLabel: "ASR",
+    idPrefix: "ext",
+    defaultName: "New Provider",
+    fallbackName: "External ASR",
+    createBlankForm: () => ({
+      name: "New Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+    }),
+    providerToForm: (p) => ({
+      name: p.name,
+      baseUrl: p.baseUrl,
+      apiKey: p.apiKey,
+      model: p.model,
+    }),
+    applyForm: (p, f) => ({
+      ...p,
+      name: p.isSidecar ? p.name : f.name || "External ASR",
+      baseUrl: f.baseUrl,
+      apiKey: f.apiKey,
+      model: p.isSidecar ? p.model : f.model,
+    }),
+    createNewProvider: (id) => ({
       id,
       name: "New Provider",
       baseUrl: "",
       apiKey: "",
       model: "",
       isSidecar: false,
-    };
-    const next = [...providers, newProvider];
-    saveProviders(next, selectedId);
-    setExpandedId(id);
-    setEditForm({ name: "New Provider", baseUrl: "", apiKey: "", model: "" });
-  }, [providers, selectedId, saveProviders]);
-
-  const handleUseProvider = useCallback(
-    (providerId: string) => {
-      saveProviders([...providers], providerId);
-    },
-    [providers, saveProviders],
-  );
-
-  const handleToggleExpand = useCallback(
-    (provider: AsrProviderConfig) => {
-      if (expandedId === provider.id) {
-        setExpandedId(null);
-        return;
-      }
-      setExpandedId(provider.id);
-      setEditForm({
-        name: provider.name,
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
+    }),
+    canTest: (p) => p.isSidecar || (!!p.baseUrl && !!p.model),
+    testProvider: async (p) => {
+      await window.capty.asrTest({
+        baseUrl: p.baseUrl ?? "",
+        apiKey: p.apiKey ?? "",
+        model: p.model ?? "",
+        isSidecar: p.isSidecar,
       });
+      return { ok: true, message: "ASR test passed" };
     },
-    [expandedId],
+  };
+
+  const {
+    providers,
+    selectedId,
+    expandedId,
+    editForm,
+    setEditForm,
+    testResults,
+    testingId,
+    handleAddProvider,
+    handleUseProvider,
+    handleToggleExpand,
+    handleSaveEdit,
+    handleDeleteProvider,
+    handleTestProvider,
+  } = useProviderManagement<AsrProviderConfig, BaseEditForm>(
+    initialProviders,
+    initialSelectedId,
+    asrConfig,
+    (next, nextSelectedId) =>
+      onSaveAsrSettings({
+        asrProviders: next,
+        selectedAsrProviderId: nextSelectedId,
+      }),
   );
 
-  const handleSaveEdit = useCallback(() => {
-    if (!expandedId) return;
-    const next = providers.map((p) =>
-      p.id === expandedId
-        ? {
-            ...p,
-            name: p.isSidecar ? p.name : editForm.name || "External ASR",
-            baseUrl: editForm.baseUrl,
-            apiKey: editForm.apiKey,
-            model: p.isSidecar ? p.model : editForm.model,
-          }
-        : p,
-    );
-    saveProviders(next, selectedId);
-  }, [expandedId, editForm, providers, selectedId, saveProviders]);
-
-  const handleDeleteProvider = useCallback(
-    (providerId: string) => {
-      const next = providers.filter((p) => p.id !== providerId);
-      const nextSelectedId =
-        selectedId === providerId ? (next[0]?.id ?? null) : selectedId;
-      saveProviders(next, nextSelectedId);
-      if (expandedId === providerId) setExpandedId(null);
-    },
-    [providers, selectedId, expandedId, saveProviders],
-  );
-
-  const handleTestProvider = useCallback(
-    async (provider: AsrProviderConfig) => {
-      // Both sidecar and external use the same real ASR test (440Hz sine wave)
-      if (!provider.isSidecar && (!provider.baseUrl || !provider.model)) return;
-      setTestingId(provider.id);
-      try {
-        await window.capty.asrTest({
-          baseUrl: provider.baseUrl ?? "",
-          apiKey: provider.apiKey ?? "",
-          model: provider.model ?? "",
-          isSidecar: provider.isSidecar,
-        });
-        setTestResults((prev) => ({
-          ...prev,
-          [provider.id]: { ok: true, message: "ASR test passed" },
-        }));
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Connection failed";
-        setTestResults((prev) => ({
-          ...prev,
-          [provider.id]: { ok: false, message: msg },
-        }));
-      } finally {
-        setTestingId(null);
-        setTimeout(() => {
-          setTestResults((prev) => {
-            const next = { ...prev };
-            delete next[provider.id];
-            return next;
-          });
-        }, 5000);
-      }
-    },
-    [],
+  // ASR-specific state
+  const [fetchedModels, setFetchedModels] = useState<
+    Record<string, Array<{ id: string; name: string }>>
+  >({});
+  const [modelsFetchingId, setModelsFetchingId] = useState<string | null>(null);
+  const [useCustomModel, setUseCustomModel] = useState<Record<string, boolean>>(
+    {},
   );
 
   const handleFetchModels = useCallback(
@@ -1604,7 +1946,6 @@ function SpeechTab({
 
   return (
     <>
-      {/* ASR Providers */}
       <div
         style={{
           display: "flex",
@@ -1652,440 +1993,212 @@ function SpeechTab({
         }}
       >
         {providers.map((provider) => {
-          const isActive = selectedId === provider.id;
-          const isExpanded = expandedId === provider.id;
           const providerFetchedModels = fetchedModels[provider.id] ?? [];
           const providerUseCustom = useCustomModel[provider.id] ?? false;
 
           return (
-            <div
+            <ProviderCard
               key={provider.id}
-              style={{
-                ...cardStyle,
-                marginBottom: "0",
-                borderColor: isActive ? "var(--accent)" : "var(--border)",
-              }}
-            >
-              {/* Provider header */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div
-                  style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
-                  onClick={() => handleToggleExpand(provider)}
-                >
+              provider={provider}
+              isActive={selectedId === provider.id}
+              isExpanded={expandedId === provider.id}
+              isRecording={isRecording}
+              sidecarReady={sidecarReady}
+              sidecarColor={asrConfig.sidecarColor}
+              sidecarBg={asrConfig.sidecarBg}
+              testingId={testingId}
+              testResult={testResults[provider.id]}
+              sidecarTestDisabled={!selectedModelId}
+              sidecarTestDisabledTitle="Select an ASR model first"
+              onToggleExpand={() => handleToggleExpand(provider)}
+              onUseProvider={() => handleUseProvider(provider.id)}
+              onDeleteProvider={() => handleDeleteProvider(provider.id)}
+              onTestProvider={() => handleTestProvider(provider)}
+              renderExpandedContent={() =>
+                provider.isSidecar ? (
+                  <InlineModelMarket
+                    category="asr"
+                    models={models}
+                    selectedModelId={selectedModelId}
+                    isDownloading={isDownloading}
+                    downloadingModelId={downloadingModelId}
+                    downloadProgress={downloadProgress}
+                    downloadError={downloadError}
+                    isRecording={isRecording}
+                    hfMirrorUrl={hfMirrorUrl}
+                    defaultHfUrl={defaultHfUrl}
+                    downloads={downloads}
+                    onSelectModel={onSelectModel}
+                    onDownloadModel={onDownloadModel}
+                    onDeleteModel={onDeleteModel}
+                    onSearchModels={onSearchModels}
+                    onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                    onPauseDownload={onPauseDownload}
+                    onResumeDownload={onResumeDownload}
+                    onCancelDownload={onCancelDownload}
+                  />
+                ) : (
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
+                      flexDirection: "column",
+                      gap: "10px",
                     }}
                   >
-                    <span
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--text-muted)",
-                        display: "inline-block",
-                        transition: "transform 0.2s",
-                        transform: isExpanded
-                          ? "rotate(0deg)"
-                          : "rotate(-90deg)",
-                        width: "12px",
-                        textAlign: "center" as const,
-                      }}
-                    >
-                      &#9660;
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {provider.name}
-                    </span>
-                    {provider.isSidecar && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: "rgba(245, 166, 35, 0.12)",
-                          color: "#F5A623",
-                        }}
-                      >
-                        Sidecar
-                      </span>
-                    )}
-                    {isActive && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: "rgba(74, 222, 128, 0.12)",
-                          color: "#4ADE80",
-                        }}
-                      >
-                        Active
-                      </span>
-                    )}
-                    {provider.isSidecar && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: sidecarReady
-                            ? "rgba(74, 222, 128, 0.12)"
-                            : "rgba(239, 68, 68, 0.12)",
-                          color: sidecarReady ? "#4ADE80" : "#EF4444",
-                        }}
-                      >
-                        {sidecarReady ? "Online" : "Offline"}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      marginTop: "4px",
-                      paddingLeft: "18px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      {provider.baseUrl || "No URL set"}
-                    </span>
-                    {!provider.isSidecar && provider.model
-                      ? ` \u00b7 ${provider.model}`
-                      : ""}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "6px",
-                    marginLeft: "8px",
-                    flexShrink: 0,
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTestProvider(provider);
-                    }}
-                    disabled={
-                      testingId === provider.id ||
-                      (provider.isSidecar && !selectedModelId)
-                    }
-                    style={{
-                      ...secondaryBtnStyle,
-                      height: "28px",
-                      padding: "0 10px",
-                      fontSize: "11px",
-                      color: "var(--text-secondary)",
-                      cursor:
-                        testingId === provider.id ||
-                        (provider.isSidecar && !selectedModelId)
-                          ? "not-allowed"
-                          : "pointer",
-                      opacity:
-                        testingId === provider.id ||
-                        (provider.isSidecar && !selectedModelId)
-                          ? 0.4
-                          : 1,
-                    }}
-                    title={
-                      provider.isSidecar && !selectedModelId
-                        ? "Select an ASR model first"
-                        : undefined
-                    }
-                  >
-                    {testingId === provider.id ? "Testing..." : "Test"}
-                  </button>
-                  {!isActive && (
-                    <button
-                      onClick={() => handleUseProvider(provider.id)}
-                      disabled={isRecording}
-                      style={{
-                        ...secondaryBtnStyle,
-                        height: "28px",
-                        padding: "0 10px",
-                        fontSize: "11px",
-                        borderColor: "var(--accent)",
-                        color: "var(--accent)",
-                        cursor: isRecording ? "not-allowed" : "pointer",
-                        opacity: isRecording ? 0.5 : 1,
-                      }}
-                    >
-                      Use
-                    </button>
-                  )}
-                  {!provider.isSidecar && (
-                    <button
-                      onClick={() => handleDeleteProvider(provider.id)}
-                      disabled={isRecording}
-                      style={{
-                        ...secondaryBtnStyle,
-                        height: "28px",
-                        padding: "0 8px",
-                        fontSize: "11px",
-                        color: "var(--text-muted)",
-                        cursor: isRecording ? "not-allowed" : "pointer",
-                        opacity: isRecording ? 0.5 : 1,
-                      }}
-                      title="Delete provider"
-                    >
-                      &times;
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Test result */}
-              {testResults[provider.id] && (
-                <div
-                  style={{
-                    marginTop: "8px",
-                    padding: "6px 10px",
-                    borderRadius: "6px",
-                    fontSize: "11px",
-                    lineHeight: "16px",
-                    backgroundColor: testResults[provider.id].ok
-                      ? "rgba(34, 197, 94, 0.1)"
-                      : "rgba(239, 68, 68, 0.1)",
-                    color: testResults[provider.id].ok ? "#22c55e" : "#ef4444",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {testResults[provider.id].message}
-                </div>
-              )}
-
-              {/* Expanded content */}
-              {isExpanded && (
-                <div
-                  style={{
-                    marginTop: "12px",
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "12px",
-                  }}
-                >
-                  {provider.isSidecar ? (
-                    <InlineModelMarket
-                      category="asr"
-                      models={models}
-                      selectedModelId={selectedModelId}
-                      isDownloading={isDownloading}
-                      downloadingModelId={downloadingModelId}
-                      downloadProgress={downloadProgress}
-                      downloadError={downloadError}
-                      isRecording={isRecording}
-                      hfMirrorUrl={hfMirrorUrl}
-                      defaultHfUrl={defaultHfUrl}
-                      downloads={downloads}
-                      onSelectModel={onSelectModel}
-                      onDownloadModel={onDownloadModel}
-                      onDeleteModel={onDeleteModel}
-                      onSearchModels={onSearchModels}
-                      onChangeHfMirrorUrl={onChangeHfMirrorUrl}
-                      onPauseDownload={onPauseDownload}
-                      onResumeDownload={onResumeDownload}
-                      onCancelDownload={onCancelDownload}
-                    />
-                  ) : (
-                    <>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
-                        }}
-                      >
-                        <div>
-                          <div style={labelStyle}>Name</div>
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                name: e.target.value,
-                              })
-                            }
-                            placeholder="My ASR Server"
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Base URL</div>
-                          <input
-                            type="text"
-                            value={editForm.baseUrl}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                baseUrl: e.target.value,
-                              })
-                            }
-                            placeholder="http://localhost:8080"
-                            style={{
-                              ...inputStyle,
-                              fontFamily: "monospace",
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>API Key (optional)</div>
-                          <input
-                            type="password"
-                            value={editForm.apiKey}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                apiKey: e.target.value,
-                              })
-                            }
-                            placeholder="sk-..."
-                            style={{
-                              ...inputStyle,
-                              fontFamily: "monospace",
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Model</div>
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            {providerFetchedModels.length > 0 &&
-                            !providerUseCustom ? (
-                              <select
-                                value={editForm.model}
-                                onChange={(e) => {
-                                  if (e.target.value === "__custom__") {
-                                    setUseCustomModel((prev) => ({
-                                      ...prev,
-                                      [provider.id]: true,
-                                    }));
-                                  } else {
-                                    setEditForm({
-                                      ...editForm,
-                                      model: e.target.value,
-                                    });
-                                  }
-                                }}
-                                style={{
-                                  ...inputStyle,
-                                  flex: 1,
-                                  width: "auto",
-                                }}
-                              >
-                                <option value="" disabled>
-                                  Select a model...
-                                </option>
-                                {providerFetchedModels.map((m) => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.name}
-                                  </option>
-                                ))}
-                                <option value="__custom__">Custom...</option>
-                              </select>
-                            ) : (
-                              <input
-                                type="text"
-                                value={editForm.model}
-                                onChange={(e) =>
-                                  setEditForm({
-                                    ...editForm,
-                                    model: e.target.value,
-                                  })
-                                }
-                                placeholder="e.g. whisper-1"
-                                style={{ ...inputStyle, flex: 1 }}
-                              />
-                            )}
-                            <button
-                              onClick={() => handleFetchModels(provider.id)}
-                              disabled={
-                                modelsFetchingId === provider.id ||
-                                !editForm.baseUrl
+                    <div>
+                      <div style={labelStyle}>Name</div>
+                      <input
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, name: e.target.value })
+                        }
+                        placeholder="My ASR Server"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <div style={labelStyle}>Base URL</div>
+                      <input
+                        type="text"
+                        value={editForm.baseUrl}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, baseUrl: e.target.value })
+                        }
+                        placeholder="http://localhost:8080"
+                        style={{ ...inputStyle, fontFamily: "monospace" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={labelStyle}>API Key (optional)</div>
+                      <input
+                        type="password"
+                        value={editForm.apiKey}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, apiKey: e.target.value })
+                        }
+                        placeholder="sk-..."
+                        style={{ ...inputStyle, fontFamily: "monospace" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={labelStyle}>Model</div>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {providerFetchedModels.length > 0 &&
+                        !providerUseCustom ? (
+                          <select
+                            value={editForm.model}
+                            onChange={(e) => {
+                              if (e.target.value === "__custom__") {
+                                setUseCustomModel((prev) => ({
+                                  ...prev,
+                                  [provider.id]: true,
+                                }));
+                              } else {
+                                setEditForm({
+                                  ...editForm,
+                                  model: e.target.value,
+                                });
                               }
-                              style={{
-                                ...secondaryBtnStyle,
-                                color: "var(--text-muted)",
-                                cursor:
-                                  modelsFetchingId === provider.id ||
-                                  !editForm.baseUrl
-                                    ? "not-allowed"
-                                    : "pointer",
-                                opacity:
-                                  modelsFetchingId === provider.id ||
-                                  !editForm.baseUrl
-                                    ? 0.5
-                                    : 1,
-                              }}
-                            >
-                              {modelsFetchingId === provider.id
-                                ? "Fetching..."
-                                : "Fetch Models"}
-                            </button>
-                          </div>
-                          {providerUseCustom &&
-                            providerFetchedModels.length > 0 && (
-                              <button
-                                onClick={() =>
-                                  setUseCustomModel((prev) => ({
-                                    ...prev,
-                                    [provider.id]: false,
-                                  }))
-                                }
-                                style={{
-                                  marginTop: "4px",
-                                  padding: "0",
-                                  fontSize: "11px",
-                                  color: "var(--accent)",
-                                  background: "none",
-                                  border: "none",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                Back to model list
-                              </button>
-                            )}
-                        </div>
-                        <div
+                            }}
+                            style={{ ...inputStyle, flex: 1, width: "auto" }}
+                          >
+                            <option value="" disabled>
+                              Select a model...
+                            </option>
+                            {providerFetchedModels.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                            <option value="__custom__">Custom...</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={editForm.model}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                model: e.target.value,
+                              })
+                            }
+                            placeholder="e.g. whisper-1"
+                            style={{ ...inputStyle, flex: 1 }}
+                          />
+                        )}
+                        <button
+                          onClick={() => handleFetchModels(provider.id)}
+                          disabled={
+                            modelsFetchingId === provider.id ||
+                            !editForm.baseUrl
+                          }
                           style={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            marginTop: "4px",
-                          }}
-                        >
-                          <button
-                            onClick={handleSaveEdit}
-                            disabled={!editForm.baseUrl}
-                            style={{
-                              ...primaryBtnStyle,
-                              cursor: !editForm.baseUrl
+                            ...secondaryBtnStyle,
+                            color: "var(--text-muted)",
+                            cursor:
+                              modelsFetchingId === provider.id ||
+                              !editForm.baseUrl
                                 ? "not-allowed"
                                 : "pointer",
-                              opacity: !editForm.baseUrl ? 0.5 : 1,
+                            opacity:
+                              modelsFetchingId === provider.id ||
+                              !editForm.baseUrl
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          {modelsFetchingId === provider.id
+                            ? "Fetching..."
+                            : "Fetch Models"}
+                        </button>
+                      </div>
+                      {providerUseCustom &&
+                        providerFetchedModels.length > 0 && (
+                          <button
+                            onClick={() =>
+                              setUseCustomModel((prev) => ({
+                                ...prev,
+                                [provider.id]: false,
+                              }))
+                            }
+                            style={{
+                              marginTop: "4px",
+                              padding: "0",
+                              fontSize: "11px",
+                              color: "var(--accent)",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
                             }}
                           >
-                            Save
+                            Back to model list
                           </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                        )}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        marginTop: "4px",
+                      }}
+                    >
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={!editForm.baseUrl}
+                        style={{
+                          ...primaryBtnStyle,
+                          cursor: !editForm.baseUrl ? "not-allowed" : "pointer",
+                          opacity: !editForm.baseUrl ? 0.5 : 1,
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )
+              }
+            />
           );
         })}
       </div>
@@ -2154,40 +2267,37 @@ function TtsTab({
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
 }): React.ReactElement {
-  const [providers, setProviders] = useState<TtsProviderConfig[]>([
-    ...initialProviders,
-  ]);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialSelectedId,
-  );
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    baseUrl: "",
-    apiKey: "",
-    model: "",
-    voice: "auto",
-  });
-  const [testResults, setTestResults] = useState<
-    Record<string, { ok: boolean; message: string }>
-  >({});
-  const [testingId, setTestingId] = useState<string | null>(null);
-
-  const saveProviders = useCallback(
-    (next: TtsProviderConfig[], nextSelectedId: string | null) => {
-      setProviders(next);
-      setSelectedId(nextSelectedId);
-      onSaveTtsSettings({
-        ttsProviders: next,
-        selectedTtsProviderId: nextSelectedId,
-      });
-    },
-    [onSaveTtsSettings],
-  );
-
-  const handleAddProvider = useCallback(() => {
-    const id = `tts-ext-${Date.now()}`;
-    const newProvider: TtsProviderConfig = {
+  const ttsConfig: ProviderCategoryConfig<TtsProviderConfig, TtsEditForm> = {
+    category: "tts",
+    sidecarColor: "#A855F7",
+    sidecarBg: "rgba(168, 85, 247, 0.12)",
+    categoryLabel: "TTS",
+    idPrefix: "tts-ext",
+    defaultName: "New TTS Provider",
+    fallbackName: "External TTS",
+    createBlankForm: () => ({
+      name: "New TTS Provider",
+      baseUrl: "",
+      apiKey: "",
+      model: "",
+      voice: "auto",
+    }),
+    providerToForm: (p) => ({
+      name: p.name,
+      baseUrl: p.baseUrl,
+      apiKey: p.apiKey,
+      model: p.model,
+      voice: p.voice,
+    }),
+    applyForm: (p, f) => ({
+      ...p,
+      name: p.isSidecar ? p.name : f.name || "External TTS",
+      baseUrl: f.baseUrl,
+      apiKey: f.apiKey,
+      model: p.isSidecar ? p.model : f.model,
+      voice: f.voice,
+    }),
+    createNewProvider: (id) => ({
       id,
       name: "New TTS Provider",
       baseUrl: "",
@@ -2195,114 +2305,49 @@ function TtsTab({
       model: "",
       voice: "auto",
       isSidecar: false,
-    };
-    const next = [...providers, newProvider];
-    saveProviders(next, selectedId);
-    setExpandedId(id);
-    setEditForm({
-      name: "New TTS Provider",
-      baseUrl: "",
-      apiKey: "",
-      model: "",
-      voice: "auto",
-    });
-  }, [providers, selectedId, saveProviders]);
-
-  const handleUseProvider = useCallback(
-    (providerId: string) => {
-      saveProviders([...providers], providerId);
-    },
-    [providers, saveProviders],
-  );
-
-  const handleToggleExpand = useCallback(
-    (provider: TtsProviderConfig) => {
-      if (expandedId === provider.id) {
-        setExpandedId(null);
-        return;
-      }
-      setExpandedId(provider.id);
-      setEditForm({
-        name: provider.name,
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-        voice: provider.voice,
+    }),
+    canTest: (p) => p.isSidecar || !!p.baseUrl,
+    testProvider: async (p) => {
+      const result = await window.capty.ttsTest({
+        baseUrl: p.baseUrl ?? "",
+        apiKey: p.apiKey ?? "",
+        model: p.model ?? "",
+        isSidecar: p.isSidecar,
       });
+      return {
+        ok: true,
+        message: `TTS test passed (${Math.round(result.bytes / 1024)}KB)`,
+      };
     },
-    [expandedId],
-  );
+  };
 
-  const handleSaveEdit = useCallback(() => {
-    if (!expandedId) return;
-    const next = providers.map((p) =>
-      p.id === expandedId
-        ? {
-            ...p,
-            name: p.isSidecar ? p.name : editForm.name || "External TTS",
-            baseUrl: editForm.baseUrl,
-            apiKey: editForm.apiKey,
-            model: p.isSidecar ? p.model : editForm.model,
-            voice: editForm.voice,
-          }
-        : p,
-    );
-    saveProviders(next, selectedId);
-  }, [expandedId, editForm, providers, selectedId, saveProviders]);
-
-  const handleDeleteProvider = useCallback(
-    (providerId: string) => {
-      const next = providers.filter((p) => p.id !== providerId);
-      const nextSelectedId =
-        selectedId === providerId ? (next[0]?.id ?? null) : selectedId;
-      saveProviders(next, nextSelectedId);
-      if (expandedId === providerId) setExpandedId(null);
-    },
-    [providers, selectedId, expandedId, saveProviders],
-  );
-
-  const handleTestProvider = useCallback(
-    async (provider: TtsProviderConfig) => {
-      // Both sidecar and external use the same real TTS test (send "Hello", verify audio)
-      if (!provider.isSidecar && !provider.baseUrl) return;
-      setTestingId(provider.id);
-      try {
-        const result = await window.capty.ttsTest({
-          baseUrl: provider.baseUrl ?? "",
-          apiKey: provider.apiKey ?? "",
-          model: provider.model ?? "",
-          isSidecar: provider.isSidecar,
-        });
-        setTestResults((prev) => ({
-          ...prev,
-          [provider.id]: {
-            ok: true,
-            message: `TTS test passed (${Math.round(result.bytes / 1024)}KB)`,
-          },
-        }));
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Connection failed";
-        setTestResults((prev) => ({
-          ...prev,
-          [provider.id]: { ok: false, message: msg },
-        }));
-      } finally {
-        setTestingId(null);
-        setTimeout(() => {
-          setTestResults((prev) => {
-            const next = { ...prev };
-            delete next[provider.id];
-            return next;
-          });
-        }, 5000);
-      }
-    },
-    [],
+  const {
+    providers,
+    selectedId,
+    expandedId,
+    editForm,
+    setEditForm,
+    testResults,
+    testingId,
+    handleAddProvider,
+    handleUseProvider,
+    handleToggleExpand,
+    handleSaveEdit,
+    handleDeleteProvider,
+    handleTestProvider,
+  } = useProviderManagement<TtsProviderConfig, TtsEditForm>(
+    initialProviders,
+    initialSelectedId,
+    ttsConfig,
+    (next, nextSelectedId) =>
+      onSaveTtsSettings({
+        ttsProviders: next,
+        selectedTtsProviderId: nextSelectedId,
+      }),
   );
 
   return (
     <>
-      {/* Add Provider button */}
       <div
         style={{
           display: "flex",
@@ -2349,350 +2394,138 @@ function TtsTab({
           marginBottom: "24px",
         }}
       >
-        {providers.map((provider) => {
-          const isActive = selectedId === provider.id;
-          const isExpanded = expandedId === provider.id;
-          const testResult = testResults[provider.id];
-
-          return (
-            <div
-              key={provider.id}
-              style={{
-                ...cardStyle,
-                marginBottom: "0",
-                borderColor: isActive ? "var(--accent)" : "var(--border)",
-              }}
-            >
-              {/* Provider header */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div
-                  style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
-                  onClick={() => handleToggleExpand(provider)}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--text-muted)",
-                        display: "inline-block",
-                        transition: "transform 0.2s",
-                        transform: isExpanded
-                          ? "rotate(0deg)"
-                          : "rotate(-90deg)",
-                        width: "12px",
-                        textAlign: "center" as const,
-                      }}
-                    >
-                      &#9660;
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {provider.name}
-                    </span>
-                    {provider.isSidecar && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: "rgba(168, 85, 247, 0.12)",
-                          color: "#A855F7",
-                        }}
-                      >
-                        Sidecar
-                      </span>
-                    )}
-                    {isActive && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: "rgba(74, 222, 128, 0.12)",
-                          color: "#4ADE80",
-                        }}
-                      >
-                        Active
-                      </span>
-                    )}
-                    {provider.isSidecar && (
-                      <span
-                        style={{
-                          ...tagStyle,
-                          backgroundColor: sidecarReady
-                            ? "rgba(74, 222, 128, 0.12)"
-                            : "rgba(239, 68, 68, 0.12)",
-                          color: sidecarReady ? "#4ADE80" : "#EF4444",
-                        }}
-                      >
-                        {sidecarReady ? "Online" : "Offline"}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      marginTop: "4px",
-                      paddingLeft: "18px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      {provider.baseUrl || "No URL set"}
-                    </span>
-                    {!provider.isSidecar && provider.model
-                      ? ` \u00b7 ${provider.model}`
-                      : ""}
-                  </div>
-                </div>
-
+        {providers.map((provider) => (
+          <ProviderCard
+            key={provider.id}
+            provider={provider}
+            isActive={selectedId === provider.id}
+            isExpanded={expandedId === provider.id}
+            isRecording={isRecording}
+            sidecarReady={sidecarReady}
+            sidecarColor={ttsConfig.sidecarColor}
+            sidecarBg={ttsConfig.sidecarBg}
+            testingId={testingId}
+            testResult={testResults[provider.id]}
+            sidecarTestDisabled={!selectedTtsModelId}
+            sidecarTestDisabledTitle="Select a TTS model first"
+            onToggleExpand={() => handleToggleExpand(provider)}
+            onUseProvider={() => handleUseProvider(provider.id)}
+            onDeleteProvider={() => handleDeleteProvider(provider.id)}
+            onTestProvider={() => handleTestProvider(provider)}
+            renderExpandedContent={() =>
+              provider.isSidecar ? (
+                <InlineModelMarket
+                  category="tts"
+                  models={ttsModels}
+                  selectedModelId={selectedTtsModelId}
+                  isDownloading={isTtsDownloading}
+                  downloadingModelId={ttsDownloadingModelId}
+                  downloadProgress={ttsDownloadProgress}
+                  downloadError={ttsDownloadError}
+                  isRecording={isRecording}
+                  hfMirrorUrl={hfMirrorUrl}
+                  defaultHfUrl={defaultHfUrl}
+                  downloads={downloads}
+                  onSelectModel={onSelectTtsModel}
+                  onDownloadModel={onDownloadTtsModel}
+                  onDeleteModel={onDeleteTtsModel}
+                  onSearchModels={onSearchTtsModels}
+                  onChangeHfMirrorUrl={onChangeHfMirrorUrl}
+                  onPauseDownload={onPauseDownload}
+                  onResumeDownload={onResumeDownload}
+                  onCancelDownload={onCancelDownload}
+                />
+              ) : (
                 <div
                   style={{
                     display: "flex",
-                    gap: "6px",
-                    alignItems: "center",
-                    flexShrink: 0,
-                    marginLeft: "12px",
+                    flexDirection: "column",
+                    gap: "8px",
                   }}
                 >
-                  {testResult && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: testResult.ok ? "#4ADE80" : "#EF4444",
-                        maxWidth: "120px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {testResult.message}
-                    </span>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTestProvider(provider);
-                    }}
-                    disabled={
-                      testingId === provider.id ||
-                      (provider.isSidecar && !selectedTtsModelId)
-                    }
+                  <div>
+                    <div style={labelStyle}>Name</div>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, name: e.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <div style={labelStyle}>Base URL</div>
+                    <input
+                      type="text"
+                      value={editForm.baseUrl}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, baseUrl: e.target.value })
+                      }
+                      placeholder="https://api.example.com/v1"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <div style={labelStyle}>API Key</div>
+                    <input
+                      type="password"
+                      value={editForm.apiKey}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, apiKey: e.target.value })
+                      }
+                      placeholder="sk-..."
+                      style={{ ...inputStyle, fontFamily: "monospace" }}
+                    />
+                  </div>
+                  <div>
+                    <div style={labelStyle}>Model</div>
+                    <input
+                      type="text"
+                      value={editForm.model}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, model: e.target.value })
+                      }
+                      placeholder="e.g. tts-1"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
+                    <div style={labelStyle}>Voice</div>
+                    <input
+                      type="text"
+                      value={editForm.voice}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, voice: e.target.value })
+                      }
+                      placeholder="auto"
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div
                     style={{
-                      ...secondaryBtnStyle,
-                      height: "28px",
-                      padding: "0 10px",
-                      fontSize: "11px",
-                      color: "var(--text-secondary)",
-                      cursor:
-                        testingId === provider.id ||
-                        (provider.isSidecar && !selectedTtsModelId)
-                          ? "not-allowed"
-                          : "pointer",
-                      opacity:
-                        testingId === provider.id ||
-                        (provider.isSidecar && !selectedTtsModelId)
-                          ? 0.4
-                          : 1,
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      marginTop: "4px",
                     }}
-                    title={
-                      provider.isSidecar && !selectedTtsModelId
-                        ? "Select a TTS model first"
-                        : undefined
-                    }
                   >
-                    {testingId === provider.id ? "Testing..." : "Test"}
-                  </button>
-                  {!isActive && (
                     <button
-                      onClick={() => handleUseProvider(provider.id)}
-                      disabled={isRecording}
+                      onClick={handleSaveEdit}
+                      disabled={!editForm.baseUrl}
                       style={{
                         ...primaryBtnStyle,
-                        height: "26px",
-                        padding: "0 10px",
-                        fontSize: "11px",
-                        cursor: isRecording ? "not-allowed" : "pointer",
-                        opacity: isRecording ? 0.5 : 1,
+                        cursor: !editForm.baseUrl ? "not-allowed" : "pointer",
+                        opacity: !editForm.baseUrl ? 0.5 : 1,
                       }}
                     >
-                      Use
+                      Save
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-
-              {/* Expanded panel */}
-              {isExpanded && (
-                <div
-                  style={{
-                    marginTop: "12px",
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "12px",
-                  }}
-                >
-                  {provider.isSidecar ? (
-                    <InlineModelMarket
-                      category="tts"
-                      models={ttsModels}
-                      selectedModelId={selectedTtsModelId}
-                      isDownloading={isTtsDownloading}
-                      downloadingModelId={ttsDownloadingModelId}
-                      downloadProgress={ttsDownloadProgress}
-                      downloadError={ttsDownloadError}
-                      isRecording={isRecording}
-                      hfMirrorUrl={hfMirrorUrl}
-                      defaultHfUrl={defaultHfUrl}
-                      downloads={downloads}
-                      onSelectModel={onSelectTtsModel}
-                      onDownloadModel={onDownloadTtsModel}
-                      onDeleteModel={onDeleteTtsModel}
-                      onSearchModels={onSearchTtsModels}
-                      onChangeHfMirrorUrl={onChangeHfMirrorUrl}
-                      onPauseDownload={onPauseDownload}
-                      onResumeDownload={onResumeDownload}
-                      onCancelDownload={onCancelDownload}
-                    />
-                  ) : (
-                    <>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "8px",
-                        }}
-                      >
-                        <div>
-                          <div style={labelStyle}>Name</div>
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                name: e.target.value,
-                              })
-                            }
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Base URL</div>
-                          <input
-                            type="text"
-                            value={editForm.baseUrl}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                baseUrl: e.target.value,
-                              })
-                            }
-                            placeholder="https://api.example.com/v1"
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>API Key</div>
-                          <input
-                            type="password"
-                            value={editForm.apiKey}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                apiKey: e.target.value,
-                              })
-                            }
-                            placeholder="sk-..."
-                            style={{ ...inputStyle, fontFamily: "monospace" }}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Model</div>
-                          <input
-                            type="text"
-                            value={editForm.model}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                model: e.target.value,
-                              })
-                            }
-                            placeholder="e.g. tts-1"
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <div style={labelStyle}>Voice</div>
-                          <input
-                            type="text"
-                            value={editForm.voice}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                voice: e.target.value,
-                              })
-                            }
-                            placeholder="auto"
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            marginTop: "4px",
-                          }}
-                        >
-                          <button
-                            onClick={() => handleDeleteProvider(provider.id)}
-                            style={{
-                              ...secondaryBtnStyle,
-                              color: "#EF4444",
-                              borderColor: "rgba(239, 68, 68, 0.3)",
-                            }}
-                          >
-                            Delete
-                          </button>
-                          <button
-                            onClick={handleSaveEdit}
-                            disabled={!editForm.baseUrl}
-                            style={{
-                              ...primaryBtnStyle,
-                              cursor: !editForm.baseUrl
-                                ? "not-allowed"
-                                : "pointer",
-                              opacity: !editForm.baseUrl ? 0.5 : 1,
-                            }}
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+              )
+            }
+          />
+        ))}
       </div>
     </>
   );
@@ -4707,7 +4540,6 @@ export function SettingsModal({
                 selectedAsrProviderId={selectedAsrProviderId}
                 sidecarReady={sidecarReady}
                 isRecording={isRecording}
-                dataDir={dataDir}
                 models={models}
                 selectedModelId={selectedModelId}
                 isDownloading={isDownloading}

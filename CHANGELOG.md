@@ -4,6 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- refactor: extract shared useProviderManagement hook and ProviderCard component from ASR/TTS tabs (~170 fewer lines)
+- style: unify ASR/TTS provider UI — delete button in header (x), inline test results, secondary+accent Use button
 - fix: remove hardcoded ASR fallback file list in model download — retry HF API 3 times with exponential backoff instead
 - fix: skip retry for deterministic HTTP 4xx errors (404/403/401/410) during file download
 - fix: resolve AbortSignal MaxListenersExceededWarning by using per-file AbortController instead of per-retry listener registration
