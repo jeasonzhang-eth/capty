@@ -1294,6 +1294,24 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     });
 
     if (!spawnOk) {
+      // Spawn failed — but maybe another sidecar is already running on the port
+      // (e.g. orphan from previous session). Check health before giving up.
+      try {
+        const resp = await fetch(`${baseUrl}/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (resp.ok) {
+          const data = (await resp.json()) as Record<string, unknown>;
+          if (data.status === "ok") {
+            console.log(
+              "[sidecar] spawn failed but existing instance found on port — reusing",
+            );
+            return { ok: true };
+          }
+        }
+      } catch {
+        // no existing instance either
+      }
       const msg =
         `Sidecar binary failed to launch: ${bin}` +
         (app.isPackaged

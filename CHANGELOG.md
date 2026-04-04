@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: sidecar start recovers from port conflict by reusing existing instance instead of failing
 - fix: sidecar start errors no longer spam Electron console — return `{ ok, error }` instead of throwing from IPC handler
 - fix: all modals/dialogs/popovers now close on ESC key (Settings, Downloads, FetchModels, SidecarPopover, TranslateMenu, ExportMenus, delete confirmations)
 - fix: remember last active Settings tab across open/close (no longer resets to General every time)
