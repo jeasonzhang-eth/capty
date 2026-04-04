@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, execSync, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "node:path";
 import { join } from "path";
@@ -152,6 +152,7 @@ function getSidecarPort(cfgDir: string): number {
   if (_cachedSidecarPort !== null) return _cachedSidecarPort;
   const config = readConfig(cfgDir);
   _cachedSidecarPort = config.sidecar?.port ?? 8765;
+  _lastSidecarPort = _cachedSidecarPort;
   return _cachedSidecarPort;
 }
 
@@ -183,17 +184,49 @@ async function waitForHealth(
 /** PID of last managed sidecar (kept for process.exit SIGKILL fallback). */
 let _sidecarPid: number | null = null;
 
-/** Kill the managed sidecar process if running. */
-export function killSidecar(): void {
-  if (!sidecarProcess) return;
-  _sidecarPid = sidecarProcess.pid ?? null;
-  const proc = sidecarProcess;
-  sidecarProcess = null;
+/** Last known sidecar port (for killing orphans on exit). */
+let _lastSidecarPort: number = 8765;
+
+/**
+ * Kill any process listening on the given port (handles orphan sidecar).
+ * Synchronous — safe to call from before-quit and process.exit handlers.
+ */
+function killProcessOnPort(port: number): void {
   try {
-    proc.kill("SIGTERM");
+    const out = execSync(`lsof -ti tcp:${port}`, {
+      encoding: "utf-8",
+      timeout: 3000,
+    }).trim();
+    for (const pidStr of out.split("\n")) {
+      const pid = Number(pidStr);
+      if (pid > 0) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // already dead
+        }
+      }
+    }
   } catch {
-    // already dead
+    // lsof failed or no process on port — fine
   }
+}
+
+/** Kill the managed sidecar process and any orphan on the configured port. */
+export function killSidecar(): void {
+  // Kill managed process
+  if (sidecarProcess) {
+    _sidecarPid = sidecarProcess.pid ?? null;
+    const proc = sidecarProcess;
+    sidecarProcess = null;
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // already dead
+    }
+  }
+  // Kill any process on the sidecar port (catches orphans from previous runs)
+  killProcessOnPort(_lastSidecarPort);
 }
 
 // Last-resort SIGKILL: `process.on('exit')` fires synchronously right before
@@ -1243,7 +1276,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { ok: true };
   });
 
-  // Stop sidecar process
+  // Stop sidecar process (managed + any orphan on the configured port)
   ipcMain.handle("sidecar:stop", () => {
     killSidecar();
     return { ok: true };
