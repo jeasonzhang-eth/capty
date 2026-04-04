@@ -122,9 +122,7 @@ function SidecarPopover({
             borderRadius: "10px",
             border: "none",
             cursor: sidecarStarting ? "wait" : "pointer",
-            backgroundColor: toggleOn
-              ? "var(--accent)"
-              : "var(--bg-tertiary)",
+            backgroundColor: toggleOn ? "var(--accent)" : "var(--bg-tertiary)",
             transition: "background-color 0.2s",
             padding: 0,
             flexShrink: 0,
@@ -208,9 +206,7 @@ function SidecarPopover({
                 width: "5px",
                 height: "5px",
                 borderRadius: "50%",
-                backgroundColor: isRunning
-                  ? "#4ADE80"
-                  : "var(--text-muted)",
+                backgroundColor: isRunning ? "#4ADE80" : "var(--text-muted)",
                 display: "inline-block",
               }}
             />
@@ -355,6 +351,7 @@ export function ControlBar({
         gap: "16px",
         height: "48px",
         flexShrink: 0,
+        zIndex: 50,
       }}
     >
       {/* Left section: brand + status indicator */}
@@ -364,6 +361,7 @@ export function ControlBar({
           alignItems: "center",
           gap: "8px",
           position: "relative",
+          zIndex: 100,
         }}
       >
         <span
@@ -403,7 +401,11 @@ export function ControlBar({
             borderRadius: "4px",
             transition: "background-color 0.15s",
             ...(indicatorClickable
-              ? { backgroundColor: showPopover ? "rgba(255,255,255,0.06)" : "transparent" }
+              ? {
+                  backgroundColor: showPopover
+                    ? "rgba(255,255,255,0.06)"
+                    : "transparent",
+                }
               : {}),
           }}
           title={

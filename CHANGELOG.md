@@ -5,6 +5,7 @@ All notable changes to Capty are documented in this file.
 ## 2026-04-04
 
 - refactor: replace ControlBar ASR/TTS status indicators with unified Sidecar popover (toggle, ASR/TTS status, port)
+- fix: sidecar popover hidden behind content panels (z-index)
 
 ## 2026-04-03
 
