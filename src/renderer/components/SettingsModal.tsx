@@ -272,12 +272,7 @@ const tagStyle: React.CSSProperties = {
   lineHeight: "14px",
 };
 
-export type TabId =
-  | "general"
-  | "default-models"
-  | "speech"
-  | "tts"
-  | "language-models";
+export type TabId = "general" | "default-models" | "asr" | "tts" | "llm";
 
 const TABS: readonly {
   readonly id: TabId;
@@ -286,9 +281,9 @@ const TABS: readonly {
 }[] = [
   { id: "general", icon: "\u2699\ufe0f", label: "General" },
   { id: "default-models", icon: "\ud83c\udfaf", label: "Default Models" },
-  { id: "speech", icon: "\ud83c\udf99\ufe0f", label: "ASR Providers" },
+  { id: "asr", icon: "\ud83c\udf99\ufe0f", label: "ASR Providers" },
   { id: "tts", icon: "\ud83d\udd0a", label: "TTS Providers" },
-  { id: "language-models", icon: "\ud83e\udde0", label: "LLM Providers" },
+  { id: "llm", icon: "\ud83e\udde0", label: "LLM Providers" },
 ];
 
 /* ─── Small reusable components ─── */
@@ -4147,7 +4142,7 @@ function DefaultModelsTab({
           providers={llmProviders}
           selected={selectedSummaryModel}
           onChange={onChangeSummaryModel}
-          onGearClick={() => onSwitchToTab?.("language-models")}
+          onGearClick={() => onSwitchToTab?.("llm")}
         />
       </div>
 
@@ -4161,7 +4156,7 @@ function DefaultModelsTab({
           providers={llmProviders}
           selected={selectedRapidModel}
           onChange={onChangeRapidModel}
-          onGearClick={() => onSwitchToTab?.("language-models")}
+          onGearClick={() => onSwitchToTab?.("llm")}
         />
         <div
           style={{
@@ -4211,7 +4206,7 @@ function DefaultModelsTab({
           providers={llmProviders}
           selected={selectedTranslateModel}
           onChange={onChangeTranslateModel}
-          onGearClick={() => onSwitchToTab?.("language-models")}
+          onGearClick={() => onSwitchToTab?.("llm")}
         />
         <div
           style={{
@@ -4515,7 +4510,7 @@ export function SettingsModal({
                 onSwitchToTab={(tab) => setActiveTab(tab as TabId)}
               />
             )}
-            {activeTab === "speech" && (
+            {activeTab === "asr" && (
               <SpeechTab
                 asrProviders={asrProviders}
                 selectedAsrProviderId={selectedAsrProviderId}
@@ -4561,7 +4556,7 @@ export function SettingsModal({
                 onCancelDownload={onCancelDownload}
               />
             )}
-            {activeTab === "language-models" && (
+            {activeTab === "llm" && (
               <LanguageModelsTab
                 llmProviders={llmProviders}
                 onSave={onSaveLlmProviders}

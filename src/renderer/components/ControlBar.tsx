@@ -231,7 +231,7 @@ function SidecarPopover({
       <div
         style={{ ...rowStyle, cursor: "pointer", borderRadius: "4px" }}
         onClick={() => {
-          onOpenSettingsTab?.("speech");
+          onOpenSettingsTab?.("asr");
           onClose();
         }}
         onMouseEnter={(e) => {

@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- refactor: rename Settings tab IDs to match labels (`speech` → `asr`, `language-models` → `llm`)
 - feat: click ASR/TTS row in SidecarPopover to jump to corresponding Settings tab
 - fix: hide "Click to manage sidecar" tooltip when popover is already open
 - fix: SidecarPopover shows "No model" instead of "Ready" when no ASR/TTS model is selected
