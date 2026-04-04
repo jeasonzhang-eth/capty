@@ -21,6 +21,7 @@ All notable changes to Capty are documented in this file.
 - refactor: replace sidecar ASR provider Base URL input with read-only port display in Settings → Speech tab
 - refactor: simplify `audio:decode-file` IPC signature — remove redundant `sidecarBaseUrl` parameter
 - feat: auto-migrate old `autoStartSidecar` config to new `sidecar` config block
+- fix: sidecar process not killed on Cmd+Q — add `process.on('exit')` SIGKILL fallback to prevent orphan processes
 
 ## 2026-04-03
 

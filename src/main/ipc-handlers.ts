@@ -180,13 +180,34 @@ async function waitForHealth(
   throw new Error("Sidecar failed to start within timeout");
 }
 
+/** PID of last managed sidecar (kept for process.exit SIGKILL fallback). */
+let _sidecarPid: number | null = null;
+
 /** Kill the managed sidecar process if running. */
 export function killSidecar(): void {
-  if (sidecarProcess) {
-    sidecarProcess.kill("SIGTERM");
-    sidecarProcess = null;
+  if (!sidecarProcess) return;
+  _sidecarPid = sidecarProcess.pid ?? null;
+  const proc = sidecarProcess;
+  sidecarProcess = null;
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    // already dead
   }
 }
+
+// Last-resort SIGKILL: `process.on('exit')` fires synchronously right before
+// the Node.js event loop stops. Any sidecar that survived SIGTERM gets killed.
+process.on("exit", () => {
+  if (_sidecarPid) {
+    try {
+      process.kill(_sidecarPid, "SIGKILL");
+    } catch {
+      // already dead — expected
+    }
+    _sidecarPid = null;
+  }
+});
 
 /** Extract domain from URL for display. */
 function extractSource(url: string): string {
@@ -1159,6 +1180,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    _sidecarPid = sidecarProcess.pid ?? null;
 
     // Drain stdout so the pipe buffer never fills
     sidecarProcess.stdout?.on("data", (chunk: Buffer) => {
@@ -1172,6 +1194,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       sidecarProcess!.on("error", (err) => {
         console.error("[sidecar] spawn error:", err.message);
         sidecarProcess = null;
+        _sidecarPid = null;
         if (!resolved) {
           resolved = true;
           resolve(false);
@@ -1180,6 +1203,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       sidecarProcess!.on("exit", (code) => {
         console.log("[sidecar] exited early with code", code);
         sidecarProcess = null;
+        _sidecarPid = null;
         if (!resolved) {
           resolved = true;
           resolve(false);
@@ -1212,6 +1236,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     sidecarProcess?.on("exit", (code) => {
       console.log("[sidecar] exited with code", code);
       sidecarProcess = null;
+      _sidecarPid = null;
     });
 
     await waitForHealth(baseUrl, 30000);
@@ -1220,10 +1245,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // Stop sidecar process
   ipcMain.handle("sidecar:stop", () => {
-    if (sidecarProcess) {
-      sidecarProcess.kill("SIGTERM");
-      sidecarProcess = null;
-    }
+    killSidecar();
     return { ok: true };
   });
 
