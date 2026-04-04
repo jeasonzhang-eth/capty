@@ -187,6 +187,9 @@ let _sidecarPid: number | null = null;
 /** Last known sidecar port (for killing orphans on exit). */
 let _lastSidecarPort: number = 8765;
 
+/** Guard against concurrent sidecar:start calls (e.g. React StrictMode double-invoke). */
+let _sidecarStarting: Promise<{ ok: boolean; error?: string }> | null = null;
+
 /**
  * Check whether the process on the given port is actually a capty-sidecar
  * by probing /health and verifying the response contains `status: "ok"`.
@@ -1212,8 +1215,22 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // Start sidecar process
   ipcMain.handle("sidecar:start", async () => {
-    const baseUrl = getSidecarBaseUrl(configDir);
-    const port = getSidecarPort(configDir);
+    // Deduplicate concurrent starts (e.g. React StrictMode double-invoke)
+    if (_sidecarStarting) return _sidecarStarting;
+    const promise = doStartSidecar(configDir);
+    _sidecarStarting = promise;
+    try {
+      return await promise;
+    } finally {
+      _sidecarStarting = null;
+    }
+  });
+
+  async function doStartSidecar(
+    cfgDir: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const baseUrl = getSidecarBaseUrl(cfgDir);
+    const port = getSidecarPort(cfgDir);
 
     // Already managed by us
     if (sidecarProcess) return { ok: true };
@@ -1335,7 +1352,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       return { ok: false, error: "Sidecar started but health check timed out" };
     }
     return { ok: true };
-  });
+  }
 
   // Stop sidecar process (managed + any orphan on the configured port)
   ipcMain.handle("sidecar:stop", () => {
