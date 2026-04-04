@@ -778,8 +778,6 @@ interface InlineModelMarketProps {
   readonly downloadProgress: number;
   readonly downloadError: string | null;
   readonly isRecording: boolean;
-  readonly hfMirrorUrl: string;
-  readonly defaultHfUrl: string;
   readonly downloads: Record<
     string,
     {
@@ -794,7 +792,6 @@ interface InlineModelMarketProps {
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
-  readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onPauseDownload: (modelId: string) => void;
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
@@ -809,14 +806,11 @@ function InlineModelMarket({
   downloadProgress,
   downloadError,
   isRecording,
-  hfMirrorUrl,
-  defaultHfUrl,
   downloads,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
-  onChangeHfMirrorUrl,
   onPauseDownload,
   onResumeDownload,
   onCancelDownload,
@@ -825,9 +819,6 @@ function InlineModelMarket({
   const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
-  const [hfUrlSaved, setHfUrlSaved] = useState(false);
-  const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sync search results' downloaded status
@@ -861,16 +852,6 @@ function InlineModelMarket({
       setConfirmDeleteId(null);
     }
   }, [confirmDeleteId, onDeleteModel]);
-
-  const handleSaveHfUrl = useCallback(() => {
-    onChangeHfMirrorUrl(editingHfUrl);
-    setHfUrlSaved(true);
-    setTimeout(() => setHfUrlSaved(false), 2000);
-  }, [editingHfUrl, onChangeHfMirrorUrl]);
-
-  const handleResetHfUrl = useCallback(() => {
-    setEditingHfUrl(defaultHfUrl);
-  }, [defaultHfUrl]);
 
   const handleSearch = useCallback(async () => {
     const q = searchQuery.trim();
@@ -929,71 +910,6 @@ function InlineModelMarket({
           }}
         >
           {isSearching ? "Searching..." : "Search"}
-        </button>
-      </div>
-
-      {/* HuggingFace Mirror URL */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "11px",
-            color: "var(--text-muted)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          HuggingFace Mirror:
-        </span>
-        <input
-          type="text"
-          value={editingHfUrl}
-          onChange={(e) => setEditingHfUrl(e.target.value)}
-          placeholder={defaultHfUrl}
-          style={{
-            ...inputStyle,
-            flex: 1,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: "11px",
-          }}
-        />
-        {hfUrlChanged && (
-          <button
-            onClick={handleSaveHfUrl}
-            style={{ ...primaryBtnStyle, fontSize: "11px" }}
-          >
-            Save
-          </button>
-        )}
-        {!hfUrlChanged && hfUrlSaved && (
-          <span
-            style={{
-              fontSize: "11px",
-              color: "#4ADE80",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Saved
-          </span>
-        )}
-        <button
-          onClick={handleResetHfUrl}
-          disabled={editingHfUrl === defaultHfUrl}
-          style={{
-            ...secondaryBtnStyle,
-            fontSize: "11px",
-            padding: "0 8px",
-            color: "var(--text-muted)",
-            cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
-            opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
-          }}
-          title="Reset to default"
-        >
-          Reset
         </button>
       </div>
 
@@ -1244,16 +1160,36 @@ function GeneralTab({
   configDir,
   isRecording,
   autoStartSidecar,
+  hfMirrorUrl,
+  defaultHfUrl,
   onChangeDataDir,
   onChangeAutoStartSidecar,
+  onChangeHfMirrorUrl,
 }: {
   readonly dataDir: string | null;
   readonly configDir: string | null;
   readonly isRecording: boolean;
   readonly autoStartSidecar: boolean;
+  readonly hfMirrorUrl: string;
+  readonly defaultHfUrl: string;
   readonly onChangeDataDir: () => void;
   readonly onChangeAutoStartSidecar: (value: boolean) => void;
+  readonly onChangeHfMirrorUrl: (url: string) => void;
 }): React.ReactElement {
+  const [editingHfUrl, setEditingHfUrl] = useState(hfMirrorUrl);
+  const [hfUrlSaved, setHfUrlSaved] = useState(false);
+  const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
+
+  const handleSaveHfUrl = useCallback(() => {
+    onChangeHfMirrorUrl(editingHfUrl);
+    setHfUrlSaved(true);
+    setTimeout(() => setHfUrlSaved(false), 2000);
+  }, [editingHfUrl, onChangeHfMirrorUrl]);
+
+  const handleResetHfUrl = useCallback(() => {
+    setEditingHfUrl(defaultHfUrl);
+  }, [defaultHfUrl]);
+
   return (
     <>
       {/* Data Directory */}
@@ -1406,6 +1342,68 @@ function GeneralTab({
                 boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
               }}
             />
+          </button>
+        </div>
+      </div>
+
+      {/* HuggingFace Mirror */}
+      <div style={sectionTitleStyle}>HuggingFace Mirror</div>
+      <div style={sectionDescStyle}>
+        Use a mirror URL when downloading models from HuggingFace.
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <input
+            type="text"
+            value={editingHfUrl}
+            onChange={(e) => setEditingHfUrl(e.target.value)}
+            placeholder={defaultHfUrl}
+            style={{
+              ...inputStyle,
+              flex: 1,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: "12px",
+            }}
+          />
+          {hfUrlChanged && (
+            <button
+              onClick={handleSaveHfUrl}
+              style={{ ...primaryBtnStyle, fontSize: "12px" }}
+            >
+              Save
+            </button>
+          )}
+          {!hfUrlChanged && hfUrlSaved && (
+            <span
+              style={{
+                fontSize: "12px",
+                color: "#4ADE80",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Saved
+            </span>
+          )}
+          <button
+            onClick={handleResetHfUrl}
+            disabled={editingHfUrl === defaultHfUrl}
+            style={{
+              ...secondaryBtnStyle,
+              fontSize: "12px",
+              padding: "0 8px",
+              color: "var(--text-muted)",
+              cursor: editingHfUrl === defaultHfUrl ? "not-allowed" : "pointer",
+              opacity: editingHfUrl === defaultHfUrl ? 0.4 : 1,
+            }}
+            title="Reset to default"
+          >
+            Reset
           </button>
         </div>
       </div>
@@ -1790,15 +1788,12 @@ function SpeechTab({
   downloadingModelId,
   downloadProgress,
   downloadError,
-  hfMirrorUrl,
-  defaultHfUrl,
   downloads,
   onSaveAsrSettings,
   onSelectModel,
   onDownloadModel,
   onDeleteModel,
   onSearchModels,
-  onChangeHfMirrorUrl,
   onPauseDownload,
   onResumeDownload,
   onCancelDownload,
@@ -1813,8 +1808,6 @@ function SpeechTab({
   readonly downloadingModelId: string | null;
   readonly downloadProgress: number;
   readonly downloadError: string | null;
-  readonly hfMirrorUrl: string;
-  readonly defaultHfUrl: string;
   readonly downloads: Record<
     string,
     {
@@ -1833,7 +1826,6 @@ function SpeechTab({
   readonly onDownloadModel: (model: ModelInfo) => void;
   readonly onDeleteModel: (modelId: string) => void;
   readonly onSearchModels: (query: string) => Promise<ModelInfo[]>;
-  readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onPauseDownload: (modelId: string) => void;
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
@@ -2021,14 +2013,11 @@ function SpeechTab({
                     downloadProgress={downloadProgress}
                     downloadError={downloadError}
                     isRecording={isRecording}
-                    hfMirrorUrl={hfMirrorUrl}
-                    defaultHfUrl={defaultHfUrl}
                     downloads={downloads}
                     onSelectModel={onSelectModel}
                     onDownloadModel={onDownloadModel}
                     onDeleteModel={onDeleteModel}
                     onSearchModels={onSearchModels}
-                    onChangeHfMirrorUrl={onChangeHfMirrorUrl}
                     onPauseDownload={onPauseDownload}
                     onResumeDownload={onResumeDownload}
                     onCancelDownload={onCancelDownload}
@@ -2215,15 +2204,12 @@ function TtsTab({
   ttsDownloadingModelId,
   ttsDownloadProgress,
   ttsDownloadError,
-  hfMirrorUrl,
-  defaultHfUrl,
   downloads,
   onSaveTtsSettings,
   onSelectTtsModel,
   onDownloadTtsModel,
   onDeleteTtsModel,
   onSearchTtsModels,
-  onChangeHfMirrorUrl,
   onPauseDownload,
   onResumeDownload,
   onCancelDownload,
@@ -2238,8 +2224,6 @@ function TtsTab({
   readonly ttsDownloadingModelId: string | null;
   readonly ttsDownloadProgress: number;
   readonly ttsDownloadError: string | null;
-  readonly hfMirrorUrl: string;
-  readonly defaultHfUrl: string;
   readonly downloads: Record<
     string,
     {
@@ -2258,7 +2242,6 @@ function TtsTab({
   readonly onDownloadTtsModel: (model: ModelInfo) => void;
   readonly onDeleteTtsModel: (modelId: string) => void;
   readonly onSearchTtsModels: (query: string) => Promise<ModelInfo[]>;
-  readonly onChangeHfMirrorUrl: (url: string) => void;
   readonly onPauseDownload: (modelId: string) => void;
   readonly onResumeDownload: (modelId: string) => void;
   readonly onCancelDownload: (modelId: string) => void;
@@ -2419,14 +2402,11 @@ function TtsTab({
                   downloadProgress={ttsDownloadProgress}
                   downloadError={ttsDownloadError}
                   isRecording={isRecording}
-                  hfMirrorUrl={hfMirrorUrl}
-                  defaultHfUrl={defaultHfUrl}
                   downloads={downloads}
                   onSelectModel={onSelectTtsModel}
                   onDownloadModel={onDownloadTtsModel}
                   onDeleteModel={onDeleteTtsModel}
                   onSearchModels={onSearchTtsModels}
-                  onChangeHfMirrorUrl={onChangeHfMirrorUrl}
                   onPauseDownload={onPauseDownload}
                   onResumeDownload={onResumeDownload}
                   onCancelDownload={onCancelDownload}
@@ -4501,8 +4481,11 @@ export function SettingsModal({
                 configDir={configDir}
                 isRecording={isRecording}
                 autoStartSidecar={autoStartSidecar}
+                hfMirrorUrl={hfMirrorUrl}
+                defaultHfUrl={defaultHfUrl}
                 onChangeDataDir={onChangeDataDir}
                 onChangeAutoStartSidecar={onChangeAutoStartSidecar}
+                onChangeHfMirrorUrl={onChangeHfMirrorUrl}
               />
             )}
             {activeTab === "default-models" && (
@@ -4542,15 +4525,12 @@ export function SettingsModal({
                 downloadingModelId={downloadingModelId}
                 downloadProgress={downloadProgress}
                 downloadError={downloadError}
-                hfMirrorUrl={hfMirrorUrl}
-                defaultHfUrl={defaultHfUrl}
                 downloads={downloads}
                 onSaveAsrSettings={onSaveAsrSettings}
                 onSelectModel={onSelectModel}
                 onDownloadModel={onDownloadModel}
                 onDeleteModel={onDeleteModel}
                 onSearchModels={onSearchModels}
-                onChangeHfMirrorUrl={onChangeHfMirrorUrl}
                 onPauseDownload={onPauseDownload}
                 onResumeDownload={onResumeDownload}
                 onCancelDownload={onCancelDownload}
@@ -4568,15 +4548,12 @@ export function SettingsModal({
                 ttsDownloadingModelId={ttsDownloadingModelId}
                 ttsDownloadProgress={ttsDownloadProgress}
                 ttsDownloadError={ttsDownloadError}
-                hfMirrorUrl={hfMirrorUrl}
-                defaultHfUrl={defaultHfUrl}
                 downloads={downloads}
                 onSaveTtsSettings={onSaveTtsSettings}
                 onSelectTtsModel={onSelectTtsModel}
                 onDownloadTtsModel={onDownloadTtsModel}
                 onDeleteTtsModel={onDeleteTtsModel}
                 onSearchTtsModels={onSearchTtsModels}
-                onChangeHfMirrorUrl={onChangeHfMirrorUrl}
                 onPauseDownload={onPauseDownload}
                 onResumeDownload={onResumeDownload}
                 onCancelDownload={onCancelDownload}
