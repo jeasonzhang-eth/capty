@@ -40,14 +40,9 @@ _collect_packages = [
     "httptools",
     "uvloop",
     "h11",
-    # TTS text processing
-    "misaki",
-    "cn2an",
-    "pypinyin",
-    "jieba",
-    "num2words",
-    "spacy",
-    "thinc",
+    # TTS text processing (only what supported models actually use)
+    # NOTE: misaki, spacy, thinc, jieba, pypinyin, cn2an, num2words are
+    # only needed by Kokoro which is excluded — do NOT add them back.
     # STT
     "tiktoken",
     "mistral_common",
@@ -95,11 +90,15 @@ a = Analysis(
         "tkinter", "matplotlib", "PIL", "pillow", "IPython", "jupyter",
         # PyTorch — we use MLX, not torch
         "torch", "torchvision", "torchaudio",
-        # Kokoro TTS model needs espeakng_loader which we don't use
-        "espeakng_loader", "phonemizer",
+        # Kokoro TTS + its text-processing deps (only Kokoro uses these)
         "mlx_audio.tts.models.kokoro",
-        # Dev / test
+        "espeakng_loader", "phonemizer",
+        "misaki",
+        "spacy", "thinc",
+        "jieba", "pypinyin", "cn2an", "num2words",
+        # Dev / test (including spacy tests pulled transitively)
         "pytest", "pytest_asyncio",
+        "spacy.tests",
         # Unused heavy packages
         "sounddevice", "miniaudio",
         "websockets",
