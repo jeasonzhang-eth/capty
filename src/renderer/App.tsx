@@ -66,6 +66,13 @@ function App(): React.JSX.Element {
       await window.capty.startSidecar();
       const health = await window.capty.checkSidecarHealth();
       store.setSidecarReady(health.online);
+      // Also check TTS immediately (instead of waiting for 10s poll)
+      try {
+        const tts = await window.capty.checkTtsProvider();
+        store.setTtsProviderReady(tts.ready);
+      } catch {
+        // TTS check is best-effort
+      }
     } catch (err) {
       console.error("Failed to start sidecar:", err);
     } finally {

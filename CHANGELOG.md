@@ -10,6 +10,7 @@ All notable changes to Capty are documented in this file.
 - fix: popover left edge now aligns with indicator dot; click indicator to toggle open/close
 - fix: keep sidecar popover open during engine startup with spinner animation
 - fix: clicking inside sidecar popover no longer closes it (stop event propagation)
+- fix: TTS status updates immediately after sidecar startup instead of waiting for 10s poll
 
 ## 2026-04-03
 
