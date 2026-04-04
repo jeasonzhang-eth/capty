@@ -55,6 +55,8 @@ function SidecarPopover({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
+      // Keep popover open while sidecar is starting so user sees progress
+      if (sidecarStarting) return;
       const target = event.target as Node;
       // Ignore clicks on the trigger (let the trigger's onClick handle toggle)
       if (triggerRef.current?.contains(target)) return;
@@ -64,7 +66,7 @@ function SidecarPopover({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose, triggerRef]);
+  }, [onClose, triggerRef, sidecarStarting]);
 
   const isRunning = sidecarReady && !sidecarStarting;
   const toggleOn = sidecarReady || (sidecarStarting ?? false);
@@ -349,7 +351,14 @@ export function ControlBar({
           tabIndex={indicatorClickable ? 0 : undefined}
           onClick={
             indicatorClickable
-              ? () => setShowPopover((prev) => !prev)
+              ? () => {
+                  if (!showPopover) {
+                    setShowPopover(true);
+                  } else if (!sidecarStarting) {
+                    setShowPopover(false);
+                  }
+                  // When starting, keep popover open so user sees progress
+                }
               : undefined
           }
           onKeyDown={
@@ -357,7 +366,11 @@ export function ControlBar({
               ? (e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setShowPopover((prev) => !prev);
+                    if (!showPopover) {
+                      setShowPopover(true);
+                    } else if (!sidecarStarting) {
+                      setShowPopover(false);
+                    }
                   }
                 }
               : undefined
