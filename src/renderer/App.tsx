@@ -43,7 +43,6 @@ function App(): React.JSX.Element {
   const [downloadBadge, setDownloadBadge] = useState<
     "active" | "failed" | null
   >(null);
-  const [sidecarStarting, setSidecarStarting] = useState(false);
   const [autoStartSidecar, setAutoStartSidecar] = useState(true);
 
   const computeDownloadBadge = useCallback(
@@ -62,7 +61,7 @@ function App(): React.JSX.Element {
   );
 
   const handleStartSidecar = useCallback(async () => {
-    setSidecarStarting(true);
+    store.setSidecarStarting(true);
     try {
       await window.capty.startSidecar();
       const health = await window.capty.checkSidecarHealth();
@@ -77,7 +76,7 @@ function App(): React.JSX.Element {
     } catch (err) {
       console.error("Failed to start sidecar:", err);
     } finally {
-      setSidecarStarting(false);
+      store.setSidecarStarting(false);
     }
   }, [store]);
 
@@ -540,10 +539,13 @@ function App(): React.JSX.Element {
           setSelectedTtsVoice(savedTtsVoice);
         }
 
-        // Restore autoStartSidecar setting
-        const cfgAutoStart = config.autoStartSidecar as boolean | undefined;
-        if (cfgAutoStart !== undefined) {
-          setAutoStartSidecar(cfgAutoStart);
+        // Restore sidecar config
+        const sidecarCfg = config.sidecar as
+          | { port: number; autoStart: boolean }
+          | undefined;
+        if (sidecarCfg) {
+          store.setSidecarPort(sidecarCfg.port ?? 8765);
+          setAutoStartSidecar(sidecarCfg.autoStart !== false);
         }
 
         // Check sidecar health
@@ -557,8 +559,8 @@ function App(): React.JSX.Element {
         }
 
         // Auto-start sidecar if configured and not already running
-        if (cfgAutoStart !== false && !sidecarOnline) {
-          setSidecarStarting(true);
+        if (sidecarCfg?.autoStart !== false && !sidecarOnline) {
+          store.setSidecarStarting(true);
           try {
             await window.capty.startSidecar();
             const h = await window.capty.checkSidecarHealth();
@@ -572,7 +574,7 @@ function App(): React.JSX.Element {
           } catch {
             /* silent */
           } finally {
-            setSidecarStarting(false);
+            store.setSidecarStarting(false);
           }
         }
 
@@ -1316,7 +1318,10 @@ function App(): React.JSX.Element {
   const handleChangeAutoStartSidecar = useCallback(async (value: boolean) => {
     setAutoStartSidecar(value);
     const config = await window.capty.getConfig();
-    await window.capty.setConfig({ ...config, autoStartSidecar: value });
+    await window.capty.setConfig({
+      ...config,
+      sidecar: { ...config.sidecar, autoStart: value },
+    });
   }, []);
 
   const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
@@ -1341,15 +1346,12 @@ function App(): React.JSX.Element {
         asrProviders: settings.asrProviders,
         selectedAsrProviderId: settings.selectedAsrProviderId,
       });
-      // Re-check sidecar health if a sidecar provider exists
-      const hasSidecar = settings.asrProviders.some((p) => p.isSidecar);
-      if (hasSidecar) {
-        try {
-          const health = await window.capty.checkSidecarHealth();
-          store.setSidecarReady(health.online);
-        } catch {
-          store.setSidecarReady(false);
-        }
+      // Always re-check sidecar health (sidecar is independent of provider list)
+      try {
+        const health = await window.capty.checkSidecarHealth();
+        store.setSidecarReady(health.online);
+      } catch {
+        store.setSidecarReady(false);
       }
     },
     [store],
@@ -1969,10 +1971,8 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Sidecar health polling (every 10s when a sidecar provider exists)
+  // Sidecar health polling (every 10s, unconditional — sidecar is independent)
   useEffect(() => {
-    const hasSidecar = store.asrProviders.some((p) => p.isSidecar);
-    if (!hasSidecar) return;
     const poll = async (): Promise<void> => {
       try {
         const health = await window.capty.checkSidecarHealth();
@@ -1983,7 +1983,7 @@ function App(): React.JSX.Element {
     };
     const timer = setInterval(poll, 10000);
     return () => clearInterval(timer);
-  }, [store.asrProviders]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // TTS provider health polling (every 10s when a TTS provider is selected)
   useEffect(() => {
@@ -2200,17 +2200,8 @@ function App(): React.JSX.Element {
         }
         onStartSidecar={handleStartSidecar}
         onStopSidecar={handleStopSidecar}
-        sidecarStarting={sidecarStarting}
-        sidecarPort={(() => {
-          const p = store.asrProviders.find((p) => p.isSidecar);
-          if (!p) return undefined;
-          try {
-            const port = new URL(p.baseUrl).port;
-            return port ? Number(port) : 8765;
-          } catch {
-            return 8765;
-          }
-        })()}
+        sidecarStarting={store.sidecarStarting}
+        sidecarPort={store.sidecarPort}
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel

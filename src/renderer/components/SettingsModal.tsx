@@ -1949,43 +1949,35 @@ function SpeechTab({
                         }}
                       >
                         <div>
-                          <div style={labelStyle}>Base URL</div>
-                          <input
-                            type="text"
-                            value={editForm.baseUrl}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                baseUrl: e.target.value,
-                              })
-                            }
-                            placeholder="http://localhost:8765"
+                          <div style={labelStyle}>Engine URL</div>
+                          <div
                             style={{
                               ...inputStyle,
+                              backgroundColor: "var(--bg-surface)",
+                              color: "var(--text-muted)",
                               fontFamily: "'JetBrains Mono', monospace",
-                            }}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "flex-end",
-                            marginTop: "4px",
-                          }}
-                        >
-                          <button
-                            onClick={handleSaveEdit}
-                            disabled={!editForm.baseUrl}
-                            style={{
-                              ...primaryBtnStyle,
-                              cursor: !editForm.baseUrl
-                                ? "not-allowed"
-                                : "pointer",
-                              opacity: !editForm.baseUrl ? 0.5 : 1,
+                              cursor: "default",
+                              userSelect: "text",
                             }}
                           >
-                            Save
-                          </button>
+                            Using local engine on port{" "}
+                            {(() => {
+                              try {
+                                return new URL(editForm.baseUrl).port || "8765";
+                              } catch {
+                                return "8765";
+                              }
+                            })()}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Port is managed in General tab
+                          </div>
                         </div>
                       </div>
 

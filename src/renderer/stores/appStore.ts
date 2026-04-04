@@ -43,6 +43,8 @@ interface AppState {
   // App status
   readonly isRecording: boolean;
   readonly sidecarReady: boolean;
+  readonly sidecarPort: number;
+  readonly sidecarStarting: boolean;
   readonly ttsProviderReady: boolean;
   readonly dataDir: string | null;
 
@@ -68,6 +70,8 @@ interface AppState {
   // Actions
   readonly setRecording: (v: boolean) => void;
   readonly setSidecarReady: (v: boolean) => void;
+  readonly setSidecarPort: (port: number) => void;
+  readonly setSidecarStarting: (v: boolean) => void;
   readonly setTtsProviderReady: (v: boolean) => void;
   readonly setDataDir: (dir: string | null) => void;
   readonly setAsrProviders: (providers: AsrProviderState[]) => void;
@@ -90,6 +94,8 @@ interface AppState {
 const initialState = {
   isRecording: false,
   sidecarReady: false,
+  sidecarPort: 8765,
+  sidecarStarting: false,
   ttsProviderReady: false,
   dataDir: null as string | null,
   asrProviders: [] as AsrProviderState[],
@@ -110,6 +116,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   setRecording: (v) => set({ isRecording: v }),
   setSidecarReady: (v) => set({ sidecarReady: v }),
+  setSidecarPort: (port) => set({ sidecarPort: port }),
+  setSidecarStarting: (v) => set({ sidecarStarting: v }),
   setTtsProviderReady: (v) => set({ ttsProviderReady: v }),
   setDataDir: (dir) => set({ dataDir: dir }),
   setAsrProviders: (providers) => set({ asrProviders: providers }),

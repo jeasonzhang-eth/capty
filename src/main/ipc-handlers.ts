@@ -144,6 +144,22 @@ function parseSidecarPort(baseUrl: string): number {
   }
 }
 
+/** Cached sidecar port from config (invalidated on config:set). */
+let _cachedSidecarPort: number | null = null;
+
+/** Read sidecar port from config (cached). */
+function getSidecarPort(cfgDir: string): number {
+  if (_cachedSidecarPort !== null) return _cachedSidecarPort;
+  const config = readConfig(cfgDir);
+  _cachedSidecarPort = config.sidecar?.port ?? 8765;
+  return _cachedSidecarPort;
+}
+
+/** Build sidecar base URL from config port. */
+function getSidecarBaseUrl(cfgDir: string): string {
+  return `http://localhost:${getSidecarPort(cfgDir)}`;
+}
+
 /** Poll /health until OK or timeout. */
 async function waitForHealth(
   baseUrl: string,
@@ -1088,23 +1104,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle("config:set", (_event, partial: Record<string, unknown>) => {
     const current = readConfig(configDir);
     writeConfig(configDir, { ...current, ...partial });
+    _cachedSidecarPort = null; // invalidate on any config change
   });
 
   // Sidecar
   ipcMain.handle("sidecar:get-url", () => {
-    const config = readConfig(configDir);
-    const sidecarProvider = (config.asrProviders ?? []).find(
-      (p) => p.isSidecar,
-    );
-    return sidecarProvider?.baseUrl ?? "http://localhost:8765";
+    return getSidecarBaseUrl(configDir);
   });
 
   ipcMain.handle("sidecar:health-check", async () => {
-    const config = readConfig(configDir);
-    const sidecarProvider = (config.asrProviders ?? []).find(
-      (p) => p.isSidecar,
-    );
-    const url = sidecarProvider?.baseUrl ?? "http://localhost:8765";
+    const url = getSidecarBaseUrl(configDir);
     try {
       const resp = await fetch(`${url}/health`, {
         signal: AbortSignal.timeout(3000),
@@ -1119,11 +1128,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // Start sidecar process
   ipcMain.handle("sidecar:start", async () => {
-    const config = readConfig(configDir);
-    const sidecarProvider = (config.asrProviders ?? []).find(
-      (p) => p.isSidecar,
-    );
-    const baseUrl = sidecarProvider?.baseUrl ?? "http://localhost:8765";
+    const baseUrl = getSidecarBaseUrl(configDir);
+    const port = getSidecarPort(configDir);
 
     // Already managed by us
     if (sidecarProcess) return { ok: true };
@@ -1139,7 +1145,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }
 
     const bin = findSidecarBin();
-    const port = parseSidecarPort(baseUrl);
+    const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     const modelsDir = join(dataDir, "models", "asr");
 
@@ -2294,26 +2300,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   );
 
   // Decode audio file to 16kHz mono WAV via sidecar (any format → WAV)
-  ipcMain.handle(
-    "audio:decode-file",
-    async (_event, filePath: string, sidecarBaseUrl: string) => {
-      const baseUrl = sidecarBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
-      const resp = await net.fetch(`${baseUrl}/v1/audio/decode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_path: filePath }),
-        signal: AbortSignal.timeout(120000), // 2min for large files
-      });
+  ipcMain.handle("audio:decode-file", async (_event, filePath: string) => {
+    const baseUrl = getSidecarBaseUrl(configDir);
+    const resp = await net.fetch(`${baseUrl}/v1/audio/decode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_path: filePath }),
+      signal: AbortSignal.timeout(120000), // 2min for large files
+    });
 
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        throw new Error(`Decode audio error (${resp.status}): ${errBody}`);
-      }
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      throw new Error(`Decode audio error (${resp.status}): ${errBody}`);
+    }
 
-      const arrayBuf = await resp.arrayBuffer();
-      return arrayBuf;
-    },
-  );
+    const arrayBuf = await resp.arrayBuffer();
+    return arrayBuf;
+  });
 
   // TTS provider reachability check
   ipcMain.handle("tts:check-provider", async () => {
@@ -2325,7 +2328,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (!provider) {
       return { ready: false, reason: "No TTS provider configured" };
     }
-    const url = provider.baseUrl ?? "http://localhost:8765";
+    const url = provider.isSidecar
+      ? getSidecarBaseUrl(configDir)
+      : provider.baseUrl;
     try {
       if (provider.isSidecar) {
         // Check sidecar /health endpoint for tts_loaded
@@ -2358,7 +2363,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const provider = (config.ttsProviders ?? []).find(
       (p) => p.id === (config.selectedTtsProviderId ?? "sidecar"),
     );
-    const url = provider?.baseUrl ?? "http://localhost:8765";
+    const url = provider?.isSidecar
+      ? getSidecarBaseUrl(configDir)
+      : (provider?.baseUrl ?? "http://localhost:8765");
     const baseUrl = normalizeTtsUrl(url);
 
     try {
@@ -2398,7 +2405,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (!provider) {
         throw new Error("No TTS provider configured. Add one in Settings.");
       }
-      const url = provider.baseUrl ?? "http://localhost:8765";
+      const url = provider.isSidecar
+        ? getSidecarBaseUrl(configDir)
+        : provider.baseUrl;
 
       // Guard: check provider reachability before making TTS request
       try {
@@ -2477,7 +2486,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         });
         return;
       }
-      const url = provider.baseUrl ?? "http://localhost:8765";
+      const url = provider.isSidecar
+        ? getSidecarBaseUrl(configDir)
+        : provider.baseUrl;
 
       // Resolve model: sidecar uses local path, external uses provider.model
       let modelValue = "";

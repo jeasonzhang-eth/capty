@@ -14,6 +14,13 @@ All notable changes to Capty are documented in this file.
 - fix: keep sidecar popover open during engine startup with spinner animation
 - fix: clicking inside sidecar popover no longer closes it (stop event propagation)
 - fix: TTS status updates immediately after sidecar startup instead of waiting for 10s poll
+- refactor: extract `SidecarConfig { port, autoStart }` as independent config block — single source of truth for sidecar process management
+- refactor: decouple all IPC handlers (sidecar lifecycle + TTS) from provider list for URL resolution — use `getSidecarBaseUrl()` helper with config cache
+- refactor: move `sidecarPort` and `sidecarStarting` state from App component to appStore for shared access
+- refactor: unconditional sidecar health polling (no longer gated by ASR provider list)
+- refactor: replace sidecar ASR provider Base URL input with read-only port display in Settings → Speech tab
+- refactor: simplify `audio:decode-file` IPC signature — remove redundant `sidecarBaseUrl` parameter
+- feat: auto-migrate old `autoStartSidecar` config to new `sidecar` config block
 
 ## 2026-04-03
 
