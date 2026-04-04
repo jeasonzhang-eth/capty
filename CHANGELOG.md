@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: suppress noisy transformers warnings (tokenizer model_type mismatch, Mistral regex) during TTS model loading
 - fix: allow deleting the last/active model in ASR/TTS provider (delete button no longer hidden for selected model)
 - fix: sidecar TTS uses local models directory before falling back to HuggingFace download (no more re-fetching already-downloaded models)
 - fix: increase sidecar TTS test timeout from 30s to 120s (model lazy-load on first request can take 60s+)

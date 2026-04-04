@@ -38,6 +38,18 @@ def _detect_data_dir() -> str:
     return default_data_dir
 
 
+def _suppress_noisy_warnings() -> None:
+    """Suppress known harmless warnings from transformers tokenizer loading."""
+    import warnings
+
+    # Qwen3-TTS tokenizer reuses Mistral format with a known regex issue
+    warnings.filterwarnings("ignore", message=".*incorrect regex pattern.*")
+    # AutoTokenizer model_type mismatch for custom model architectures
+    warnings.filterwarnings(
+        "ignore", message=".*to instantiate a model of type.*"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Capty ASR Sidecar - real-time speech-to-text server"
@@ -63,6 +75,8 @@ def main() -> None:
         help="Logging level (default: info)",
     )
     args = parser.parse_args()
+
+    _suppress_noisy_warnings()
 
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
