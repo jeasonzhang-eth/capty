@@ -4,6 +4,7 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: yt-dlp/ffmpeg not found in packaged DMG — extend PATH with Homebrew dirs (`/opt/homebrew/bin`, `/usr/local/bin`) for all spawned child processes
 - fix: sidecar ASR test resolves local model path from config (was sending empty model → 400 "No ASR model loaded")
 - fix: ASR/TTS test handlers return `{ success, error }` instead of throwing — no more Electron console spam
 - fix: early-return "No model selected" when no ASR/TTS model is configured instead of sending request
