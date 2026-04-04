@@ -2,6 +2,13 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-05
+
+- refactor: LLM Provider uses expand/collapse mode with chevron (matches ASR/TTS pattern), remove Edit button
+- fix: LLM Test button always visible, disabled when no API key or no models (with tooltip hints)
+- fix: LLM Test uses first model from models list instead of legacy `provider.model`
+- style: unify Test button styles across ASR/TTS/LLM tabs (color: text-secondary, disabled opacity: 0.4)
+
 ## 2026-04-04
 
 - refactor: unify ASR/TTS test logic — sidecar and external providers use the same real test (sine wave for ASR, "Hello" for TTS) instead of health-check shortcut

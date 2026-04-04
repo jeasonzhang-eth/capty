@@ -3203,7 +3203,7 @@ function LanguageModelsTab({
   readonly onSave: (providers: LlmProvider[]) => void;
 }): React.ReactElement {
   const [providers, setProviders] = useState<LlmProvider[]>([...llmProviders]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     baseUrl: "",
@@ -3245,7 +3245,7 @@ function LanguageModelsTab({
       };
       const next = [...providers, newProvider];
       save(next);
-      setEditingId(newProvider.id);
+      setExpandedId(newProvider.id);
       setEditForm({
         name: newProvider.name,
         baseUrl: newProvider.baseUrl,
@@ -3269,7 +3269,7 @@ function LanguageModelsTab({
     };
     const next = [...providers, newProvider];
     save(next);
-    setEditingId(id);
+    setExpandedId(id);
     setEditForm({
       name: "Custom Provider",
       baseUrl: "",
@@ -3278,13 +3278,13 @@ function LanguageModelsTab({
     });
   }, [providers, save]);
 
-  const handleEdit = useCallback(
+  const handleToggleExpand = useCallback(
     (provider: LlmProvider) => {
-      if (editingId === provider.id) {
-        setEditingId(null);
+      if (expandedId === provider.id) {
+        setExpandedId(null);
         return;
       }
-      setEditingId(provider.id);
+      setExpandedId(provider.id);
       setEditForm({
         name: provider.name,
         baseUrl: provider.baseUrl,
@@ -3292,13 +3292,13 @@ function LanguageModelsTab({
         models: provider.models ?? (provider.model ? [provider.model] : []),
       });
     },
-    [editingId],
+    [expandedId],
   );
 
   const handleSaveEdit = useCallback(() => {
-    if (!editingId) return;
+    if (!expandedId) return;
     const next = providers.map((p) =>
-      p.id === editingId
+      p.id === expandedId
         ? {
             ...p,
             name: p.isPreset ? p.name : editForm.name,
@@ -3310,16 +3310,16 @@ function LanguageModelsTab({
         : p,
     );
     save(next);
-    setEditingId(null);
-  }, [editingId, editForm, providers, save]);
+    setExpandedId(null);
+  }, [expandedId, editForm, providers, save]);
 
   const handleDelete = useCallback(
     (providerId: string) => {
       const next = providers.filter((p) => p.id !== providerId);
       save(next);
-      if (editingId === providerId) setEditingId(null);
+      if (expandedId === providerId) setExpandedId(null);
     },
-    [providers, editingId, save],
+    [providers, expandedId, save],
   );
 
   const handleTest = useCallback(async (provider: LlmProvider) => {
@@ -3330,10 +3330,11 @@ function LanguageModelsTab({
       return next;
     });
     try {
+      const testModel = provider.models?.[0] ?? provider.model;
       const result = await window.capty.testLlmProvider({
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey,
-        model: provider.model,
+        model: testModel,
       });
       setTestResults((prev) => ({
         ...prev,
@@ -3463,7 +3464,9 @@ function LanguageModelsTab({
         {providers.map((provider) => {
           const modelCount =
             provider.models?.length ?? (provider.model ? 1 : 0);
-          const isEditing = editingId === provider.id;
+          const isExpanded = expandedId === provider.id;
+          const isTestDisabled =
+            testingId === provider.id || !provider.apiKey || modelCount === 0;
 
           return (
             <div
@@ -3480,7 +3483,10 @@ function LanguageModelsTab({
                   alignItems: "center",
                 }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                  onClick={() => handleToggleExpand(provider)}
+                >
                   <div
                     style={{
                       display: "flex",
@@ -3488,6 +3494,21 @@ function LanguageModelsTab({
                       gap: "6px",
                     }}
                   >
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        color: "var(--text-muted)",
+                        display: "inline-block",
+                        transition: "transform 0.2s",
+                        transform: isExpanded
+                          ? "rotate(0deg)"
+                          : "rotate(-90deg)",
+                        width: "12px",
+                        textAlign: "center",
+                      }}
+                    >
+                      ▼
+                    </span>
                     <span
                       style={{
                         fontSize: "13px",
@@ -3525,6 +3546,7 @@ function LanguageModelsTab({
                       fontSize: "11px",
                       color: "var(--text-muted)",
                       marginTop: "4px",
+                      paddingLeft: "18px",
                     }}
                   >
                     {provider.baseUrl || "No URL set"}
@@ -3540,39 +3562,37 @@ function LanguageModelsTab({
                     alignItems: "center",
                   }}
                 >
-                  {modelCount > 0 && (
-                    <button
-                      onClick={() => handleTest(provider)}
-                      disabled={testingId === provider.id}
-                      style={{
-                        ...secondaryBtnStyle,
-                        height: "28px",
-                        padding: "0 10px",
-                        fontSize: "11px",
-                        color: "var(--text-muted)",
-                        cursor:
-                          testingId === provider.id ? "not-allowed" : "pointer",
-                        opacity: testingId === provider.id ? 0.6 : 1,
-                      }}
-                    >
-                      {testingId === provider.id ? "Testing..." : "Test"}
-                    </button>
-                  )}
                   <button
-                    onClick={() => handleEdit(provider)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTest(provider);
+                    }}
+                    disabled={isTestDisabled}
                     style={{
                       ...secondaryBtnStyle,
                       height: "28px",
                       padding: "0 10px",
                       fontSize: "11px",
-                      color: "var(--text-muted)",
+                      color: "var(--text-secondary)",
+                      cursor: isTestDisabled ? "not-allowed" : "pointer",
+                      opacity: isTestDisabled ? 0.4 : 1,
                     }}
+                    title={
+                      !provider.apiKey
+                        ? "Set API key first"
+                        : modelCount === 0
+                          ? "Add at least one model"
+                          : undefined
+                    }
                   >
-                    {isEditing ? "Cancel" : "Edit"}
+                    {testingId === provider.id ? "Testing..." : "Test"}
                   </button>
                   {!provider.isPreset && (
                     <button
-                      onClick={() => handleDelete(provider.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(provider.id);
+                      }}
                       style={{
                         ...secondaryBtnStyle,
                         height: "28px",
@@ -3609,10 +3629,12 @@ function LanguageModelsTab({
               )}
 
               {/* Edit form */}
-              {isEditing && (
+              {isExpanded && (
                 <div
                   style={{
                     marginTop: "12px",
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: "12px",
                     display: "flex",
                     flexDirection: "column",
                     gap: "10px",
@@ -3865,7 +3887,7 @@ function LanguageModelsTab({
 
       {showFetchDialog && (
         <FetchModelsDialog
-          providerName={providers.find((p) => p.id === editingId)?.name ?? ""}
+          providerName={providers.find((p) => p.id === expandedId)?.name ?? ""}
           fetchedModels={fetchedModels}
           existingModels={editForm.models}
           onAdd={handleAddModelFromFetch}
