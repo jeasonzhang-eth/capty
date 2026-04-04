@@ -1497,6 +1497,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const body: Record<string, unknown> = { input: "Hello" };
       if (modelValue) body.model = modelValue;
 
+      // Sidecar may lazy-load the TTS model on first request (can take 60s+)
+      const timeoutMs = provider.isSidecar ? 120_000 : 30_000;
       const resp = await net.fetch(`${baseUrl}/v1/audio/speech`, {
         method: "POST",
         headers: {
@@ -1506,7 +1508,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
             : {}),
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (!resp.ok) {

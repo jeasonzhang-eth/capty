@@ -122,15 +122,35 @@ def create_app(models_dir: str, data_dir: str = "") -> FastAPI:
         model_path = Path(models_dir) / target_model
         await pool.load_engine("asr", target_model, model_path)
 
+    def _find_local_tts_model() -> Optional[Path]:
+        """Find first downloaded TTS model in local models/tts directory."""
+        tts_dir = Path(models_dir).parent / "tts"
+        if not tts_dir.is_dir():
+            return None
+        for d in sorted(tts_dir.iterdir()):
+            if d.is_dir() and (d / "config.json").is_file():
+                logger.info("Found local TTS model: %s", d.name)
+                return d
+        return None
+
     async def _ensure_tts_loaded(model: str = "") -> None:
-        """Ensure the TTS model is loaded."""
+        """Ensure the TTS model is loaded.
+
+        Resolution order when no model is specified:
+        1. Check local models/tts directory for downloaded models
+        2. Fall back to DEFAULT_TTS_MODEL (downloads from HuggingFace)
+        """
         engine = pool.tts
         target_model = model.strip() if model else None
         if target_model:
             if not engine.is_loaded() or engine.model_id != target_model:
                 await pool.load_engine("tts", target_model, Path(target_model))
         elif not engine.is_loaded():
-            await pool.load_engine("tts", DEFAULT_TTS_MODEL, Path(DEFAULT_TTS_MODEL))
+            local = _find_local_tts_model()
+            if local:
+                await pool.load_engine("tts", local.name, local)
+            else:
+                await pool.load_engine("tts", DEFAULT_TTS_MODEL, Path(DEFAULT_TTS_MODEL))
 
     # ------------------------------------------------------------------
     # Health & models

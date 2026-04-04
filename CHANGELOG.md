@@ -4,6 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-05
 
+- fix: sidecar TTS uses local models directory before falling back to HuggingFace download (no more re-fetching already-downloaded models)
+- fix: increase sidecar TTS test timeout from 30s to 120s (model lazy-load on first request can take 60s+)
 - refactor: extract shared useProviderManagement hook and ProviderCard component from ASR/TTS tabs (~170 fewer lines)
 - style: unify ASR/TTS provider UI — delete button in header (x), inline test results, secondary+accent Use button
 - fix: remove hardcoded ASR fallback file list in model download — retry HF API 3 times with exponential backoff instead
