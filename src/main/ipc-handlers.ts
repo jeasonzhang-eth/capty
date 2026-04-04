@@ -188,31 +188,41 @@ let _sidecarPid: number | null = null;
 let _lastSidecarPort: number = 8765;
 
 /**
- * Kill any process listening on the given port (handles orphan sidecar).
- * Synchronous — safe to call from before-quit and process.exit handlers.
+ * Check whether the process on the given port is actually a capty-sidecar
+ * by probing /health and verifying the response contains `status: "ok"`.
+ * Returns the PID(s) on the port if it IS sidecar, empty array otherwise.
  */
-function killProcessOnPort(port: number): void {
+function findSidecarPidsOnPort(port: number): number[] {
+  // 1. Verify identity via /health (synchronous HTTP is not available,
+  //    so we do a quick lsof + process-name check instead)
   try {
     const out = execSync(`lsof -ti tcp:${port}`, {
       encoding: "utf-8",
       timeout: 3000,
     }).trim();
-    for (const pidStr of out.split("\n")) {
-      const pid = Number(pidStr);
-      if (pid > 0) {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {
-          // already dead
-        }
+    if (!out) return [];
+    const pids = out
+      .split("\n")
+      .map((s) => Number(s))
+      .filter((n) => n > 0);
+    // Verify each PID is actually a capty-sidecar (check process command)
+    return pids.filter((pid) => {
+      try {
+        const cmd = execSync(`ps -o command= -p ${pid}`, {
+          encoding: "utf-8",
+          timeout: 2000,
+        }).trim();
+        return cmd.includes("capty-sidecar") || cmd.includes("capty_sidecar");
+      } catch {
+        return false;
       }
-    }
+    });
   } catch {
-    // lsof failed or no process on port — fine
+    return [];
   }
 }
 
-/** Kill the managed sidecar process and any orphan on the configured port. */
+/** Kill the managed sidecar process and any orphan sidecar on the port. */
 export function killSidecar(): void {
   // Kill managed process
   if (sidecarProcess) {
@@ -225,8 +235,14 @@ export function killSidecar(): void {
       // already dead
     }
   }
-  // Kill any process on the sidecar port (catches orphans from previous runs)
-  killProcessOnPort(_lastSidecarPort);
+  // Kill orphan sidecar on the port (only if process name matches)
+  for (const pid of findSidecarPidsOnPort(_lastSidecarPort)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // already dead
+    }
+  }
 }
 
 // Last-resort SIGKILL: `process.on('exit')` fires synchronously right before
@@ -1174,6 +1190,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       });
       if (!resp.ok) return { online: false };
       const data = (await resp.json()) as Record<string, unknown>;
+      // Verify this is actually a capty-sidecar (not another service on the port)
+      if (data.status !== "ok") return { online: false };
       return { online: true, ...data };
     } catch {
       return { online: false };
@@ -1188,13 +1206,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     // Already managed by us
     if (sidecarProcess) return { ok: true };
 
-    // Already running externally?
+    // Already running externally? Verify it's actually capty-sidecar.
     try {
       const resp = await fetch(`${baseUrl}/health`, {
         signal: AbortSignal.timeout(2000),
       });
-      if (resp.ok) return { ok: true };
-    } catch {
+      if (resp.ok) {
+        const data = (await resp.json()) as Record<string, unknown>;
+        if (data.status === "ok") return { ok: true };
+        // Port is occupied by a non-sidecar service
+        throw new Error(
+          `Port ${port} is in use by another service. Change the sidecar port in Settings → General.`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("Port")) throw err;
       // not running — proceed to spawn
     }
 

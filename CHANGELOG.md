@@ -22,7 +22,9 @@ All notable changes to Capty are documented in this file.
 - refactor: simplify `audio:decode-file` IPC signature — remove redundant `sidecarBaseUrl` parameter
 - feat: auto-migrate old `autoStartSidecar` config to new `sidecar` config block
 - fix: sidecar process not killed on Cmd+Q — add `process.on('exit')` SIGKILL fallback to prevent orphan processes
-- fix: stopping sidecar now also kills orphan processes on the configured port via `lsof` + SIGKILL
+- fix: stopping sidecar now kills orphan sidecar processes on the port (verified by process name, won't kill other services)
+- fix: sidecar health-check and start now verify `status: "ok"` in response to avoid mistaking other services for sidecar
+- fix: sidecar start reports clear error when port is occupied by another service
 
 ## 2026-04-03
 
