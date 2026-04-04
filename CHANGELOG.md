@@ -9,6 +9,7 @@ All notable changes to Capty are documented in this file.
 - style: redesign sidecar popover to compact macOS-style panel (180px, smaller toggle, tighter rows)
 - fix: popover left edge now aligns with indicator dot; click indicator to toggle open/close
 - fix: keep sidecar popover open during engine startup with spinner animation
+- fix: clicking inside sidecar popover no longer closes it (stop event propagation)
 
 ## 2026-04-03
 

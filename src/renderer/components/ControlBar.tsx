@@ -109,6 +109,8 @@ function SidecarPopover({
   return (
     <div
       ref={popoverRef}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
         top: "calc(100% + 4px)",
