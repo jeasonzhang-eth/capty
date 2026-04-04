@@ -2206,6 +2206,7 @@ function App(): React.JSX.Element {
         ttsProviderName={
           ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ?? null
         }
+        selectedTtsModelId={selectedTtsModelId}
         onStartSidecar={handleStartSidecar}
         onStopSidecar={handleStopSidecar}
         sidecarStarting={store.sidecarStarting}

@@ -24,6 +24,7 @@ interface ControlBarProps {
   readonly onDownloadModel: () => void;
   readonly ttsProviderReady: boolean;
   readonly ttsProviderName: string | null;
+  readonly selectedTtsModelId: string;
   readonly onStartSidecar?: () => void;
   readonly onStopSidecar?: () => void;
   readonly sidecarStarting?: boolean;
@@ -35,6 +36,8 @@ function SidecarPopover({
   sidecarStarting,
   ttsProviderReady,
   ttsProviderName,
+  hasAsrModel,
+  hasTtsModel,
   sidecarPort,
   triggerRef,
   onStartSidecar,
@@ -45,6 +48,8 @@ function SidecarPopover({
   readonly sidecarStarting?: boolean;
   readonly ttsProviderReady: boolean;
   readonly ttsProviderName: string | null;
+  readonly hasAsrModel: boolean;
+  readonly hasTtsModel: boolean;
   readonly sidecarPort?: number;
   readonly triggerRef: React.RefObject<HTMLDivElement | null>;
   readonly onStartSidecar?: () => void;
@@ -223,8 +228,8 @@ function SidecarPopover({
       <div style={rowStyle}>
         <span style={labelStyle}>ASR</span>
         <span style={valueStyle}>
-          <span style={dotStyle(isRunning)} />
-          {isRunning ? "Ready" : "Offline"}
+          <span style={dotStyle(isRunning && hasAsrModel)} />
+          {!isRunning ? "Offline" : hasAsrModel ? "Ready" : "No model"}
         </span>
       </div>
 
@@ -232,8 +237,8 @@ function SidecarPopover({
         <div style={rowStyle}>
           <span style={labelStyle}>TTS</span>
           <span style={valueStyle}>
-            <span style={dotStyle(ttsProviderReady)} />
-            {ttsProviderReady ? "Ready" : "Offline"}
+            <span style={dotStyle(ttsProviderReady && hasTtsModel)} />
+            {!ttsProviderReady ? "Offline" : hasTtsModel ? "Ready" : "No model"}
           </span>
         </div>
       )}
@@ -267,6 +272,7 @@ export function ControlBar({
   onDownloadModel,
   ttsProviderReady,
   ttsProviderName,
+  selectedTtsModelId,
   onStartSidecar,
   onStopSidecar,
   sidecarStarting,
@@ -437,6 +443,8 @@ export function ControlBar({
               sidecarStarting={sidecarStarting}
               ttsProviderReady={ttsProviderReady}
               ttsProviderName={ttsProviderName}
+              hasAsrModel={!!selectedModelId}
+              hasTtsModel={!!selectedTtsModelId}
               sidecarPort={sidecarPort}
               triggerRef={indicatorRef}
               onStartSidecar={onStartSidecar}
