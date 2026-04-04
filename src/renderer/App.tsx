@@ -2159,6 +2159,16 @@ function App(): React.JSX.Element {
         onStartSidecar={handleStartSidecar}
         onStopSidecar={handleStopSidecar}
         sidecarStarting={sidecarStarting}
+        sidecarPort={(() => {
+          const p = store.asrProviders.find((p) => p.isSidecar);
+          if (!p) return undefined;
+          try {
+            const port = new URL(p.baseUrl).port;
+            return port ? Number(port) : 8765;
+          } catch {
+            return 8765;
+          }
+        })()}
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel

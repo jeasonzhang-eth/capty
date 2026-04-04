@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 interface ControlBarProps {
   readonly isRecording: boolean;
@@ -27,6 +27,250 @@ interface ControlBarProps {
   readonly onStartSidecar?: () => void;
   readonly onStopSidecar?: () => void;
   readonly sidecarStarting?: boolean;
+  readonly sidecarPort?: number;
+}
+
+function SidecarPopover({
+  sidecarReady,
+  sidecarStarting,
+  ttsProviderReady,
+  ttsProviderName,
+  sidecarPort,
+  onStartSidecar,
+  onStopSidecar,
+  onClose,
+}: {
+  readonly sidecarReady: boolean;
+  readonly sidecarStarting?: boolean;
+  readonly ttsProviderReady: boolean;
+  readonly ttsProviderName: string | null;
+  readonly sidecarPort?: number;
+  readonly onStartSidecar?: () => void;
+  readonly onStopSidecar?: () => void;
+  readonly onClose: () => void;
+}): React.ReactElement {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node)
+      ) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
+  const isRunning = sidecarReady && !sidecarStarting;
+  const toggleOn = sidecarReady || (sidecarStarting ?? false);
+
+  const handleToggle = (): void => {
+    if (sidecarStarting) return;
+    if (isRunning) {
+      onStopSidecar?.();
+    } else {
+      onStartSidecar?.();
+    }
+  };
+
+  return (
+    <div
+      ref={popoverRef}
+      style={{
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        left: 0,
+        zIndex: 100,
+        backgroundColor: "rgba(38, 38, 42, 0.98)",
+        border: "1px solid var(--border)",
+        borderRadius: "10px",
+        padding: "14px 16px",
+        minWidth: "220px",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+      }}
+    >
+      {/* Header + Toggle */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "12px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "var(--text-primary)",
+          }}
+        >
+          Local Engine
+        </span>
+        {/* CSS Toggle Switch */}
+        <button
+          onClick={handleToggle}
+          style={{
+            position: "relative",
+            width: "36px",
+            height: "20px",
+            borderRadius: "10px",
+            border: "none",
+            cursor: sidecarStarting ? "wait" : "pointer",
+            backgroundColor: toggleOn
+              ? "var(--accent)"
+              : "var(--bg-tertiary)",
+            transition: "background-color 0.2s",
+            padding: 0,
+            flexShrink: 0,
+          }}
+          title={
+            sidecarStarting
+              ? "Starting..."
+              : isRunning
+                ? "Stop sidecar"
+                : "Start sidecar"
+          }
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: "2px",
+              left: toggleOn ? "18px" : "2px",
+              width: "16px",
+              height: "16px",
+              borderRadius: "50%",
+              backgroundColor: "#fff",
+              transition: "left 0.2s",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+            }}
+          />
+        </button>
+      </div>
+
+      {/* Status line */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "10px",
+          paddingBottom: "10px",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <span
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            backgroundColor: sidecarStarting
+              ? "#f59e0b"
+              : isRunning
+                ? "#4ADE80"
+                : "var(--text-muted)",
+            display: "inline-block",
+            boxShadow: sidecarStarting
+              ? "0 0 6px rgba(245, 158, 11, 0.6)"
+              : isRunning
+                ? "0 0 6px rgba(74, 222, 128, 0.5)"
+                : "none",
+            animation: sidecarStarting
+              ? "breathe 1.5s ease-in-out infinite"
+              : undefined,
+          }}
+        />
+        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+          {sidecarStarting ? "Starting…" : isRunning ? "Running" : "Stopped"}
+        </span>
+      </div>
+
+      {/* Detail rows */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            ASR
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <span
+              style={{
+                width: "5px",
+                height: "5px",
+                borderRadius: "50%",
+                backgroundColor: isRunning
+                  ? "#4ADE80"
+                  : "var(--text-muted)",
+                display: "inline-block",
+              }}
+            />
+            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+              {isRunning ? "Ready" : "Offline"}
+            </span>
+          </div>
+        </div>
+
+        {ttsProviderName && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              TTS
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span
+                style={{
+                  width: "5px",
+                  height: "5px",
+                  borderRadius: "50%",
+                  backgroundColor: ttsProviderReady
+                    ? "#4ADE80"
+                    : "var(--text-muted)",
+                  display: "inline-block",
+                }}
+              />
+              <span
+                style={{ fontSize: "12px", color: "var(--text-secondary)" }}
+              >
+                {ttsProviderReady ? "Ready" : "Offline"}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {sidecarPort != null && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              Port
+            </span>
+            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+              {sidecarPort}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function ControlBar({
@@ -49,42 +293,53 @@ export function ControlBar({
   onStartSidecar,
   onStopSidecar,
   sidecarStarting,
+  sidecarPort,
 }: ControlBarProps): React.ReactElement {
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const needsDownload = selectedModel && !selectedModel.downloaded;
+  const [showPopover, setShowPopover] = useState(false);
 
-  let statusColor: string;
-  let statusLabel: string;
-  let statusGlow: string;
-  let statusAnimation: string | undefined;
+  // Derive indicator state
+  let indicatorColor: string;
+  let indicatorLabel: string;
+  let indicatorGlow: string;
+  let indicatorAnimation: string | undefined;
+  let indicatorClickable = false;
 
   if (isRecording) {
-    statusColor = "var(--danger)";
-    statusLabel = "Recording";
-    statusGlow = "0 0 6px rgba(239, 68, 68, 0.6)";
-    statusAnimation = "breathe 1.5s ease-in-out infinite";
+    indicatorColor = "var(--danger)";
+    indicatorLabel = "Recording";
+    indicatorGlow = "0 0 6px rgba(239, 68, 68, 0.6)";
+    indicatorAnimation = "breathe 1.5s ease-in-out infinite";
   } else if (!activeProviderName) {
-    statusColor = "var(--text-muted)";
-    statusLabel = "No Provider";
-    statusGlow = "none";
-    statusAnimation = undefined;
+    indicatorColor = "var(--text-muted)";
+    indicatorLabel = "No Provider";
+    indicatorGlow = "none";
+    indicatorAnimation = undefined;
   } else if (isSidecarActive) {
-    if (sidecarReady) {
-      statusColor = "var(--accent)";
-      statusLabel = "Ready";
-      statusGlow = "0 0 6px rgba(245, 166, 35, 0.5)";
-      statusAnimation = undefined;
+    indicatorClickable = true;
+    if (sidecarStarting) {
+      indicatorColor = "#f59e0b";
+      indicatorLabel = "Starting…";
+      indicatorGlow = "0 0 6px rgba(245, 158, 11, 0.6)";
+      indicatorAnimation = "breathe 1.5s ease-in-out infinite";
+    } else if (sidecarReady) {
+      indicatorColor = "#4ADE80";
+      indicatorLabel = "Sidecar";
+      indicatorGlow = "0 0 6px rgba(74, 222, 128, 0.5)";
+      indicatorAnimation = undefined;
     } else {
-      statusColor = "var(--text-muted)";
-      statusLabel = "Offline";
-      statusGlow = "none";
-      statusAnimation = undefined;
+      indicatorColor = "var(--text-muted)";
+      indicatorLabel = "Sidecar";
+      indicatorGlow = "none";
+      indicatorAnimation = undefined;
     }
   } else {
-    statusColor = "#3b82f6";
-    statusLabel = activeProviderName;
-    statusGlow = "0 0 6px rgba(59, 130, 246, 0.5)";
-    statusAnimation = undefined;
+    // External provider — show provider name, not clickable
+    indicatorColor = "#3b82f6";
+    indicatorLabel = activeProviderName;
+    indicatorGlow = "0 0 6px rgba(59, 130, 246, 0.5)";
+    indicatorAnimation = undefined;
   }
 
   return (
@@ -102,7 +357,15 @@ export function ControlBar({
         flexShrink: 0,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {/* Left section: brand + status indicator */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          position: "relative",
+        }}
+      >
         <span
           style={{
             fontFamily: "'DM Sans', sans-serif",
@@ -113,134 +376,77 @@ export function ControlBar({
         >
           Capty
         </span>
-        <span
+        <div
+          role={indicatorClickable ? "button" : undefined}
+          tabIndex={indicatorClickable ? 0 : undefined}
+          onClick={
+            indicatorClickable
+              ? () => setShowPopover((prev) => !prev)
+              : undefined
+          }
+          onKeyDown={
+            indicatorClickable
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setShowPopover((prev) => !prev);
+                  }
+                }
+              : undefined
+          }
           style={{
-            width: "6px",
-            height: "6px",
-            borderRadius: "50%",
-            backgroundColor: statusColor,
-            display: "inline-block",
-            boxShadow: statusGlow,
-            animation: statusAnimation,
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            cursor: indicatorClickable ? "pointer" : "default",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            transition: "background-color 0.15s",
+            ...(indicatorClickable
+              ? { backgroundColor: showPopover ? "rgba(255,255,255,0.06)" : "transparent" }
+              : {}),
           }}
-          title={`ASR: ${activeProviderName ?? "None"} - ${statusLabel}`}
-        />
-        <span
-          style={{ fontSize: "11px", color: "var(--text-muted)" }}
-          title={`ASR: ${activeProviderName ?? "None"} - ${statusLabel}`}
+          title={
+            indicatorClickable
+              ? "Click to manage sidecar"
+              : `Provider: ${activeProviderName ?? "None"}`
+          }
         >
-          ASR
-        </span>
-        {isSidecarActive &&
-          !isRecording &&
-          (sidecarStarting ? (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "14px",
-                height: "14px",
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                animation: "spin 1s linear infinite",
-              }}
-              title="Starting sidecar..."
-            >
-              &#8635;
-            </span>
-          ) : sidecarReady ? (
-            <button
-              onClick={onStopSidecar}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "14px",
-                height: "14px",
-                padding: 0,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                fontSize: "10px",
-                lineHeight: 1,
-                borderRadius: "2px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--danger)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-              }}
-              title="Stop sidecar"
-            >
-              &#9632;
-            </button>
-          ) : (
-            <button
-              onClick={onStartSidecar}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "14px",
-                height: "14px",
-                padding: 0,
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                fontSize: "10px",
-                lineHeight: 1,
-                borderRadius: "2px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "#4ADE80";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-              }}
-              title="Start sidecar"
-            >
-              &#9654;
-            </button>
-          ))}
-        {ttsProviderName && (
-          <>
-            <span
-              style={{
-                width: "1px",
-                height: "14px",
-                backgroundColor: "var(--border)",
-                margin: "0 2px",
-              }}
-            />
-            <span
-              style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                backgroundColor: ttsProviderReady
-                  ? "#4ADE80"
-                  : "var(--text-muted)",
-                display: "inline-block",
-                boxShadow: ttsProviderReady
-                  ? "0 0 4px rgba(74, 222, 128, 0.5)"
-                  : "none",
-              }}
-              title={`TTS: ${ttsProviderName} - ${ttsProviderReady ? "Ready" : "Offline"}`}
-            />
-            <span
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-              }}
-              title={`TTS: ${ttsProviderName} - ${ttsProviderReady ? "Ready" : "Offline"}`}
-            >
-              TTS
-            </span>
-          </>
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              backgroundColor: indicatorColor,
+              display: "inline-block",
+              boxShadow: indicatorGlow,
+              animation: indicatorAnimation,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: "11px",
+              color: "var(--text-muted)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {indicatorLabel}
+          </span>
+        </div>
+
+        {/* Sidecar popover */}
+        {showPopover && isSidecarActive && (
+          <SidecarPopover
+            sidecarReady={sidecarReady}
+            sidecarStarting={sidecarStarting}
+            ttsProviderReady={ttsProviderReady}
+            ttsProviderName={ttsProviderName}
+            sidecarPort={sidecarPort}
+            onStartSidecar={onStartSidecar}
+            onStopSidecar={onStopSidecar}
+            onClose={() => setShowPopover(false)}
+          />
         )}
       </div>
 
