@@ -171,8 +171,8 @@ const DEFAULT_CONFIG: AppConfig = {
       name: "DeepSeek",
       baseUrl: "https://api.deepseek.com/v1",
       apiKey: "",
-      model: "deepseek-chat",
-      models: ["deepseek-chat", "deepseek-reasoner"],
+      model: "",
+      models: [],
       isPreset: true,
     },
     {
