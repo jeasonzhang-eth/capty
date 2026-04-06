@@ -2,6 +2,10 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-06
+
+- fix: improve yt-dlp not found error message — show step-by-step Homebrew + yt-dlp install instructions, strip internal IPC method names from user-facing errors
+
 ## 2026-04-05
 
 - fix: remove default models from DeepSeek preset provider — empty models list avoids misleading users into thinking no API key is needed

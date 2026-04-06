@@ -1132,13 +1132,26 @@ function App(): React.JSX.Element {
   const handleStartAudioDownload = useCallback(
     async (url: string) => {
       try {
-        await window.capty.downloadAudio(url);
+        const result = await window.capty.downloadAudio(url);
+        // Handler returned an error object instead of throwing
+        if (
+          result &&
+          typeof result === "object" &&
+          "ok" in result &&
+          !result.ok
+        ) {
+          throw new Error(result.error ?? "Download failed");
+        }
         const list = await window.capty.getAudioDownloads();
         setAudioDownloads(list);
         setDownloadBadge(computeDownloadBadge(list));
       } catch (err: unknown) {
-        // yt-dlp not found — show error in a new failed download entry
-        const message = err instanceof Error ? err.message : String(err);
+        const raw = err instanceof Error ? err.message : String(err);
+        // Strip Electron IPC prefix if present
+        const message = raw.replace(
+          /^Error invoking remote method '[^']+': Error: /,
+          "",
+        );
         setAudioDownloads((prev) => [
           {
             id: -Date.now(),

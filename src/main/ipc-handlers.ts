@@ -3040,7 +3040,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           check.on("error", reject);
         });
       } catch {
-        throw new Error("yt-dlp not found. Install: brew install yt-dlp");
+        return {
+          ok: false,
+          error:
+            "yt-dlp is not installed. To install:\n" +
+            '1. Install Homebrew: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n' +
+            "2. Install yt-dlp: brew install yt-dlp",
+        };
       }
     }
 

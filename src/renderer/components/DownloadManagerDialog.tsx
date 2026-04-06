@@ -624,6 +624,7 @@ function DownloadItemRow({
               fontSize: "11px",
               marginBottom: "6px",
               wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
             }}
           >
             {item.error || "Unknown error"}
