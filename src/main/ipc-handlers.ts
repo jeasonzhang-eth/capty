@@ -3347,6 +3347,54 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { downloadId };
   });
 
+  // ── Dependency check (brew / ffmpeg / yt-dlp) ──────────────────────
+  ipcMain.handle("deps:check", async () => {
+    const deps: Array<{ cmd: string; versionArgs: string[] }> = [
+      { cmd: "brew", versionArgs: ["--version"] },
+      { cmd: "ffmpeg", versionArgs: ["-version"] },
+      { cmd: "yt-dlp", versionArgs: ["--version"] },
+    ];
+    return Promise.all(
+      deps.map(async ({ cmd, versionArgs }) => {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const check = spawn("which", [cmd]);
+            check.on("close", (code) =>
+              code === 0 ? resolve() : reject(new Error("not found")),
+            );
+            check.on("error", reject);
+          });
+          let version: string | null = null;
+          try {
+            version = await new Promise<string>((resolve, reject) => {
+              const proc = spawn(cmd, versionArgs);
+              let out = "";
+              proc.stdout?.on("data", (d: Buffer) => {
+                out += d.toString();
+              });
+              const timer = setTimeout(() => {
+                proc.kill();
+                reject(new Error("timeout"));
+              }, 5000);
+              proc.on("close", (code) => {
+                clearTimeout(timer);
+                code === 0
+                  ? resolve(out.trim().split("\n")[0])
+                  : reject(new Error("non-zero exit"));
+              });
+              proc.on("error", reject);
+            });
+          } catch {
+            version = "installed";
+          }
+          return { name: cmd, installed: true, version };
+        } catch {
+          return { name: cmd, installed: false, version: null };
+        }
+      }),
+    );
+  });
+
   ipcMain.handle("audio:download-retry", async (_event, downloadId: number) => {
     const dl = getDownload(db, downloadId);
     if (!dl) throw new Error("Download not found");

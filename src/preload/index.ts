@@ -451,6 +451,12 @@ const api = {
     }[],
   ) => ipcRenderer.invoke("prompt-types:save", types),
 
+  // Dependency check
+  checkDependencies: () =>
+    ipcRenderer.invoke("deps:check") as Promise<
+      Array<{ name: string; installed: boolean; version: string | null }>
+    >,
+
   // Audio download (yt-dlp)
   downloadAudio: (url: string) =>
     ipcRenderer.invoke("audio:download-start", url) as Promise<{

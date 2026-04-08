@@ -28,6 +28,45 @@ const PROVIDERS = [
   },
 ] as const;
 
+interface DepInfo {
+  readonly name: string;
+  readonly label: string;
+  readonly description: string;
+  readonly installCmd: string;
+  readonly installUrl: string | null;
+}
+
+const DEPENDENCIES: readonly DepInfo[] = [
+  {
+    name: "brew",
+    label: "Homebrew",
+    description: "macOS package manager",
+    installCmd:
+      '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+    installUrl: "https://brew.sh",
+  },
+  {
+    name: "ffmpeg",
+    label: "FFmpeg",
+    description: "Audio/video processing",
+    installCmd: "brew install ffmpeg",
+    installUrl: null,
+  },
+  {
+    name: "yt-dlp",
+    label: "yt-dlp",
+    description: "Audio downloader",
+    installCmd: "brew install yt-dlp",
+    installUrl: null,
+  },
+];
+
+interface DepStatus {
+  readonly name: string;
+  readonly installed: boolean;
+  readonly version: string | null;
+}
+
 const cardStyle: React.CSSProperties = {
   backgroundColor: "var(--bg-tertiary)",
   borderRadius: "10px",
@@ -64,9 +103,28 @@ export function SetupWizard({
   const [useHfMirror, setUseHfMirror] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
 
+  // Dependency check state
+  const [depStatus, setDepStatus] = useState<readonly DepStatus[]>([]);
+  const [depChecking, setDepChecking] = useState(false);
+
   // Load default data dir on mount
   useEffect(() => {
     window.capty.getDefaultDataDir().then((dir) => setDataDir(dir));
+  }, []);
+
+  const checkDeps = useCallback(async () => {
+    setDepChecking(true);
+    try {
+      const results = await window.capty.checkDependencies();
+      setDepStatus(results);
+    } catch {
+      // If the IPC call fails, mark all as unknown
+      setDepStatus(
+        DEPENDENCIES.map((d) => ({ name: d.name, installed: false, version: null })),
+      );
+    } finally {
+      setDepChecking(false);
+    }
   }, []);
 
   const handleChangeDir = useCallback(async () => {
@@ -80,6 +138,18 @@ export function SetupWizard({
     const hfMirrorUrl = useHfMirror ? "https://hf-mirror.com" : null;
     await window.capty.setConfig({ dataDir, hfMirrorUrl });
     setStep(1);
+    // Auto-run dependency check when entering Step 1
+    setDepChecking(true);
+    try {
+      const results = await window.capty.checkDependencies();
+      setDepStatus(results);
+    } catch {
+      setDepStatus(
+        DEPENDENCIES.map((d) => ({ name: d.name, installed: false, version: null })),
+      );
+    } finally {
+      setDepChecking(false);
+    }
   }, [dataDir, useHfMirror]);
 
   const handleFinish = useCallback(
@@ -120,6 +190,11 @@ export function SetupWizard({
 
   const hasAnyKey = Object.values(apiKeys).some((k) => k.trim().length > 0);
 
+  const getDepStatus = (name: string): DepStatus | undefined =>
+    depStatus.find((d) => d.name === name);
+
+  const brewInstalled = getDepStatus("brew")?.installed ?? false;
+
   return (
     <div
       style={{
@@ -142,6 +217,7 @@ export function SetupWizard({
           gap: "24px",
         }}
       >
+        {/* ── Step 0: Welcome / Data Dir / HF Mirror ────────────── */}
         {step === 0 && (
           <>
             <h1
@@ -279,7 +355,192 @@ export function SetupWizard({
           </>
         )}
 
+        {/* ── Step 1: Dependency Check ──────────────────────────── */}
         {step === 1 && (
+          <>
+            <h2
+              style={{
+                fontSize: "24px",
+                fontWeight: 600,
+                fontFamily: "'DM Sans', sans-serif",
+                color: "var(--text-primary)",
+                margin: 0,
+              }}
+            >
+              System Dependencies
+            </h2>
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "14px",
+                textAlign: "center",
+                fontFamily: "'DM Sans', sans-serif",
+                lineHeight: 1.5,
+                margin: 0,
+              }}
+            >
+              Optional — needed for audio download from URLs.
+            </p>
+
+            {DEPENDENCIES.map((dep) => {
+              const status = getDepStatus(dep.name);
+              const isInstalled = status?.installed ?? false;
+              const needsBrew =
+                !brewInstalled && dep.name !== "brew";
+
+              return (
+                <div key={dep.name} style={cardStyle}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: 600,
+                          color: "var(--text-primary)",
+                          fontFamily: "'DM Sans', sans-serif",
+                        }}
+                      >
+                        {dep.label}
+                      </span>
+                      {dep.installUrl && (
+                        <a
+                          href={dep.installUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--accent)",
+                            textDecoration: "none",
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          &#8599;
+                        </a>
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontFamily: "'DM Sans', sans-serif",
+                        color: depChecking
+                          ? "var(--text-muted)"
+                          : isInstalled
+                            ? "#4ade80"
+                            : "#f87171",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {depChecking
+                        ? "Checking..."
+                        : isInstalled
+                          ? `\u2713 ${status?.version ?? "installed"}`
+                          : "\u2717 not installed"}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--text-muted)",
+                      fontFamily: "'DM Sans', sans-serif",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {dep.description}
+                  </div>
+
+                  {!depChecking && !isInstalled && (
+                    <div style={{ marginTop: "8px" }}>
+                      {needsBrew && (
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#f59e0b",
+                            fontFamily: "'DM Sans', sans-serif",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          Requires Homebrew
+                        </div>
+                      )}
+                      <code
+                        style={{
+                          display: "block",
+                          backgroundColor: "var(--bg-surface)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                          padding: "8px 12px",
+                          fontSize: "12px",
+                          fontFamily: "'JetBrains Mono', monospace",
+                          color: "var(--text-primary)",
+                          userSelect: "all",
+                          WebkitUserSelect: "all",
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        $ {dep.installCmd}
+                      </code>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                marginTop: "8px",
+                width: "100%",
+                justifyContent: "center",
+              }}
+            >
+              <button
+                onClick={checkDeps}
+                disabled={depChecking}
+                style={{
+                  ...secondaryButtonStyle,
+                  opacity: depChecking ? 0.5 : 1,
+                }}
+              >
+                Re-check
+              </button>
+              <button
+                onClick={() => setStep(2)}
+                style={primaryButtonStyle}
+              >
+                Continue
+              </button>
+            </div>
+
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "12px",
+                textAlign: "center",
+                fontFamily: "'DM Sans', sans-serif",
+                margin: 0,
+              }}
+            >
+              You can install these tools later.
+            </p>
+          </>
+        )}
+
+        {/* ── Step 2: Configure AI Providers (was Step 1) ────── */}
+        {step === 2 && (
           <>
             <h2
               style={{

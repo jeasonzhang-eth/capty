@@ -98,6 +98,9 @@ declare global {
         filePath: string,
         provider: { baseUrl: string; apiKey: string; model: string },
       ) => Promise<{ text: string }>;
+      checkDependencies: () => Promise<
+        Array<{ name: string; installed: boolean; version: string | null }>
+      >;
       saveFile: (
         defaultName: string,
         content: string,
