@@ -927,6 +927,35 @@ function App(): React.JSX.Element {
     [store],
   );
 
+  const handleEditSession = useCallback(
+    async (sessionId: number, newTitle: string, newStartedAt: string) => {
+      try {
+        const session = store.sessions.find((s) => s.id === sessionId);
+        // 1. If title changed, use rename (handles filesystem rename)
+        if (session && newTitle !== session.title) {
+          await window.capty.renameSession(sessionId, newTitle);
+        }
+        // 2. Update started_at + auto-compute ended_at
+        const startedAtDb = newStartedAt.replace("T", " ");
+        const durationSeconds = session?.duration_seconds ?? 0;
+        const endedAtDate = new Date(newStartedAt);
+        endedAtDate.setSeconds(endedAtDate.getSeconds() + durationSeconds);
+        const endedAt = endedAtDate
+          .toLocaleString("sv-SE")
+          .replace("T", " ")
+          .slice(0, 19);
+        await window.capty.updateSession(sessionId, {
+          startedAt: startedAtDb,
+          endedAt,
+        });
+        await store.loadSessions();
+      } catch (err) {
+        console.error("Failed to edit session:", err);
+      }
+    },
+    [store],
+  );
+
   const handleAddCategory = useCallback(
     async (cat: { label: string; icon: string }) => {
       try {
@@ -2279,6 +2308,7 @@ function App(): React.JSX.Element {
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
           onReorderCategories={handleReorderCategories}
+          onEditSession={handleEditSession}
         />
         <TranscriptArea
           segments={store.segments}

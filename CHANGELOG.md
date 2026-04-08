@@ -2,8 +2,13 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-07
+
+- feat: add session metadata editor — right-click "Edit Info" on completed sessions to edit title and recorded time (started_at), auto-computes ended_at
+
 ## 2026-04-06
 
+- feat: add dependency check step to SetupWizard — detect Homebrew, ffmpeg, yt-dlp with version info, show install commands for missing tools
 - fix: improve yt-dlp not found error message — show step-by-step Homebrew + yt-dlp install instructions, strip internal IPC method names from user-facing errors
 
 ## 2026-04-05

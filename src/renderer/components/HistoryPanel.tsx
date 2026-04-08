@@ -67,6 +67,11 @@ interface HistoryPanelProps {
   readonly onAddCategory?: (category: { label: string; icon: string }) => void;
   readonly onDeleteCategory?: (categoryId: string) => void;
   readonly onReorderCategories?: (categoryIds: string[]) => void;
+  readonly onEditSession?: (
+    id: number,
+    title: string,
+    startedAt: string,
+  ) => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -239,6 +244,7 @@ export function HistoryPanel({
   onAddCategory,
   onDeleteCategory,
   onReorderCategories,
+  onEditSession,
 }: HistoryPanelProps): React.ReactElement {
   // Drag handle for resizing
   const isDragging = useRef(false);
@@ -467,6 +473,44 @@ export function HistoryPanel({
       renameInputRef.current.select();
     }
   }, [renamingSessionId]);
+
+  // ── Edit Info modal state ──
+  const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editStartedAt, setEditStartedAt] = useState(""); // datetime-local: "2025-04-06T14:30"
+
+  const handleEditInfoClick = useCallback(() => {
+    if (contextMenu.sessionId !== null) {
+      const target = sessions.find((s) => s.id === contextMenu.sessionId);
+      if (target) {
+        setEditingSessionId(target.id);
+        setEditTitle(target.title);
+        setEditStartedAt(target.started_at.replace(" ", "T"));
+      }
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, sessions]);
+
+  const handleEditInfoSave = useCallback(() => {
+    if (editingSessionId !== null && onEditSession && editTitle.trim()) {
+      onEditSession(editingSessionId, editTitle.trim(), editStartedAt);
+    }
+    setEditingSessionId(null);
+  }, [editingSessionId, editTitle, editStartedAt, onEditSession]);
+
+  const handleEditInfoCancel = useCallback(() => {
+    setEditingSessionId(null);
+  }, []);
+
+  // ESC to dismiss edit info modal
+  useEffect(() => {
+    if (editingSessionId === null) return;
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setEditingSessionId(null);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [editingSessionId]);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
@@ -1758,6 +1802,26 @@ export function HistoryPanel({
                   >
                     Rename
                   </div>
+                  {isCompleted && onEditSession && (
+                    <div
+                      onClick={handleEditInfoClick}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "var(--accent-glow)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "transparent")
+                      }
+                    >
+                      Edit Info
+                    </div>
+                  )}
                   {/* Move to... submenu */}
                   {onUpdateCategory && (
                     <>
@@ -1938,6 +2002,158 @@ export function HistoryPanel({
                   }}
                 >
                   {"\u5220\u9664"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Edit Info modal */}
+      {editingSessionId !== null &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+            }}
+            onClick={handleEditInfoCancel}
+          >
+            <div
+              style={{
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                backgroundColor: "rgba(28, 28, 31, 0.92)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "20px 24px",
+                maxWidth: "380px",
+                width: "100%",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  marginBottom: "16px",
+                  color: "var(--text-primary)",
+                }}
+              >
+                Edit Session Info
+              </div>
+              {/* Title field */}
+              <div style={{ marginBottom: "12px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleEditInfoSave();
+                  }}
+                  autoFocus
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    fontSize: "13px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    color: "var(--text-primary)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              {/* Recorded At field */}
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Recorded At
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editStartedAt}
+                  onChange={(e) => setEditStartedAt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleEditInfoSave();
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    fontSize: "13px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    color: "var(--text-primary)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    colorScheme: "dark",
+                  }}
+                />
+              </div>
+              {/* Buttons */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                <button
+                  onClick={handleEditInfoCancel}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditInfoSave}
+                  disabled={!editTitle.trim()}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "none",
+                    backgroundColor: "var(--accent)",
+                    color: "#000",
+                    cursor: editTitle.trim() ? "pointer" : "not-allowed",
+                    opacity: editTitle.trim() ? 1 : 0.5,
+                  }}
+                >
+                  Save
                 </button>
               </div>
             </div>
