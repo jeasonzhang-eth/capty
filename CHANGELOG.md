@@ -2,6 +2,10 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-08
+
+- ci: add GitHub Actions CI/CD — PR checks (build + test) and tag-triggered release (sidecar + DMG packaging)
+
 ## 2026-04-07
 
 - feat: add session metadata editor — right-click "Edit Info" on completed sessions to edit title and recorded time (started_at), auto-computes ended_at
