@@ -5,7 +5,7 @@
 <h1 align="center">Capty</h1>
 
 <p align="center">
-  macOS 本地实时语音转文字桌面应用 · 数据完全本地 · 支持 Qwen3-ASR / Whisper
+  Real-time speech-to-text desktop app for macOS · Fully local · Qwen3-ASR / Whisper
 </p>
 
 <p align="center">
@@ -20,101 +20,103 @@
   </a>
 </p>
 
+<p align="center">
+  <a href="README.zh-CN.md">中文</a>
+</p>
+
 <br />
 
-> **隐私优先**：语音数据不上传云端，ASR 推理完全在本地 Apple GPU 运行。
+> **Privacy first**: your audio never leaves your machine — ASR runs entirely on the local Apple GPU.
 
 ---
 
-## 功能亮点
+## Highlights
 
-### 实时录音转写
-麦克风实时采集，VAD 自动检测语音停顿，流式传输至本地 ASR 模型，毫秒级延迟。
+### Real-time transcription
+Captures microphone audio, detects speech pauses with VAD, and streams to a local ASR model with minimal latency.
 
-### 本地模型市场
-内置模型市场，一键下载 Qwen3-ASR（0.6B / 1.7B）或 Whisper Large V3 Turbo，支持 HuggingFace 镜像加速。
+### Local model market
+Download Qwen3-ASR (0.6B / 1.7B) or Whisper Large V3 Turbo with one click. HuggingFace mirror support for users in China.
 
-### 音频导入 & 下载
-- 导入本地音频（WAV / MP3 / M4A / FLAC 等）自动转写
-- 从 YouTube、Bilibili、小宇宙等 1800+ 网站下载音频并转写
+### Audio import & download
+- Import local audio files (WAV / MP3 / M4A / FLAC / …) for transcription
+- Download audio from YouTube, Bilibili, Xiaoyuzhou, and 1800+ other sites
 
-### LLM 智能分析
-转写完成后，接入 OpenAI / DeepSeek / OpenRouter 等，自动生成摘要、追问、背景推测，支持自定义分析维度。
+### LLM analysis
+Connect to OpenAI / DeepSeek / OpenRouter and auto-generate summaries, follow-up questions, and context — fully customizable.
 
-### 字幕翻译
-逐段翻译转写内容，支持中英互译，3 路并发，翻译结果持久化保存。
+### Translation
+Translate transcripts segment-by-segment with 3-way concurrency. Results are persisted and survive app restarts.
 
-### 导出
-支持导出为 TXT / SRT / Markdown。
-
----
-
-## 截图
-
-<!-- TODO: 添加截图 -->
-> 截图即将上传，可先下载体验。
+### Export
+Export transcripts as TXT, SRT, or Markdown.
 
 ---
 
-## 下载安装
+## Screenshots
 
-**系统要求：macOS · Apple Silicon（M1 及以上）**
-
-1. 前往 [Releases 页面](https://github.com/jeasonzhang-eth/capty/releases/latest) 下载最新 `Capty-x.x.x-arm64.dmg`
-2. 打开 DMG，将 Capty 拖入 Applications
-3. 首次启动需要安装依赖（Homebrew / ffmpeg / yt-dlp），安装向导会自动引导
-
-> 首次启动时，macOS 可能提示"无法验证开发者"，前往 **系统设置 → 隐私与安全性** 点击「仍要打开」即可。
+<!-- TODO: add screenshots -->
+> Screenshots coming soon. Download and try it now!
 
 ---
 
-## 本地运行 / 开发
+## Download
+
+**Requirements: macOS · Apple Silicon (M1 or later)**
+
+1. Go to the [Releases page](https://github.com/jeasonzhang-eth/capty/releases/latest) and download the latest `Capty-x.x.x-arm64.dmg`
+2. Open the DMG and drag Capty to Applications
+3. On first launch, the setup wizard will guide you through installing dependencies (Homebrew / ffmpeg / yt-dlp)
+
+> If macOS shows "Cannot verify developer", go to **System Settings → Privacy & Security** and click "Open Anyway".
+
+---
+
+## Development
 
 ```bash
-# 克隆项目
+# Clone
 git clone https://github.com/jeasonzhang-eth/capty.git
 cd capty
 
-# 安装依赖
+# Install Node dependencies
 npm install
 
-# 创建 Python sidecar 环境
+# Set up Python sidecar
 cd sidecar && python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e .
 cd ..
 
-# 启动开发模式
+# Start dev mode
 npm run dev
 ```
 
-### 构建 DMG
+### Build DMG
 
 ```bash
-# 先构建 sidecar，再打包
-npm run dist:all
+npm run dist:all   # builds sidecar first, then packages DMG
 ```
 
 ---
 
-## 技术栈
+## Tech stack
 
-| 层 | 技术 |
+| Layer | Technology |
 |---|---|
-| 桌面框架 | Electron 33 + electron-vite |
-| 前端 | React 18 · TypeScript · Zustand |
-| 数据库 | SQLite (better-sqlite3) |
-| ML 推理 | Python FastAPI + mlx-audio · Apple GPU 加速 |
-| 音频处理 | Web Audio API · VAD · ffmpeg |
+| Desktop | Electron 33 + electron-vite |
+| Frontend | React 18 · TypeScript · Zustand |
+| Database | SQLite (better-sqlite3) |
+| ML inference | Python FastAPI + mlx-audio · Apple GPU |
+| Audio | Web Audio API · VAD · ffmpeg |
 
 ---
 
 ## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and pull requests are welcome!
 
-开发规范：
-- 从 `main` 创建 feature 分支（`feat/xxx` / `fix/xxx`）
-- 提交 PR 到 `main`，CI 自动运行构建和测试
+- Branch off `main` with a `feat/xxx` or `fix/xxx` branch
+- Open a PR to `main` — CI runs build and tests automatically
 
 ---
 

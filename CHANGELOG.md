@@ -4,7 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-10
 
-- docs: rewrite README for end-users — feature highlights, install guide, dev setup, badges
+- docs: rewrite README in English with link to Chinese version (README.zh-CN.md)
+- docs: add README.zh-CN.md (Chinese README)
 - chore: add MIT License
 
 ## 2026-04-08
