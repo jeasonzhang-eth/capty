@@ -2,6 +2,11 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-10
+
+- docs: rewrite README for end-users — feature highlights, install guide, dev setup, badges
+- chore: add MIT License
+
 ## 2026-04-08
 
 - ci: add GitHub Actions CI/CD — PR checks (build + test) and tag-triggered release (sidecar + DMG packaging)
