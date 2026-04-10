@@ -2,6 +2,10 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-11
+
+- docs: add missing features to README — playback, session management, TTS read-aloud (EN + ZH)
+
 ## 2026-04-10
 
 - docs: rewrite README in English with link to Chinese version (README.zh-CN.md)
