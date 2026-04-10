@@ -48,6 +48,15 @@ Connect to OpenAI / DeepSeek / OpenRouter and auto-generate summaries, follow-up
 ### Translation
 Translate transcripts segment-by-segment with 3-way concurrency. Results are persisted and survive app restarts.
 
+### Playback with waveform
+Play back any recorded session with a wavesurfer.js waveform player. Features include pause/resume, click-to-seek, ±10s skip, variable speed (0.5×–2×), and lyrics-style subtitle sync that auto-scrolls and highlights the current segment.
+
+### Session management
+Organize sessions into categories (Downloads / Personal / Meeting / Phone / custom). Drag-and-drop to reorder or move between categories. Right-click to rename inline, regenerate subtitles, or edit recorded time. AI auto-rename generates a title from the transcript with one click.
+
+### TTS read-aloud
+Have any summary card read aloud using a local or external TTS provider. Streaming playback starts as soon as the first audio chunk arrives — no waiting for the full generation.
+
 ### Export
 Export transcripts as TXT, SRT, or Markdown.
 
