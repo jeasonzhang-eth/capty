@@ -30,6 +30,8 @@ _collect_packages = [
     "audioread",
     "numba",
     "scipy",
+    # HTTP / TLS
+    "certifi",
     # Web server
     "fastapi",
     "starlette",
@@ -84,7 +86,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=["hooks/rthook_certifi.py"],
     excludes=[
         # GUI / display — not needed for headless server
         "tkinter", "matplotlib", "PIL", "pillow", "IPython", "jupyter",

@@ -2,6 +2,10 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-12
+
+- fix: certifi.where() crash in packaged sidecar — add certifi to PyInstaller collect list and runtime hook for SSL_CERT_FILE
+
 ## 2026-04-11
 
 - docs: add missing features to README — playback, session management, TTS read-aloud (EN + ZH)
