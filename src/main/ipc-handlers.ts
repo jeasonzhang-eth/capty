@@ -1,56 +1,10 @@
 import { ipcMain, dialog, BrowserWindow, app, shell, net } from "electron";
-import {
-  spawn as rawSpawn,
-  execSync,
-  type ChildProcess,
-  type SpawnOptions,
-} from "child_process";
+import { assertPathWithin } from "./shared/path";
+import { spawn, getExtendedEnv } from "./shared/spawn";
+import { execSync, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "node:path";
 import { join } from "path";
-
-/**
- * Extend PATH with common Homebrew / system binary directories so that
- * packaged Electron apps (launched from Finder, not terminal) can find
- * tools like yt-dlp, ffmpeg, python, etc.
- */
-const EXTRA_PATHS = [
-  "/opt/homebrew/bin", // Apple Silicon Homebrew
-  "/opt/homebrew/sbin",
-  "/usr/local/bin", // Intel Homebrew / manual installs
-  "/usr/local/sbin",
-];
-
-function getExtendedEnv(): NodeJS.ProcessEnv {
-  const currentPath = process.env.PATH ?? "";
-  const missing = EXTRA_PATHS.filter((p) => !currentPath.includes(p));
-  if (missing.length === 0) return process.env;
-  return { ...process.env, PATH: `${missing.join(":")}:${currentPath}` };
-}
-
-/** Spawn with extended PATH so packaged apps find Homebrew binaries. */
-function spawn(
-  command: string,
-  args: readonly string[],
-  options?: SpawnOptions,
-): ChildProcess {
-  return rawSpawn(command, args, { ...options, env: getExtendedEnv() });
-}
-
-/**
- * Validates that `targetPath` resolves to a location within `basePath`.
- * Throws if a path traversal is detected (e.g. via `../`).
- */
-function assertPathWithin(basePath: string, targetPath: string): void {
-  const resolved = path.resolve(targetPath);
-  const resolvedBase = path.resolve(basePath);
-  if (
-    !resolved.startsWith(resolvedBase + path.sep) &&
-    resolved !== resolvedBase
-  ) {
-    throw new Error(`Path traversal detected: ${targetPath}`);
-  }
-}
 
 /** Strip trailing /v1 so we can append /v1/... consistently. */
 function normalizeTtsUrl(baseUrl: string): string {
