@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: extract sidecar-handlers module (4 handlers + lifecycle state): `sidecar:get-url`, `sidecar:health-check`, `sidecar:start`, `sidecar:stop` — exports `register()` and `killSidecar()` (14 unit tests, TDD)
 - Refactor: introducing handler module structure (work in progress)
 - Refactor: extract `assertPathWithin` to `src/main/shared/path.ts` with prefix-bypass security fix (S5)
 - Refactor: extract `spawn` and `getExtendedEnv` to `src/main/shared/spawn.ts` (TDD, 2 unit tests)
