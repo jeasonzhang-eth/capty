@@ -120,7 +120,11 @@ export function SetupWizard({
     } catch {
       // If the IPC call fails, mark all as unknown
       setDepStatus(
-        DEPENDENCIES.map((d) => ({ name: d.name, installed: false, version: null })),
+        DEPENDENCIES.map((d) => ({
+          name: d.name,
+          installed: false,
+          version: null,
+        })),
       );
     } finally {
       setDepChecking(false);
@@ -145,7 +149,11 @@ export function SetupWizard({
       setDepStatus(results);
     } catch {
       setDepStatus(
-        DEPENDENCIES.map((d) => ({ name: d.name, installed: false, version: null })),
+        DEPENDENCIES.map((d) => ({
+          name: d.name,
+          installed: false,
+          version: null,
+        })),
       );
     } finally {
       setDepChecking(false);
@@ -197,6 +205,7 @@ export function SetupWizard({
 
   return (
     <div
+      data-testid="setup-wizard"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -385,8 +394,7 @@ export function SetupWizard({
             {DEPENDENCIES.map((dep) => {
               const status = getDepStatus(dep.name);
               const isInstalled = status?.installed ?? false;
-              const needsBrew =
-                !brewInstalled && dep.name !== "brew";
+              const needsBrew = !brewInstalled && dep.name !== "brew";
 
               return (
                 <div key={dep.name} style={cardStyle}>
@@ -517,10 +525,7 @@ export function SetupWizard({
               >
                 Re-check
               </button>
-              <button
-                onClick={() => setStep(2)}
-                style={primaryButtonStyle}
-              >
+              <button onClick={() => setStep(2)} style={primaryButtonStyle}>
                 Continue
               </button>
             </div>

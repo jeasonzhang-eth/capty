@@ -14,6 +14,8 @@ All notable changes to Capty are documented in this file.
 
 - E2E smoke test: app launch (window visible, title check)
 - E2E test isolation: main process honors `ELECTRON_USER_DATA_DIR_OVERRIDE` env var
+- E2E smoke test: SetupWizard visible on first run (no dataDir configured)
+- Add `data-testid="setup-wizard"` to SetupWizard root element for stable E2E selector
 
 ## 2026-04-12
 
