@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 - chore: add Playwright config for Electron E2E
 - chore: add tsconfig for E2E tests
+- chore: ignore Playwright artifacts
 
 ## 2026-04-12
 
