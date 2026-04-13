@@ -142,6 +142,13 @@ function initDataDir(dataDir: string, configDir: string): Database.Database {
   return database;
 }
 
+// Honor ELECTRON_USER_DATA_DIR_OVERRIDE before app is ready — used by E2E tests.
+// In production this env var is never set.
+const userDataOverride = process.env.ELECTRON_USER_DATA_DIR_OVERRIDE;
+if (userDataOverride) {
+  app.setPath("userData", userDataOverride);
+}
+
 app.whenReady().then(() => {
   // 1. Determine configDir
   const configDir = app.getPath("userData");

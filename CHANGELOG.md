@@ -10,6 +10,10 @@ All notable changes to Capty are documented in this file.
 - chore: add tsconfig for E2E tests
 - chore: ignore Playwright artifacts
 
+### Added
+
+- E2E test isolation: main process honors `ELECTRON_USER_DATA_DIR_OVERRIDE` env var
+
 ## 2026-04-12
 
 - fix: certifi.where() crash in packaged sidecar — add certifi to PyInstaller collect list and runtime hook for SSL_CERT_FILE
