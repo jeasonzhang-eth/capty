@@ -5,6 +5,7 @@ All notable changes to Capty are documented in this file.
 ## 2026-04-13
 
 - chore: add Playwright config for Electron E2E
+- chore: add tsconfig for E2E tests
 
 ## 2026-04-12
 
