@@ -13,6 +13,9 @@
     "pack": "electron-vite build && electron-builder --dir",
     "dist": "electron-vite build && electron-builder",
     "dist:all": "npm run build:sidecar && npm run dist",
+    "e2e": "npm run build && playwright test",
+    "e2e:debug": "npm run build && PWDEBUG=1 playwright test",
+    "e2e:ui": "npm run build && playwright test --ui",
     "test": "npm rebuild better-sqlite3 && vitest run; EXIT=$?; electron-rebuild --force; exit $EXIT",
     "test:watch": "npm rebuild better-sqlite3 && vitest"
   },
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@electron/rebuild": "^4.0.3",
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.8",
     "@types/dompurify": "^3.0.5",
     "@types/react": "^18.3.12",
