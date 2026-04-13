@@ -4362,6 +4362,7 @@ export function SettingsModal({
 
   return (
     <div
+      data-testid="settings-modal"
       style={{
         position: "fixed",
         top: 0,
@@ -4457,6 +4458,7 @@ export function SettingsModal({
               return (
                 <button
                   key={tab.id}
+                  data-testid={`settings-tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
                   style={{
                     display: "flex",

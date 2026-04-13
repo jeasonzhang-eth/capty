@@ -621,6 +621,7 @@ export function ControlBar({
       )}
 
       <button
+        data-testid="open-settings"
         onClick={onSettings}
         onMouseEnter={(e) => {
           e.currentTarget.style.color = "var(--text-primary)";

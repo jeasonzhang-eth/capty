@@ -18,6 +18,7 @@ All notable changes to Capty are documented in this file.
 - Add `data-testid="setup-wizard"` to SetupWizard root element for stable E2E selector
 - E2E smoke test: main UI panels (ControlBar, HistoryPanel, RecordingControls)
 - Stable `data-testid` attributes on main UI components
+- E2E smoke test: settings modal open and tab switching
 
 ## 2026-04-12
 
