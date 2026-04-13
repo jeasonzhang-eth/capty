@@ -49,6 +49,7 @@ export function RecordingControls({
 }: RecordingControlsProps): React.ReactElement {
   return (
     <div
+      data-testid="recording-controls"
       style={{
         display: "flex",
         alignItems: "center",

@@ -1078,6 +1078,7 @@ export function HistoryPanel({
 
   return (
     <div
+      data-testid="history-panel"
       style={{
         width: `${width}px`,
         minWidth: `${HISTORY_MIN_WIDTH}px`,

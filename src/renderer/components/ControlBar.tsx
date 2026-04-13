@@ -365,6 +365,7 @@ export function ControlBar({
 
   return (
     <div
+      data-testid="control-bar"
       style={{
         display: "flex",
         alignItems: "center",
