@@ -19,6 +19,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: extract tts-handlers module (7 handlers)
 - Refactor: extract audio-handlers module (12 handlers) to `src/main/handlers/audio-handlers.ts` (TDD, 8 unit tests)
 - Refactor: extract export-handlers module (5 handlers)
+- Refactor: replace `ipc-handlers.ts` god module (3366 lines) with 49-line delegator that imports from 10 focused handler modules. Net: -3317 lines from one file. All 84 IPC channels preserved, 139 unit tests pass, build verified.
 
 - test: add Playwright fixtures for seeded/fresh Electron launches
 - test: add E2E helpers for temp userData seeding
