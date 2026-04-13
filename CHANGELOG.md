@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-13
 
+### Changed
+
+- Refactor: introducing handler module structure (work in progress)
+
 - test: add Playwright fixtures for seeded/fresh Electron launches
 - test: add E2E helpers for temp userData seeding
 - chore: add Playwright config for Electron E2E
