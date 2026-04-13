@@ -12,6 +12,7 @@ All notable changes to Capty are documented in this file.
 
 ### Added
 
+- E2E smoke test: app launch (window visible, title check)
 - E2E test isolation: main process honors `ELECTRON_USER_DATA_DIR_OVERRIDE` env var
 
 ## 2026-04-12
