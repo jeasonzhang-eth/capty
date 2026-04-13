@@ -2,6 +2,10 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-13
+
+- chore: add Playwright config for Electron E2E
+
 ## 2026-04-12
 
 - fix: certifi.where() crash in packaged sidecar — add certifi to PyInstaller collect list and runtime hook for SSL_CERT_FILE
