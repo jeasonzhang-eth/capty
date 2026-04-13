@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: extract audio-download-handlers module (5 handlers: audio:download-start, audio:download-list, audio:download-remove, audio:download-cancel, audio:download-retry) with TDD (8 unit tests)
 - Refactor: introducing handler module structure (work in progress)
 - Refactor: extract `assertPathWithin` to `src/main/shared/path.ts` with prefix-bypass security fix (S5)
 - Refactor: extract `spawn` and `getExtendedEnv` to `src/main/shared/spawn.ts` (TDD, 2 unit tests)
