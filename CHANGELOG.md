@@ -9,6 +9,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: extract session-handlers module (14 handlers)
 - Refactor: extract sidecar-handlers module (4 handlers + lifecycle state)
 - Refactor: extract model-handlers module (14 handlers + model management helpers)
+- Refactor: extract llm-handlers module (11 handlers: llm:fetch-models, llm:test, llm:summarize, llm:translate, llm:generate-title, summary:list, summary:delete, translation:list, translation:save, prompt-types:list, prompt-types:save)
 - Refactor: introducing handler module structure (work in progress)
 - Refactor: extract `assertPathWithin` to `src/main/shared/path.ts` with prefix-bypass security fix (S5)
 - Refactor: extract `spawn` and `getExtendedEnv` to `src/main/shared/spawn.ts` (TDD, 2 unit tests)
