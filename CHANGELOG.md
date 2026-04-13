@@ -19,6 +19,9 @@ All notable changes to Capty are documented in this file.
 - E2E smoke test: main UI panels (ControlBar, HistoryPanel, RecordingControls)
 - Stable `data-testid` attributes on main UI components
 - E2E smoke test: settings modal open and tab switching
+- E2E testing guide (`tests/e2e/README.md`) — architecture, fixture docs, writing new tests
+- CI job `e2e` runs Playwright suite on every PR (after `check` job passes)
+- `vitest.config.ts` excludes `tests/e2e/**` so E2E specs don't bleed into unit test run
 
 ## 2026-04-12
 
