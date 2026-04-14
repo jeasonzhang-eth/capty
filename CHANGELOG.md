@@ -2,6 +2,13 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-13
+
+### Changed
+
+- Refactor: extract TTS state into standalone `useTtsStore` Zustand store (`src/renderer/stores/ttsStore.ts`)
+- Refactor: add 15 unit tests for ttsStore covering initial state, setters, `loadVoices`, `saveTtsSettings`, and `reset`
+
 ## 2026-04-15
 
 ### Changed
