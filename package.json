@@ -16,8 +16,8 @@
     "e2e": "npm run build && playwright test",
     "e2e:debug": "npm run build && PWDEBUG=1 playwright test",
     "e2e:ui": "npm run build && playwright test --ui",
-    "test": "npm rebuild better-sqlite3 && vitest run; EXIT=$?; electron-rebuild --force; exit $EXIT",
-    "test:watch": "npm rebuild better-sqlite3 && vitest"
+    "test": "ELECTRON_RUN_AS_NODE=true electron ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "ELECTRON_RUN_AS_NODE=true electron ./node_modules/vitest/vitest.mjs"
   },
   "author": "",
   "license": "MIT",
