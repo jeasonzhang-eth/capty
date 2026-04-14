@@ -2,6 +2,15 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-15
+
+### Security
+
+- S1: add column name whitelist to `updateDownload` in database.ts to prevent SQL injection
+- S2: add `assertPathWithin` validation to `audio:get-duration` handler
+- S3: restrict `shell.openExternal` to http/https URLs only (block javascript:/file:// schemes)
+- S4: block `dataDir`, `hfMirrorUrl`, `modelRegistryUrl` from being set via `config:set` IPC
+
 ## 2026-04-14
 
 ### Changed
