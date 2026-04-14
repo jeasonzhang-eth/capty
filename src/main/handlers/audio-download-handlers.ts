@@ -311,7 +311,7 @@ export function register(deps: IpcDeps): void {
                 url,
               ]);
               let out = "";
-              proc.stdout.on("data", (chunk: Buffer) => {
+              proc.stdout?.on("data", (chunk: Buffer) => {
                 out += chunk.toString();
               });
               proc.on("close", (code) => {
@@ -358,11 +358,11 @@ export function register(deps: IpcDeps): void {
           activeDownloads.set(downloadId, ytdlp);
 
           let stderrBuf = "";
-          ytdlp.stderr.on("data", (chunk: Buffer) => {
+          ytdlp.stderr?.on("data", (chunk: Buffer) => {
             stderrBuf += chunk.toString();
           });
 
-          ytdlp.stdout.on("data", (chunk: Buffer) => {
+          ytdlp.stdout?.on("data", (chunk: Buffer) => {
             const lines = chunk.toString().split("\n");
             for (const line of lines) {
               const progress = parseYtdlpProgress(line);

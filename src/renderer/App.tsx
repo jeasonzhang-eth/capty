@@ -101,6 +101,8 @@ function App(): React.JSX.Element {
 
   // Monotonic counter for segment IDs (avoids Date.now() collisions)
   const segmentIdCounter = useRef(0);
+  // B1 fix: capture sessionId at recording start so late callbacks use the correct value
+  const recordingSessionIdRef = useRef<number | null>(null);
 
   // Precise audio time tracking (sample-based, not wall-clock)
   const audioSamplesRef = useRef(0); // total samples fed since recording start
@@ -119,11 +121,12 @@ function App(): React.JSX.Element {
       endTime: number,
     ) => {
       if (!text.trim()) return;
-      // startTime/endTime are captured at send time (not callback time)
-      // to avoid race conditions with subsequent speech events.
-      if (store.currentSessionId) {
+      // B1 fix: use ref-captured sessionId (set at recording start) so late
+      // callbacks still save to the correct session even if store has been reset.
+      const sessionId = recordingSessionIdRef.current;
+      if (sessionId) {
         await window.capty.addSegment({
-          sessionId: store.currentSessionId,
+          sessionId,
           startTime,
           endTime,
           text,
@@ -138,7 +141,7 @@ function App(): React.JSX.Element {
         text,
       });
     },
-    [store.currentSessionId],
+    [],
   );
 
   const onErrorCallback = useCallback((msg: string) => {
@@ -705,6 +708,7 @@ function App(): React.JSX.Element {
     try {
       const sessionId = await session.startSession(store.selectedModelId);
       store.setCurrentSessionId(sessionId);
+      recordingSessionIdRef.current = sessionId;
 
       // Start audio capture (triggers mic permission prompt)
       await audioCapture.start((pcm: Int16Array) => {
@@ -786,6 +790,7 @@ function App(): React.JSX.Element {
 
     store.setRecording(false);
     store.setCurrentSessionId(null);
+    recordingSessionIdRef.current = null;
     store.setPartialText("");
 
     await store.loadSessions();
