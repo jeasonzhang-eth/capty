@@ -13,6 +13,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: extract summary/LLM state into `summaryStore` (5 fields, 24 tests)
 - Refactor: extract translation state into `translationStore` (4 fields, 15 tests)
 - Refactor: extract download state into `downloadStore` (4 fields, 22 tests)
+- Refactor: add localStorage mock to renderer test setup
 
 ### Security
 
