@@ -11,6 +11,12 @@ All notable changes to Capty are documented in this file.
 - S3: restrict `shell.openExternal` to http/https URLs only (block javascript:/file:// schemes)
 - S4: block `dataDir`, `hfMirrorUrl`, `modelRegistryUrl` from being set via `config:set` IPC
 
+### Fixed
+
+- B1: fix stop-recording segment loss — use ref-captured sessionId so late ASR callbacks save to the correct session
+- B2: `gracefulDisconnect` now drains ALL in-flight transcription requests before resolving (not just its own)
+- B3: add null-safety (`?.`) for yt-dlp `stdout`/`stderr` access to prevent TypeError crashes
+
 ## 2026-04-14
 
 ### Changed

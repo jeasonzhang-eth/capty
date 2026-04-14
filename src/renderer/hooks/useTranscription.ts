@@ -55,58 +55,54 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
     bufferRef.current.push(new Int16Array(pcmBuffer));
   }, []);
 
-  const sendSegmentEnd = useCallback(
-    (startTime: number, endTime: number) => {
-      const provider = providerRef.current;
-      if (!provider) return;
+  const sendSegmentEnd = useCallback((startTime: number, endTime: number) => {
+    const provider = providerRef.current;
+    if (!provider) return;
 
-      const chunks = bufferRef.current;
-      bufferRef.current = [];
+    const chunks = bufferRef.current;
+    bufferRef.current = [];
 
-      if (chunks.length === 0) return;
+    if (chunks.length === 0) return;
 
-      // Merge buffered chunks into a single PCM buffer
-      const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-      const merged = new Int16Array(totalLength);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
-      }
+    // Merge buffered chunks into a single PCM buffer
+    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+    const merged = new Int16Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
 
-      const segId = ++segmentIdRef.current;
-      pendingRef.current++;
+    const segId = ++segmentIdRef.current;
+    pendingRef.current++;
 
-      // Capture startTime/endTime at send time (not at callback time)
-      // to avoid race conditions with subsequent speech events.
-      const capturedStart = startTime;
-      const capturedEnd = endTime;
+    // Capture startTime/endTime at send time (not at callback time)
+    // to avoid race conditions with subsequent speech events.
+    const capturedStart = startTime;
+    const capturedEnd = endTime;
 
-      // Fire-and-forget HTTP POST via IPC
-      window.capty
-        .asrTranscribe(merged.buffer as ArrayBuffer, {
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          model: provider.model,
-        })
-        .then((result) => {
-          pendingRef.current--;
-          callbacksRef.current.onFinal?.(
-            result.text,
-            segId,
-            capturedStart,
-            capturedEnd,
-          );
-        })
-        .catch((err: unknown) => {
-          pendingRef.current--;
-          const msg =
-            err instanceof Error ? err.message : "Transcription failed";
-          callbacksRef.current.onError?.(msg);
-        });
-    },
-    [],
-  );
+    // Fire-and-forget HTTP POST via IPC
+    window.capty
+      .asrTranscribe(merged.buffer as ArrayBuffer, {
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
+        model: provider.model,
+      })
+      .then((result) => {
+        pendingRef.current--;
+        callbacksRef.current.onFinal?.(
+          result.text,
+          segId,
+          capturedStart,
+          capturedEnd,
+        );
+      })
+      .catch((err: unknown) => {
+        pendingRef.current--;
+        const msg = err instanceof Error ? err.message : "Transcription failed";
+        callbacksRef.current.onError?.(msg);
+      });
+  }, []);
 
   const disconnect = useCallback(() => {
     readyRef.current = false;
@@ -161,6 +157,17 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
           const msg =
             err instanceof Error ? err.message : "Transcription failed";
           callbacksRef.current.onError?.(msg);
+        })
+        .then(() => {
+          // B2 fix: drain ALL in-flight requests before disconnecting
+          if (pendingRef.current <= 0) return;
+          return new Promise<void>((resolve) => {
+            const check = () => {
+              if (pendingRef.current <= 0) resolve();
+              else setTimeout(check, 50);
+            };
+            check();
+          });
         })
         .finally(() => {
           readyRef.current = false;
