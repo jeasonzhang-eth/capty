@@ -4,6 +4,11 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-15
 
+### Changed
+
+- Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles)
+- Refactor: add appStore unit tests (6 tests: initial state, setters, loadSessions, reset)
+
 ### Security
 
 - S1: add column name whitelist to `updateDownload` in database.ts to prevent SQL injection
