@@ -9,11 +9,7 @@ import {
   appendAudioStream,
   finalizeAudioStream,
 } from "../audio-files";
-import {
-  createSession,
-  getSession,
-  updateSession,
-} from "../database";
+import { createSession, getSession, updateSession } from "../database";
 import { readConfig } from "../config";
 import fs from "fs";
 import path from "path";
@@ -180,6 +176,9 @@ export function register(deps: IpcDeps): void {
 
   // Get audio duration from WAV header (all audio is converted to WAV on import)
   ipcMain.handle("audio:get-duration", (_event, filePath: string) => {
+    const config = readConfig(configDir);
+    const dataDir = config.dataDir ?? join(configDir, "data");
+    assertPathWithin(dataDir, filePath);
     const fd = fs.openSync(filePath, "r");
     try {
       const header = Buffer.alloc(44);

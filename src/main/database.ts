@@ -597,9 +597,23 @@ export function updateDownload(
     completed_at: string;
   }>,
 ): void {
+  const ALLOWED_COLUMNS = new Set([
+    "title",
+    "status",
+    "progress",
+    "speed",
+    "eta",
+    "temp_dir",
+    "session_id",
+    "error",
+    "completed_at",
+  ]);
   const setClauses: string[] = [];
   const values: unknown[] = [];
   for (const [key, value] of Object.entries(fields)) {
+    if (!ALLOWED_COLUMNS.has(key)) {
+      throw new Error(`Invalid column name: ${key}`);
+    }
     setClauses.push(`${key} = ?`);
     values.push(value);
   }

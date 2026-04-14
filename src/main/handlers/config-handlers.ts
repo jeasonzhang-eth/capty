@@ -16,8 +16,19 @@ export function register(deps: IpcDeps): void {
   });
 
   ipcMain.handle("config:set", (_event, partial: Record<string, unknown>) => {
+    const BLOCKED_KEYS = new Set([
+      "dataDir",
+      "hfMirrorUrl",
+      "modelRegistryUrl",
+    ]);
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(partial)) {
+      if (!BLOCKED_KEYS.has(key)) {
+        sanitized[key] = value;
+      }
+    }
     const current = readConfig(configDir);
-    writeConfig(configDir, { ...current, ...partial });
+    writeConfig(configDir, { ...current, ...sanitized });
     _cachedSidecarPort = null; // invalidate on any config change
   });
 

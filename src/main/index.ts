@@ -80,7 +80,10 @@ function createWindow(configDir: string): BrowserWindow {
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    const url = details.url;
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      shell.openExternal(url);
+    }
     return { action: "deny" };
   });
 
