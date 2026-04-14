@@ -118,3 +118,21 @@ for (const m of methods) {
 }
 
 (globalThis as any).window = { capty };
+
+// Minimal localStorage mock for Node test environment
+const localStorageStore: Record<string, string> = {};
+const localStorageMock = {
+  getItem: (key: string) => localStorageStore[key] ?? null,
+  setItem: (key: string, value: string) => {
+    localStorageStore[key] = value;
+  },
+  removeItem: (key: string) => {
+    delete localStorageStore[key];
+  },
+  clear: () => {
+    for (const key of Object.keys(localStorageStore)) {
+      delete localStorageStore[key];
+    }
+  },
+};
+(globalThis as any).localStorage = localStorageMock;

@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: extract translation state into standalone `useTranslationStore` Zustand store (`src/renderer/stores/translationStore.ts`) — manages `translationProgressMap`, `translations`, `activeTranslationLang`, `abortMap` with 15 unit tests; add localStorage mock to shared renderer test setup
 - Refactor: extract TTS state into standalone `useTtsStore` Zustand store (`src/renderer/stores/ttsStore.ts`)
 - Refactor: add 15 unit tests for ttsStore covering initial state, setters, `loadVoices`, `saveTtsSettings`, and `reset`
 - Refactor: extract summary/LLM generation state into standalone `useSummaryStore` Zustand store (`src/renderer/stores/summaryStore.ts`) — manages `summaries`, `generatingTabs`, `streamingContentMap`, `generateError`, `activePromptType`
