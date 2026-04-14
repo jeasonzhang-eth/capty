@@ -2,29 +2,17 @@
 
 All notable changes to Capty are documented in this file.
 
-## 2026-04-13
-
-### Changed
-
-- Refactor: extract download tracking state into standalone `useDownloadStore` Zustand store (`src/renderer/stores/downloadStore.ts`) — DownloadInfo interface, audioDownloads list, downloadBadge badge logic, showDownloadManager toggle, loadAudioDownloads() async action
-- Refactor: add 22 unit tests for downloadStore covering initial state, setDownload, removeDownload, loadAudioDownloads, computeBadge, and setShowDownloadManager
-
-## 2026-04-13
-
-### Changed
-
-- Refactor: extract translation state into standalone `useTranslationStore` Zustand store (`src/renderer/stores/translationStore.ts`) — manages `translationProgressMap`, `translations`, `activeTranslationLang`, `abortMap` with 15 unit tests; add localStorage mock to shared renderer test setup
-- Refactor: extract TTS state into standalone `useTtsStore` Zustand store (`src/renderer/stores/ttsStore.ts`)
-- Refactor: add 15 unit tests for ttsStore covering initial state, setters, `loadVoices`, `saveTtsSettings`, and `reset`
-- Refactor: extract summary/LLM generation state into standalone `useSummaryStore` Zustand store (`src/renderer/stores/summaryStore.ts`) — manages `summaries`, `generatingTabs`, `streamingContentMap`, `generateError`, `activePromptType`
-- Test: add 24 unit tests for `summaryStore` covering initial state, `loadSummaries`, multi-tab generation lifecycle, streaming content accumulation, error handling, and reset
-
 ## 2026-04-15
 
 ### Changed
 
-- Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles)
-- Refactor: add appStore unit tests (6 tests: initial state, setters, loadSessions, reset)
+- Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles + localStorage mock)
+- Refactor: add appStore unit tests (6 tests)
+- Refactor: extract settings state into `settingsStore` (14 fields, 23 tests)
+- Refactor: extract TTS state into `ttsStore` (6 fields, 15 tests)
+- Refactor: extract summary/LLM state into `summaryStore` (5 fields, 24 tests)
+- Refactor: extract translation state into `translationStore` (4 fields, 15 tests)
+- Refactor: extract download state into `downloadStore` (4 fields, 22 tests)
 
 ### Security
 
