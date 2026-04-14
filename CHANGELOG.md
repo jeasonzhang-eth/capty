@@ -2,6 +2,12 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-14
+
+### Changed
+
+- fix: run vitest via Electron's Node runtime (`ELECTRON_RUN_AS_NODE`) to eliminate native module rebuild cycle
+
 ## 2026-04-13
 
 ### Changed
