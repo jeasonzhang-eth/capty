@@ -6,6 +6,13 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: extract download tracking state into standalone `useDownloadStore` Zustand store (`src/renderer/stores/downloadStore.ts`) — DownloadInfo interface, audioDownloads list, downloadBadge badge logic, showDownloadManager toggle, loadAudioDownloads() async action
+- Refactor: add 22 unit tests for downloadStore covering initial state, setDownload, removeDownload, loadAudioDownloads, computeBadge, and setShowDownloadManager
+
+## 2026-04-13
+
+### Changed
+
 - Refactor: extract translation state into standalone `useTranslationStore` Zustand store (`src/renderer/stores/translationStore.ts`) — manages `translationProgressMap`, `translations`, `activeTranslationLang`, `abortMap` with 15 unit tests; add localStorage mock to shared renderer test setup
 - Refactor: extract TTS state into standalone `useTtsStore` Zustand store (`src/renderer/stores/ttsStore.ts`)
 - Refactor: add 15 unit tests for ttsStore covering initial state, setters, `loadVoices`, `saveTtsSettings`, and `reset`
