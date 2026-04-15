@@ -5,24 +5,21 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import {
-  SettingsModal,
-  LlmProvider,
-  TtsProviderConfig,
-  TabId,
-} from "./components/SettingsModal";
-import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
+import { SettingsModal, LlmProvider, TabId } from "./components/SettingsModal";
+import { SummaryPanel, PromptType } from "./components/SummaryPanel";
+import type { TtsProviderConfig } from "./stores/ttsStore";
 import { useAppStore } from "./stores/appStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useTtsStore } from "./stores/ttsStore";
+import { useSummaryStore } from "./stores/summaryStore";
+import { useTranslationStore } from "./stores/translationStore";
+import { useDownloadStore } from "./stores/downloadStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
 import { useTranscription } from "./hooks/useTranscription";
 import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
-import {
-  DownloadManagerDialog,
-  DownloadItem,
-} from "./components/DownloadManagerDialog";
+import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
 
 function App(): React.JSX.Element {
   const store = useAppStore();
@@ -37,27 +34,13 @@ function App(): React.JSX.Element {
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     TabId | undefined
   >(undefined);
-  const [showDownloadManager, setShowDownloadManager] = useState(false);
-  const [audioDownloads, setAudioDownloads] = useState<DownloadItem[]>([]);
-  const [downloadBadge, setDownloadBadge] = useState<
-    "active" | "failed" | null
-  >(null);
   const autoStartSidecar = useSettingsStore((s) => s.autoStartSidecar);
 
-  const computeDownloadBadge = useCallback(
-    (list: readonly DownloadItem[]): "active" | "failed" | null => {
-      const hasActive = list.some((d) =>
-        ["pending", "fetching-info", "downloading", "converting"].includes(
-          d.status,
-        ),
-      );
-      if (hasActive) return "active";
-      const hasFailed = list.some((d) => d.status === "failed");
-      if (hasFailed) return "failed";
-      return null;
-    },
-    [],
-  );
+  // Download store
+  const downloads = useDownloadStore((s) => s.downloads);
+  const audioDownloads = useDownloadStore((s) => s.audioDownloads);
+  const downloadBadge = useDownloadStore((s) => s.downloadBadge);
+  const showDownloadManager = useDownloadStore((s) => s.showDownloadManager);
 
   const handleStartSidecar = useCallback(async () => {
     store.setSidecarStarting(true);
@@ -169,16 +152,6 @@ function App(): React.JSX.Element {
   const [regenerationProgress, setRegenerationProgress] = useState(0);
   const cancelRegenerationRef = useRef(false);
 
-  // Unified download tracking (supports multi-model, pause/cancel)
-  interface DownloadInfo {
-    readonly modelId: string;
-    readonly category: "asr" | "tts";
-    readonly percent: number;
-    readonly status: string; // downloading | paused | failed | completed | pending
-    readonly error?: string;
-  }
-  const [downloads, setDownloads] = useState<Record<string, DownloadInfo>>({});
-
   // Derive ASR download state for backward compatibility
   const asrDownloadEntries = Object.values(downloads).filter(
     (d) =>
@@ -195,28 +168,13 @@ function App(): React.JSX.Element {
       (d) => d.category === "asr" && d.status === "failed",
     )?.error ?? null;
 
-  // TTS state
-  const [ttsProviders, setTtsProviders] = useState<TtsProviderConfig[]>([]);
-  const [selectedTtsProviderId, setSelectedTtsProviderId] = useState<
-    string | null
-  >(null);
-  const [ttsModels, setTtsModels] = useState<
-    Array<{
-      id: string;
-      name: string;
-      type: string;
-      repo: string;
-      downloaded: boolean;
-      size_gb: number;
-      languages: readonly string[];
-      description: string;
-    }>
-  >([]);
-  const [selectedTtsModelId, setSelectedTtsModelId] = useState("");
-  const [selectedTtsVoice, setSelectedTtsVoice] = useState("");
-  const [ttsVoices, setTtsVoices] = useState<
-    Array<{ id: string; name: string; lang: string; gender: string }>
-  >([]);
+  // TTS store
+  const ttsProviders = useTtsStore((s) => s.ttsProviders);
+  const selectedTtsProviderId = useTtsStore((s) => s.selectedTtsProviderId);
+  const ttsModels = useTtsStore((s) => s.ttsModels);
+  const selectedTtsModelId = useTtsStore((s) => s.selectedTtsModelId);
+  const selectedTtsVoice = useTtsStore((s) => s.selectedTtsVoice);
+  const ttsVoices = useTtsStore((s) => s.ttsVoices);
   // Derive TTS download state for backward compatibility
   const ttsDownloadEntries = Object.values(downloads).filter(
     (d) =>
@@ -246,11 +204,15 @@ function App(): React.JSX.Element {
   const translatePrompt = useSettingsStore((s) => s.translatePrompt);
 
   const DEFAULT_HF_URL = "https://huggingface.co";
-  // Per-session translation tracking: sessionId → progress%
-  const [translationProgressMap, setTranslationProgressMap] = useState<
-    Record<number, number>
-  >({});
-  const translateAbortMapRef = useRef<Record<number, boolean>>({});
+
+  // Translation store
+  const translationProgressMap = useTranslationStore(
+    (s) => s.translationProgressMap,
+  );
+  const translations = useTranslationStore((s) => s.translations);
+  const activeTranslationLang = useTranslationStore(
+    (s) => s.activeTranslationLang,
+  );
   // Derived: is the *current* session translating?
   const isTranslating =
     store.currentSessionId != null &&
@@ -259,39 +221,20 @@ function App(): React.JSX.Element {
     store.currentSessionId != null
       ? (translationProgressMap[store.currentSessionId] ?? 0)
       : 0;
-  // Map: segmentId → translated text (for current session + language)
-  const [translations, setTranslations] = useState<Record<number, string>>({});
-  const [activeTranslationLang, setActiveTranslationLangRaw] = useState<
-    string | null
-  >(() => localStorage.getItem("capty:activeTranslationLang"));
-  const setActiveTranslationLang = useCallback((lang: string | null) => {
-    setActiveTranslationLangRaw(lang);
-    if (lang) {
-      localStorage.setItem("capty:activeTranslationLang", lang);
-    } else {
-      localStorage.removeItem("capty:activeTranslationLang");
-    }
-  }, []);
 
   const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
     null,
   );
 
-  // Summary state (per-tab generation support)
-  const [summaries, setSummaries] = useState<Summary[]>([]);
-  const [generatingTabs, setGeneratingTabs] = useState<Set<string>>(new Set());
-  const generatingTabsRef = useRef(generatingTabs);
-  generatingTabsRef.current = generatingTabs;
-  const [streamingContentMap, setStreamingContentMap] = useState<
-    Record<string, string>
-  >({});
-  const [generateError, setGenerateError] = useState<string | null>(null);
+  // Summary store
+  const summaries = useSummaryStore((s) => s.summaries);
+  const generatingTabs = useSummaryStore((s) => s.generatingTabs);
+  const streamingContentMap = useSummaryStore((s) => s.streamingContentMap);
+  const generateError = useSummaryStore((s) => s.generateError);
+  const activePromptType = useSummaryStore((s) => s.activePromptType);
 
-  // Prompt type state (activePromptType is local UI state, not persisted)
+  // Prompt type state
   const promptTypes = useSettingsStore((s) => s.promptTypes);
-  const [activePromptType, setActivePromptType] = useState("summarize");
-  const activePromptTypeRef = useRef(activePromptType);
-  activePromptTypeRef.current = activePromptType;
 
   // Session categories from store
   const sessionCategories = useSettingsStore((s) => s.sessionCategories);
@@ -301,27 +244,21 @@ function App(): React.JSX.Element {
   const summaryPanelWidth = useSettingsStore((s) => s.summaryPanelWidth);
   const zoomFactor = useSettingsStore((s) => s.zoomFactor);
 
-  // Subscribe to unified download events (manages the `downloads` state)
+  // Subscribe to unified download events (manages the `downloads` state via store)
   useEffect(() => {
     const unsubscribe = window.capty.onDownloadEvent((progress) => {
-      setDownloads((prev) => {
-        if (progress.status === "completed") {
-          // Remove completed downloads from tracking
-          const next = { ...prev };
-          delete next[progress.modelId];
-          return next;
-        }
-        return {
-          ...prev,
-          [progress.modelId]: {
-            modelId: progress.modelId,
-            category: progress.category,
-            percent: progress.percent,
-            status: progress.status,
-            error: progress.error,
-          },
-        };
-      });
+      const ds = useDownloadStore.getState();
+      if (progress.status === "completed") {
+        ds.removeDownload(progress.modelId);
+      } else {
+        ds.setDownload(progress.modelId, {
+          modelId: progress.modelId,
+          category: progress.category,
+          percent: progress.percent,
+          status: progress.status,
+          error: progress.error,
+        });
+      }
     });
     return unsubscribe;
   }, []);
@@ -331,16 +268,15 @@ function App(): React.JSX.Element {
     if (!store.dataDir) return;
     window.capty.getIncompleteDownloads().then((incompletes) => {
       if (incompletes.length === 0) return;
-      const initial: Record<string, DownloadInfo> = {};
+      const ds = useDownloadStore.getState();
       for (const d of incompletes) {
-        initial[d.modelId] = {
+        ds.setDownload(d.modelId, {
           modelId: d.modelId,
           category: d.category,
           percent: d.percent,
           status: d.status,
-        };
+        });
       }
-      setDownloads((prev) => ({ ...prev, ...initial }));
     });
   }, [store.dataDir]);
 
@@ -353,15 +289,13 @@ function App(): React.JSX.Element {
     const dataDir = store.dataDir;
     if (!dataDir) return;
 
-    setDownloads((prev) => ({
-      ...prev,
-      [model.id]: {
-        modelId: model.id,
-        category: "asr" as const,
-        percent: 0,
-        status: "downloading",
-      },
-    }));
+    const ds = useDownloadStore.getState();
+    ds.setDownload(model.id, {
+      modelId: model.id,
+      category: "asr" as const,
+      percent: 0,
+      status: "downloading",
+    });
 
     try {
       const destDir = `${dataDir}/models/asr/${model.id}`;
@@ -373,11 +307,7 @@ function App(): React.JSX.Element {
     } catch (err) {
       console.error("Failed to download model:", err);
     } finally {
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
+      useDownloadStore.getState().removeDownload(model.id);
     }
   }, [store, isDownloading]);
 
@@ -439,26 +369,27 @@ function App(): React.JSX.Element {
         }
 
         // Restore TTS providers
+        const tts = useTtsStore.getState();
         const savedTtsProviders = config.ttsProviders as
           | TtsProviderConfig[]
           | undefined;
         if (savedTtsProviders?.length) {
-          setTtsProviders(savedTtsProviders);
+          tts.setTtsProviders(savedTtsProviders);
         }
         const savedTtsProviderId = config.selectedTtsProviderId as
           | string
           | null
           | undefined;
         if (savedTtsProviderId !== undefined) {
-          setSelectedTtsProviderId(savedTtsProviderId);
+          tts.setSelectedTtsProviderId(savedTtsProviderId);
         }
         const savedTtsModelId = config.selectedTtsModelId as string | null;
         if (savedTtsModelId) {
-          setSelectedTtsModelId(savedTtsModelId);
+          tts.setSelectedTtsModel(savedTtsModelId);
         }
         const savedTtsVoice = config.selectedTtsVoice as string | undefined;
         if (savedTtsVoice) {
-          setSelectedTtsVoice(savedTtsVoice);
+          tts.setSelectedTtsVoice(savedTtsVoice);
         }
 
         // Restore sidecar config (autoStartSidecar already loaded by settingsStore)
@@ -541,8 +472,9 @@ function App(): React.JSX.Element {
 
         // Load TTS models
         try {
+          const ttsInit = useTtsStore.getState();
           const ttsList = await window.capty.listTtsModels();
-          setTtsModels(
+          ttsInit.setTtsModels(
             ttsList as Array<{
               id: string;
               name: string;
@@ -561,14 +493,14 @@ function App(): React.JSX.Element {
               (m) => m.downloaded,
             )?.id;
           if (!savedTtsModelId && effectiveTtsModelId) {
-            setSelectedTtsModelId(effectiveTtsModelId);
+            ttsInit.setSelectedTtsModel(effectiveTtsModelId);
           }
 
           // Fetch voice list for the selected TTS model
           if (effectiveTtsModelId) {
             try {
               const voiceResult = await window.capty.ttsListVoices();
-              setTtsVoices(voiceResult.voices);
+              ttsInit.setTtsVoices(voiceResult.voices);
               // Validate saved voice — fall back to first voice if invalid
               const currentVoice = savedTtsVoice ?? "";
               if (
@@ -577,7 +509,7 @@ function App(): React.JSX.Element {
                   (v: { id: string }) => v.id === currentVoice,
                 )
               ) {
-                setSelectedTtsVoice(voiceResult.voices[0].id);
+                ttsInit.setSelectedTtsVoice(voiceResult.voices[0].id);
               }
             } catch {
               // Voice listing not available
@@ -733,35 +665,23 @@ function App(): React.JSX.Element {
           })),
         );
         // Auto-load translations for the new session if a language was active
-        if (activeTranslationLang) {
-          try {
-            const rows = await window.capty.listTranslations(
-              sessionId,
-              activeTranslationLang,
-            );
-            const map: Record<number, string> = {};
-            for (const row of rows) {
-              map[row.segment_id] = row.translated_text;
-            }
-            setTranslations(map);
-          } catch {
-            setTranslations({});
-          }
+        const lang = useTranslationStore.getState().activeTranslationLang;
+        if (lang) {
+          await useTranslationStore
+            .getState()
+            .loadTranslations(sessionId, lang);
         } else {
-          setTranslations({});
+          useTranslationStore.getState().setTranslation(sessionId, {});
         }
         // Load summaries for this session filtered by active prompt type
-        const sessionSummaries = await window.capty.listSummaries(
-          sessionId,
-          activePromptType,
-        );
-        setSummaries(sessionSummaries as Summary[]);
-        setGenerateError(null);
+        const currentPromptType = useSummaryStore.getState().activePromptType;
+        await useSummaryStore.getState().loadSummaries(sessionId);
+        useSummaryStore.getState().clearError();
       } catch (err) {
         console.error("Failed to load session:", err);
       }
     },
-    [store, activePromptType, audioPlayer, activeTranslationLang],
+    [store, audioPlayer],
   );
 
   const handlePlaySession = useCallback(
@@ -794,7 +714,7 @@ function App(): React.JSX.Element {
         if (store.currentSessionId === sessionId) {
           store.setCurrentSessionId(null);
           store.clearSegments();
-          setSummaries([]);
+          useSummaryStore.getState().setSummaries([]);
         }
         await store.loadSessions();
       } catch (err) {
@@ -1058,84 +978,65 @@ function App(): React.JSX.Element {
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);
 
-  const handleStartAudioDownload = useCallback(
-    async (url: string) => {
-      try {
-        const result = await window.capty.downloadAudio(url);
-        // Handler returned an error object instead of throwing
-        if (
-          result &&
-          typeof result === "object" &&
-          "ok" in result &&
-          !result.ok
-        ) {
-          throw new Error(result.error ?? "Download failed");
-        }
-        const list = await window.capty.getAudioDownloads();
-        setAudioDownloads(list);
-        setDownloadBadge(computeDownloadBadge(list));
-      } catch (err: unknown) {
-        const raw = err instanceof Error ? err.message : String(err);
-        // Strip Electron IPC prefix if present
-        const message = raw.replace(
-          /^Error invoking remote method '[^']+': Error: /,
-          "",
-        );
-        setAudioDownloads((prev) => [
-          {
-            id: -Date.now(),
-            url,
-            title: null,
-            source: null,
-            status: "failed",
-            progress: 0,
-            speed: null,
-            eta: null,
-            session_id: null,
-            error: message,
-            created_at: new Date().toISOString(),
-            completed_at: null,
-          },
-          ...prev,
-        ]);
+  const handleStartAudioDownload = useCallback(async (url: string) => {
+    try {
+      const result = await window.capty.downloadAudio(url);
+      // Handler returned an error object instead of throwing
+      if (
+        result &&
+        typeof result === "object" &&
+        "ok" in result &&
+        !result.ok
+      ) {
+        throw new Error(result.error ?? "Download failed");
       }
-    },
-    [computeDownloadBadge],
-  );
+      await useDownloadStore.getState().loadAudioDownloads();
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Strip Electron IPC prefix if present
+      const message = raw.replace(
+        /^Error invoking remote method '[^']+': Error: /,
+        "",
+      );
+      const ds = useDownloadStore.getState();
+      ds.setAudioDownloads([
+        {
+          id: -Date.now(),
+          url,
+          title: null,
+          source: null,
+          status: "failed",
+          progress: 0,
+          speed: null,
+          eta: null,
+          session_id: null,
+          error: message,
+          created_at: new Date().toISOString(),
+          completed_at: null,
+        },
+        ...ds.audioDownloads,
+      ]);
+    }
+  }, []);
 
-  const handleCancelAudioDownload = useCallback(
-    async (id: number) => {
-      await window.capty.cancelAudioDownload(id);
-      const list = await window.capty.getAudioDownloads();
-      setAudioDownloads(list);
-      setDownloadBadge(computeDownloadBadge(list));
-    },
-    [computeDownloadBadge],
-  );
+  const handleCancelAudioDownload = useCallback(async (id: number) => {
+    await window.capty.cancelAudioDownload(id);
+    await useDownloadStore.getState().loadAudioDownloads();
+  }, []);
 
-  const handleRetryAudioDownload = useCallback(
-    async (id: number) => {
-      await window.capty.retryAudioDownload(id);
-      const list = await window.capty.getAudioDownloads();
-      setAudioDownloads(list);
-      setDownloadBadge(computeDownloadBadge(list));
-    },
-    [computeDownloadBadge],
-  );
+  const handleRetryAudioDownload = useCallback(async (id: number) => {
+    await window.capty.retryAudioDownload(id);
+    await useDownloadStore.getState().loadAudioDownloads();
+  }, []);
 
-  const handleRemoveAudioDownload = useCallback(
-    async (id: number) => {
-      await window.capty.removeAudioDownload(id);
-      const list = await window.capty.getAudioDownloads();
-      setAudioDownloads(list);
-      setDownloadBadge(computeDownloadBadge(list));
-    },
-    [computeDownloadBadge],
-  );
+  const handleRemoveAudioDownload = useCallback(async (id: number) => {
+    await window.capty.removeAudioDownload(id);
+    await useDownloadStore.getState().loadAudioDownloads();
+  }, []);
 
   const handleAudioDownloadSelectSession = useCallback(
     async (sessionId: number) => {
-      setShowDownloadManager(false);
+      useDownloadStore.getState().setShowDownloadManager(false);
       await store.loadSessions();
       await handleSelectSession(sessionId);
     },
@@ -1185,20 +1086,21 @@ function App(): React.JSX.Element {
       readonly languages: readonly string[];
       readonly description: string;
     }) => {
-      if (downloads[model.id]?.status === "downloading") return;
+      if (
+        useDownloadStore.getState().downloads[model.id]?.status ===
+        "downloading"
+      )
+        return;
 
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
-      setDownloads((prev) => ({
-        ...prev,
-        [model.id]: {
-          modelId: model.id,
-          category: "asr" as const,
-          percent: 0,
-          status: "downloading",
-        },
-      }));
+      useDownloadStore.getState().setDownload(model.id, {
+        modelId: model.id,
+        category: "asr" as const,
+        percent: 0,
+        status: "downloading",
+      });
 
       try {
         const destDir = `${dataDir}/models/asr/${model.id}`;
@@ -1224,24 +1126,18 @@ function App(): React.JSX.Element {
             ? err.message
             : "Download failed. Check network.";
         console.error("Failed to download model:", err);
-        setDownloads((prev) => ({
-          ...prev,
-          [model.id]: {
-            ...prev[model.id],
-            status: "failed",
-            error: msg,
-          },
-        }));
+        const currentDl = useDownloadStore.getState().downloads[model.id];
+        useDownloadStore.getState().setDownload(model.id, {
+          ...currentDl,
+          status: "failed",
+          error: msg,
+        });
         return; // Don't clean up so error shows in UI
       }
       // Clean up on success
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
+      useDownloadStore.getState().removeDownload(model.id);
     },
-    [store, downloads],
+    [store],
   );
 
   const handleDeleteModel = useCallback(
@@ -1315,30 +1211,23 @@ function App(): React.JSX.Element {
       ttsProviders: TtsProviderConfig[];
       selectedTtsProviderId: string | null;
     }) => {
-      setTtsProviders(settings.ttsProviders);
-      setSelectedTtsProviderId(settings.selectedTtsProviderId);
-      await window.capty.saveTtsSettings({
-        ...settings,
-        selectedTtsModelId,
-      });
+      await useTtsStore.getState().saveTtsSettings(settings);
     },
-    [selectedTtsModelId],
+    [],
   );
 
-  const handleSelectTtsModel = useCallback(
-    async (modelId: string) => {
-      setSelectedTtsModelId(modelId);
-      await window.capty.saveTtsSettings({
-        ttsProviders,
-        selectedTtsProviderId,
-        selectedTtsModelId: modelId,
-      });
-    },
-    [ttsProviders, selectedTtsProviderId],
-  );
+  const handleSelectTtsModel = useCallback(async (modelId: string) => {
+    const ts = useTtsStore.getState();
+    ts.setSelectedTtsModel(modelId);
+    await ts.saveTtsSettings({
+      ttsProviders: [...ts.ttsProviders],
+      selectedTtsProviderId: ts.selectedTtsProviderId,
+      selectedTtsModelId: modelId,
+    });
+  }, []);
 
   const handleChangeTtsVoice = useCallback(async (voice: string) => {
-    setSelectedTtsVoice(voice);
+    useTtsStore.getState().setSelectedTtsVoice(voice);
     const config = await window.capty.getConfig();
     await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
   }, []);
@@ -1389,7 +1278,8 @@ function App(): React.JSX.Element {
       const sessionId = store.currentSessionId;
       if (!sessionId) return;
       // Already translating this session
-      if (sessionId in translateAbortMapRef.current) return;
+      if (sessionId in useTranslationStore.getState().translationProgressMap)
+        return;
 
       // Resolve provider + model for translation (read from store to avoid stale closures)
       const settings = useSettingsStore.getState();
@@ -1405,14 +1295,14 @@ function App(): React.JSX.Element {
       }
       const modelToUse = sel?.model || provider.models[0] || provider.model;
 
-      translateAbortMapRef.current[sessionId] = false;
-      setTranslationProgressMap((prev) => ({ ...prev, [sessionId]: 0 }));
-      setActiveTranslationLang(targetLanguage);
+      useTranslationStore.getState().clearAbort(sessionId);
+      useTranslationStore.getState().setProgress(sessionId, 0);
+      useTranslationStore.getState().setActiveTranslationLang(targetLanguage);
 
       const segments = [...store.segments];
       const total = segments.length;
       const newTranslations: Record<number, string> = {};
-      setTranslations({});
+      useTranslationStore.getState().setTranslation(sessionId, {});
       let completed = 0;
 
       const CONCURRENCY = 3;
@@ -1420,7 +1310,7 @@ function App(): React.JSX.Element {
       const translateOne = async (
         seg: (typeof segments)[number],
       ): Promise<void> => {
-        if (translateAbortMapRef.current[sessionId]) return;
+        if (useTranslationStore.getState().isAborted(sessionId)) return;
         try {
           const result = await window.capty.translate(
             provider.id,
@@ -1429,12 +1319,14 @@ function App(): React.JSX.Element {
             targetLanguage,
             currentTranslatePrompt,
           );
-          if (translateAbortMapRef.current[sessionId]) return;
+          if (useTranslationStore.getState().isAborted(sessionId)) return;
 
           newTranslations[seg.id] = result;
           // Only update displayed translations if still viewing this session
           if (useAppStore.getState().currentSessionId === sessionId) {
-            setTranslations({ ...newTranslations });
+            useTranslationStore
+              .getState()
+              .setTranslation(sessionId, { ...newTranslations });
           }
 
           await window.capty.saveTranslation(
@@ -1447,41 +1339,32 @@ function App(): React.JSX.Element {
           console.warn(`Translation skipped for segment ${seg.id}:`, err);
         }
         completed++;
-        setTranslationProgressMap((prev) => ({
-          ...prev,
-          [sessionId]: Math.round((completed / total) * 100),
-        }));
+        useTranslationStore
+          .getState()
+          .setProgress(sessionId, Math.round((completed / total) * 100));
       };
 
       // Process segments in batches of CONCURRENCY
       for (let i = 0; i < total; i += CONCURRENCY) {
-        if (translateAbortMapRef.current[sessionId]) break;
+        if (useTranslationStore.getState().isAborted(sessionId)) break;
         const batch = segments.slice(i, i + CONCURRENCY);
         await Promise.all(batch.map(translateOne));
       }
 
-      // Cleanup finished session
-      delete translateAbortMapRef.current[sessionId];
-      setTranslationProgressMap((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
+      // Cleanup finished session: remove abort flag and progress key
+      useTranslationStore.getState().clearAbort(sessionId);
+      // Remove session from progress map so `isTranslating` (`in` check) becomes false
+      const cleanedMap = {
+        ...useTranslationStore.getState().translationProgressMap,
+      };
+      delete cleanedMap[sessionId];
+      useTranslationStore.setState({ translationProgressMap: cleanedMap });
+
       // If user switched back, reload translations from DB
       if (useAppStore.getState().currentSessionId === sessionId) {
-        try {
-          const rows = await window.capty.listTranslations(
-            sessionId,
-            targetLanguage,
-          );
-          const map: Record<number, string> = {};
-          for (const row of rows) {
-            map[row.segment_id] = row.translated_text;
-          }
-          setTranslations(map);
-        } catch {
-          // keep newTranslations as-is
-        }
+        await useTranslationStore
+          .getState()
+          .loadTranslations(sessionId, targetLanguage);
       }
     },
     [store],
@@ -1490,27 +1373,16 @@ function App(): React.JSX.Element {
   const handleStopTranslation = useCallback(() => {
     const sid = store.currentSessionId;
     if (sid != null) {
-      translateAbortMapRef.current[sid] = true;
+      useTranslationStore.getState().requestAbort(sid);
     }
   }, [store.currentSessionId]);
 
   // Load saved translations when switching language or session
   const handleLoadTranslations = useCallback(
     async (sessionId: number, targetLanguage: string) => {
-      try {
-        const rows = await window.capty.listTranslations(
-          sessionId,
-          targetLanguage,
-        );
-        const map: Record<number, string> = {};
-        for (const row of rows) {
-          map[row.segment_id] = row.translated_text;
-        }
-        setTranslations(map);
-        setActiveTranslationLang(targetLanguage);
-      } catch {
-        setTranslations({});
-      }
+      await useTranslationStore
+        .getState()
+        .loadTranslations(sessionId, targetLanguage);
     },
     [],
   );
@@ -1564,9 +1436,10 @@ function App(): React.JSX.Element {
 
   const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
     // Immediately reset voice to "auto" to avoid stale voice for new model
-    setSelectedTtsModelId(modelId);
-    setSelectedTtsVoice("");
-    setTtsVoices([]);
+    const ts = useTtsStore.getState();
+    ts.setSelectedTtsModel(modelId);
+    ts.setSelectedTtsVoice("");
+    ts.setTtsVoices([]);
 
     const config = await window.capty.getConfig();
     await window.capty.setConfig({
@@ -1578,15 +1451,15 @@ function App(): React.JSX.Element {
     // Fetch voice list for the new model and default to first voice
     try {
       const result = await window.capty.ttsListVoices();
-      setTtsVoices(result.voices);
+      useTtsStore.getState().setTtsVoices(result.voices);
       if (result.voices.length > 0) {
         const firstVoice = result.voices[0].id;
-        setSelectedTtsVoice(firstVoice);
+        useTtsStore.getState().setSelectedTtsVoice(firstVoice);
         const cfg = await window.capty.getConfig();
         await window.capty.setConfig({ ...cfg, selectedTtsVoice: firstVoice });
       }
     } catch {
-      setTtsVoices([]);
+      useTtsStore.getState().setTtsVoices([]);
     }
   }, []);
 
@@ -1600,19 +1473,20 @@ function App(): React.JSX.Element {
       readonly languages: readonly string[];
       readonly description: string;
     }) => {
-      if (downloads[model.id]?.status === "downloading") return;
+      if (
+        useDownloadStore.getState().downloads[model.id]?.status ===
+        "downloading"
+      )
+        return;
       const dataDir = store.dataDir;
       if (!dataDir) return;
 
-      setDownloads((prev) => ({
-        ...prev,
-        [model.id]: {
-          modelId: model.id,
-          category: "tts" as const,
-          percent: 0,
-          status: "downloading",
-        },
-      }));
+      useDownloadStore.getState().setDownload(model.id, {
+        modelId: model.id,
+        category: "tts" as const,
+        percent: 0,
+        status: "downloading",
+      });
 
       try {
         const destDir = `${dataDir}/models/tts/${model.id}`;
@@ -1631,7 +1505,7 @@ function App(): React.JSX.Element {
 
         // Refresh TTS models list
         const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
+        useTtsStore.getState().setTtsModels(
           ttsList as Array<{
             id: string;
             name: string;
@@ -1649,50 +1523,45 @@ function App(): React.JSX.Element {
             ? err.message
             : "Download failed. Check network.";
         console.error("Failed to download TTS model:", err);
-        setDownloads((prev) => ({
-          ...prev,
-          [model.id]: {
-            ...prev[model.id],
-            status: "failed",
-            error: msg,
-          },
-        }));
+        const currentDl = useDownloadStore.getState().downloads[model.id];
+        useDownloadStore.getState().setDownload(model.id, {
+          ...currentDl,
+          status: "failed",
+          error: msg,
+        });
         return;
       }
       // Clean up on success
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
+      useDownloadStore.getState().removeDownload(model.id);
     },
-    [store, downloads],
+    [store],
   );
 
   // Download control handlers (pause / resume / cancel)
   const handlePauseDownload = useCallback(async (modelId: string) => {
     await window.capty.pauseDownload(modelId);
-    setDownloads((prev) => ({
-      ...prev,
-      [modelId]: { ...prev[modelId], status: "paused" },
-    }));
+    const dl = useDownloadStore.getState().downloads[modelId];
+    if (dl) {
+      useDownloadStore
+        .getState()
+        .setDownload(modelId, { ...dl, status: "paused" });
+    }
   }, []);
 
   const handleResumeDownload = useCallback(
     async (modelId: string) => {
-      const dl = downloads[modelId];
+      const dl = useDownloadStore.getState().downloads[modelId];
       if (!dl) return;
-      setDownloads((prev) => ({
-        ...prev,
-        [modelId]: { ...prev[modelId], status: "downloading" },
-      }));
+      useDownloadStore
+        .getState()
+        .setDownload(modelId, { ...dl, status: "downloading" });
       try {
         await window.capty.resumeDownload(modelId);
         // On success, refresh model lists
         const models = await window.capty.listModels();
         store.setModels(models as Parameters<typeof store.setModels>[0]);
         const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
+        useTtsStore.getState().setTtsModels(
           ttsList as Array<{
             id: string;
             name: string;
@@ -1707,59 +1576,48 @@ function App(): React.JSX.Element {
       } catch (err) {
         console.error("Failed to resume download:", err);
       } finally {
-        setDownloads((prev) => {
-          const next = { ...prev };
-          delete next[modelId];
-          return next;
-        });
+        useDownloadStore.getState().removeDownload(modelId);
       }
     },
-    [store, downloads],
+    [store],
   );
 
   const handleCancelDownload = useCallback(async (modelId: string) => {
     await window.capty.cancelDownload(modelId);
-    setDownloads((prev) => {
-      const next = { ...prev };
-      delete next[modelId];
-      return next;
-    });
+    useDownloadStore.getState().removeDownload(modelId);
   }, []);
 
-  const handleDeleteTtsModel = useCallback(
-    async (modelId: string) => {
-      try {
-        await window.capty.deleteTtsModel(modelId);
-        const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-        if (selectedTtsModelId === modelId) {
-          const firstDownloaded = (
-            ttsList as Array<{ id: string; downloaded: boolean }>
-          ).find((m) => m.downloaded);
-          const newId = firstDownloaded ? firstDownloaded.id : "";
-          setSelectedTtsModelId(newId);
-          await window.capty.setConfig({
-            ...(await window.capty.getConfig()),
-            selectedTtsModelId: newId || null,
-          });
-        }
-      } catch (err) {
-        console.error("Failed to delete TTS model:", err);
+  const handleDeleteTtsModel = useCallback(async (modelId: string) => {
+    try {
+      await window.capty.deleteTtsModel(modelId);
+      const ttsList = await window.capty.listTtsModels();
+      useTtsStore.getState().setTtsModels(
+        ttsList as Array<{
+          id: string;
+          name: string;
+          type: string;
+          repo: string;
+          downloaded: boolean;
+          size_gb: number;
+          languages: readonly string[];
+          description: string;
+        }>,
+      );
+      if (useTtsStore.getState().selectedTtsModelId === modelId) {
+        const firstDownloaded = (
+          ttsList as Array<{ id: string; downloaded: boolean }>
+        ).find((m) => m.downloaded);
+        const newId = firstDownloaded ? firstDownloaded.id : "";
+        useTtsStore.getState().setSelectedTtsModel(newId);
+        await window.capty.setConfig({
+          ...(await window.capty.getConfig()),
+          selectedTtsModelId: newId || null,
+        });
       }
-    },
-    [selectedTtsModelId],
-  );
+    } catch (err) {
+      console.error("Failed to delete TTS model:", err);
+    }
+  }, []);
 
   const handleSearchTtsModels = useCallback(async (query: string) => {
     const results = await window.capty.searchTtsModels(query);
@@ -1785,11 +1643,10 @@ function App(): React.JSX.Element {
 
   const handleSummarize = useCallback(
     async (providerId: string, model: string, promptType: string) => {
-      if (!store.currentSessionId || generatingTabsRef.current.has(promptType))
-        return;
-      setStreamingContentMap((prev) => ({ ...prev, [promptType]: "" }));
-      setGeneratingTabs((prev) => new Set(prev).add(promptType));
-      setGenerateError(null);
+      const ss = useSummaryStore.getState();
+      if (!store.currentSessionId || ss.generatingTabs.has(promptType)) return;
+      ss.startGeneration(promptType);
+      ss.clearError();
       try {
         await window.capty.summarize(
           store.currentSessionId,
@@ -1797,19 +1654,9 @@ function App(): React.JSX.Element {
           model,
           promptType,
         );
-        // Clear streaming content for this tab
-        setStreamingContentMap((prev) => {
-          const next = { ...prev };
-          delete next[promptType];
-          return next;
-        });
         // Reload summaries for the currently active tab (user may have switched)
-        const currentTab = activePromptTypeRef.current;
-        const freshSummaries = await window.capty.listSummaries(
-          store.currentSessionId,
-          currentTab,
-        );
-        setSummaries(freshSummaries as Summary[]);
+        const currentTab = useSummaryStore.getState().activePromptType;
+        await useSummaryStore.getState().loadSummaries(store.currentSessionId);
         // Remember last used model selection
         useSettingsStore
           .getState()
@@ -1820,18 +1667,9 @@ function App(): React.JSX.Element {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
-        setGenerateError(msg);
+        useSummaryStore.getState().setError(msg);
       } finally {
-        setGeneratingTabs((prev) => {
-          const next = new Set(prev);
-          next.delete(promptType);
-          return next;
-        });
-        setStreamingContentMap((prev) => {
-          const next = { ...prev };
-          delete next[promptType];
-          return next;
-        });
+        useSummaryStore.getState().stopGeneration(promptType);
       }
     },
     [store.currentSessionId],
@@ -1839,18 +1677,16 @@ function App(): React.JSX.Element {
 
   const handleChangePromptType = useCallback(
     async (promptType: string) => {
-      setActivePromptType(promptType);
-      setGenerateError(null);
+      useSummaryStore.getState().setActivePromptType(promptType);
+      useSummaryStore.getState().clearError();
       // Reload summaries for new prompt type
       if (store.currentSessionId) {
         try {
-          const sessionSummaries = await window.capty.listSummaries(
-            store.currentSessionId,
-            promptType,
-          );
-          setSummaries(sessionSummaries as Summary[]);
+          await useSummaryStore
+            .getState()
+            .loadSummaries(store.currentSessionId);
         } catch {
-          setSummaries([]);
+          useSummaryStore.getState().setSummaries([]);
         }
       }
     },
@@ -1950,28 +1786,33 @@ function App(): React.JSX.Element {
   // Refresh voice list when TTS provider changes
   useEffect(() => {
     if (!selectedTtsProviderId) return;
-    const provider = ttsProviders.find((p) => p.id === selectedTtsProviderId);
+    const provider = ttsProviders.find(
+      (p: { id: string }) => p.id === selectedTtsProviderId,
+    );
     if (!provider?.isSidecar) {
       // External providers don't use voice selectors
-      setTtsVoices([]);
+      useTtsStore.getState().setTtsVoices([]);
       return;
     }
     (async () => {
       try {
         const result = await window.capty.ttsListVoices();
-        setTtsVoices(result.voices);
+        const ts = useTtsStore.getState();
+        ts.setTtsVoices(result.voices);
         // If saved voice not in list, default to first
         if (
           result.voices.length > 0 &&
-          !result.voices.some((v) => v.id === selectedTtsVoice)
+          !result.voices.some(
+            (v: { id: string }) => v.id === ts.selectedTtsVoice,
+          )
         ) {
           const first = result.voices[0].id;
-          setSelectedTtsVoice(first);
+          ts.setSelectedTtsVoice(first);
           const config = await window.capty.getConfig();
           await window.capty.setConfig({ ...config, selectedTtsVoice: first });
         }
       } catch {
-        setTtsVoices([]);
+        useTtsStore.getState().setTtsVoices([]);
       }
     })();
   }, [selectedTtsProviderId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2013,10 +1854,7 @@ function App(): React.JSX.Element {
     const unsub = window.capty.onSummaryChunk(
       ({ content, done, promptType }) => {
         if (done) return;
-        setStreamingContentMap((prev) => ({
-          ...prev,
-          [promptType]: (prev[promptType] || "") + content,
-        }));
+        useSummaryStore.getState().appendStreamContent(promptType, content);
       },
     );
     return unsub;
@@ -2040,66 +1878,59 @@ function App(): React.JSX.Element {
         store.loadSessions();
       }
 
-      setAudioDownloads((prev) => {
-        const idx = prev.findIndex((d) => d.id === event.id);
-        if (idx === -1) {
-          // New download — reload full list
-          window.capty.getAudioDownloads().then((list) => {
-            setAudioDownloads(list);
-            setDownloadBadge(computeDownloadBadge(list));
-          });
-          return prev;
-        }
-        const updated = [...prev];
-        const current = updated[idx];
-        updated[idx] = {
-          ...current,
-          status:
-            event.stage === "error"
-              ? "failed"
-              : event.stage === "progress"
-                ? "downloading"
-                : event.stage,
-          progress: event.percent ?? current.progress,
-          speed: event.speed ?? current.speed,
-          eta: event.eta ?? current.eta,
-          title: event.title ?? current.title,
-          source: event.source ?? current.source,
-          error: event.error ?? current.error,
-          session_id: event.sessionId ?? current.session_id,
-        };
-        setDownloadBadge(computeDownloadBadge(updated));
-        return updated;
-      });
+      const ds = useDownloadStore.getState();
+      const prev = ds.audioDownloads;
+      const idx = prev.findIndex((d) => d.id === event.id);
+      if (idx === -1) {
+        // New download — reload full list
+        ds.loadAudioDownloads();
+        return;
+      }
+      const updated = [...prev];
+      const current = updated[idx];
+      updated[idx] = {
+        ...current,
+        status:
+          event.stage === "error"
+            ? "failed"
+            : event.stage === "progress"
+              ? "downloading"
+              : event.stage,
+        progress: event.percent ?? current.progress,
+        speed: event.speed ?? current.speed,
+        eta: event.eta ?? current.eta,
+        title: event.title ?? current.title,
+        source: event.source ?? current.source,
+        error: event.error ?? current.error,
+        session_id: event.sessionId ?? current.session_id,
+      };
+      ds.setAudioDownloads(updated);
     });
     return cleanup;
-  }, [computeDownloadBadge, store]);
+  }, [store]);
 
   // Load download list on mount + crash recovery
   useEffect(() => {
     if (needsSetup !== false) return; // DB not ready during setup wizard
     window.capty.getAudioDownloads().then((list) => {
-      setAudioDownloads(list);
-      setDownloadBadge(computeDownloadBadge(list));
+      const ds = useDownloadStore.getState();
+      ds.setAudioDownloads(list);
       const hasInterrupted = list.some((d) =>
         ["pending", "downloading", "converting"].includes(d.status),
       );
-      if (hasInterrupted) setShowDownloadManager(true);
+      if (hasInterrupted) ds.setShowDownloadManager(true);
     });
-  }, [computeDownloadBadge, needsSetup]);
+  }, [needsSetup]);
 
   // Listen for retry trigger from main process
   useEffect(() => {
     const cleanup = window.capty.onAudioDownloadRetryTrigger(({ url }) => {
       window.capty.downloadAudio(url).then(() => {
-        window.capty.getAudioDownloads().then((list) => {
-          setAudioDownloads(list);
-          setDownloadBadge(computeDownloadBadge(list));
-        });
+        useDownloadStore.getState().loadAudioDownloads();
       });
     });
     return cleanup;
-  }, [computeDownloadBadge]);
+  }, []);
 
   // No streaming partial text with HTTP-based transcription
 
@@ -2172,7 +2003,9 @@ function App(): React.JSX.Element {
           onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
           onUploadAudio={handleUploadAudio}
-          onDownloadAudio={() => setShowDownloadManager(true)}
+          onDownloadAudio={() =>
+            useDownloadStore.getState().setShowDownloadManager(true)
+          }
           downloadBadge={downloadBadge}
           onAiRename={
             llmProviders.some((p) => (p.models?.length ?? 0) > 0)
@@ -2402,7 +2235,9 @@ function App(): React.JSX.Element {
           onRetryDownload={handleRetryAudioDownload}
           onRemoveDownload={handleRemoveAudioDownload}
           onSelectSession={handleAudioDownloadSelectSession}
-          onClose={() => setShowDownloadManager(false)}
+          onClose={() =>
+            useDownloadStore.getState().setShowDownloadManager(false)
+          }
         />
       )}
     </div>
