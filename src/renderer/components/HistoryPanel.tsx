@@ -6,6 +6,9 @@ import React, {
   useMemo,
 } from "react";
 import { createPortal } from "react-dom";
+import { useAppStore } from "../stores/appStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useDownloadStore } from "../stores/downloadStore";
 
 interface SessionSummary {
   readonly id: number;
@@ -40,38 +43,19 @@ const ICON_CHOICES = [
 ];
 
 interface HistoryPanelProps {
-  readonly sessions: readonly SessionSummary[];
-  readonly currentSessionId: number | null;
+  // Props that require App.tsx hooks/refs (audio player, recording flow, ASR)
   readonly playingSessionId: number | null;
   readonly regeneratingSessionId: number | null;
   readonly regenerationProgress: number;
-  readonly isRecording: boolean;
-  readonly width: number;
-  readonly onWidthChange: (width: number) => void;
   readonly onSelectSession: (id: number) => void;
   readonly onDeleteSession: (id: number) => void;
   readonly onPlaySession: (id: number) => void;
   readonly onStopPlayback: () => void;
-  readonly onRenameSession: (id: number, newTitle: string) => void;
   readonly onRegenerateSubtitles: (id: number) => void;
   readonly onCancelRegeneration: () => void;
-  readonly onOpenFolder: (id: number) => void;
   readonly onUploadAudio: () => void;
-  readonly onDownloadAudio: () => void;
-  readonly downloadBadge: "active" | "failed" | null;
   readonly onAiRename?: (id: number) => void;
   readonly aiRenamingSessionId?: number | null;
-  readonly onUpdateCategory?: (id: number, category: string) => void;
-  readonly onReorderSessions?: (sessionIds: number[]) => void;
-  readonly categories?: readonly SessionCategory[];
-  readonly onAddCategory?: (category: { label: string; icon: string }) => void;
-  readonly onDeleteCategory?: (categoryId: string) => void;
-  readonly onReorderCategories?: (categoryIds: string[]) => void;
-  readonly onEditSession?: (
-    id: number,
-    title: string,
-    startedAt: string,
-  ) => void;
 }
 
 function formatDuration(seconds: number | null): string {

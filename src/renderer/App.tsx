@@ -6,7 +6,7 @@ import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
 import { SettingsModal, TabId } from "./components/SettingsModal";
-import { SummaryPanel, PromptType } from "./components/SummaryPanel";
+import { SummaryPanel } from "./components/SummaryPanel";
 import type { TtsProviderConfig } from "./stores/ttsStore";
 import { useAppStore } from "./stores/appStore";
 import { useSettingsStore } from "./stores/settingsStore";
@@ -37,7 +37,6 @@ function App(): React.JSX.Element {
   // Download store
   const downloads = useDownloadStore((s) => s.downloads);
   const audioDownloads = useDownloadStore((s) => s.audioDownloads);
-  const downloadBadge = useDownloadStore((s) => s.downloadBadge);
   const showDownloadManager = useDownloadStore((s) => s.showDownloadManager);
 
   const handleStartSidecar = useCallback(async () => {
@@ -159,20 +158,12 @@ function App(): React.JSX.Element {
   const isDownloading = asrDownloadEntries.some(
     (d) => d.status === "downloading",
   );
-  const downloadingModelId = asrDownloadEntries[0]?.modelId ?? null;
   const downloadProgress = asrDownloadEntries[0]?.percent ?? 0;
-  const downloadError =
-    Object.values(downloads).find(
-      (d) => d.category === "asr" && d.status === "failed",
-    )?.error ?? null;
 
   // TTS store
   const ttsProviders = useTtsStore((s) => s.ttsProviders);
   const selectedTtsProviderId = useTtsStore((s) => s.selectedTtsProviderId);
-  const ttsModels = useTtsStore((s) => s.ttsModels);
   const selectedTtsModelId = useTtsStore((s) => s.selectedTtsModelId);
-  const selectedTtsVoice = useTtsStore((s) => s.selectedTtsVoice);
-  const ttsVoices = useTtsStore((s) => s.ttsVoices);
   // Settings from store
   const llmProviders = useSettingsStore((s) => s.llmProviders);
   const selectedSummaryModel = useSettingsStore((s) => s.selectedSummaryModel);
@@ -201,24 +192,6 @@ function App(): React.JSX.Element {
   const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
     null,
   );
-
-  // Summary store
-  const summaries = useSummaryStore((s) => s.summaries);
-  const generatingTabs = useSummaryStore((s) => s.generatingTabs);
-  const streamingContentMap = useSummaryStore((s) => s.streamingContentMap);
-  const generateError = useSummaryStore((s) => s.generateError);
-  const activePromptType = useSummaryStore((s) => s.activePromptType);
-
-  // Prompt type state
-  const promptTypes = useSettingsStore((s) => s.promptTypes);
-
-  // Session categories from store
-  const sessionCategories = useSettingsStore((s) => s.sessionCategories);
-
-  // Layout from store
-  const historyPanelWidth = useSettingsStore((s) => s.historyPanelWidth);
-  const summaryPanelWidth = useSettingsStore((s) => s.summaryPanelWidth);
-  const zoomFactor = useSettingsStore((s) => s.zoomFactor);
 
   // Subscribe to unified download events (manages the `downloads` state via store)
   useEffect(() => {
@@ -765,44 +738,6 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleAddCategory = useCallback(
-    async (cat: { label: string; icon: string }) => {
-      try {
-        await useSettingsStore.getState().addCategory(cat);
-      } catch (err) {
-        console.error("Failed to add category:", err);
-      }
-    },
-    [],
-  );
-
-  const handleDeleteCategory = useCallback(
-    async (categoryId: string) => {
-      try {
-        await useSettingsStore.getState().deleteCategory(categoryId);
-        await store.loadSessions(); // refresh since sessions moved to "recording"
-      } catch (err) {
-        console.error("Failed to delete category:", err);
-      }
-    },
-    [store],
-  );
-
-  const handleReorderCategories = useCallback(async (categoryIds: string[]) => {
-    try {
-      const cats = useSettingsStore.getState().sessionCategories;
-      const reordered = categoryIds
-        .map((id) => cats.find((c) => c.id === id))
-        .filter(
-          Boolean,
-        ) as import("./components/HistoryPanel").SessionCategory[];
-      useSettingsStore.getState().setSessionCategories(reordered);
-      await window.capty.saveSessionCategories(reordered);
-    } catch (err) {
-      console.error("Failed to reorder categories:", err);
-    }
-  }, []);
-
   const handleRegenerateSubtitles = useCallback(
     async (sessionId: number) => {
       if (regeneratingSessionId !== null || store.isRecording) return;
@@ -1043,12 +978,6 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleChangeTtsVoice = useCallback(async (voice: string) => {
-    useTtsStore.getState().setSelectedTtsVoice(voice);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
-  }, []);
-
   const handleChangeTranslateModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
       useSettingsStore.getState().setSelectedTranslateModel(selection);
@@ -1220,110 +1149,6 @@ function App(): React.JSX.Element {
     },
     [aiRenamingSessionId, store],
   );
-
-  const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
-    // Immediately reset voice to "auto" to avoid stale voice for new model
-    const ts = useTtsStore.getState();
-    ts.setSelectedTtsModel(modelId);
-    ts.setSelectedTtsVoice("");
-    ts.setTtsVoices([]);
-
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      selectedTtsModelId: modelId,
-      selectedTtsVoice: "",
-    });
-
-    // Fetch voice list for the new model and default to first voice
-    try {
-      const result = await window.capty.ttsListVoices();
-      useTtsStore.getState().setTtsVoices(result.voices);
-      if (result.voices.length > 0) {
-        const firstVoice = result.voices[0].id;
-        useTtsStore.getState().setSelectedTtsVoice(firstVoice);
-        const cfg = await window.capty.getConfig();
-        await window.capty.setConfig({ ...cfg, selectedTtsVoice: firstVoice });
-      }
-    } catch {
-      useTtsStore.getState().setTtsVoices([]);
-    }
-  }, []);
-
-  const handleSummarize = useCallback(
-    async (providerId: string, model: string, promptType: string) => {
-      const ss = useSummaryStore.getState();
-      if (!store.currentSessionId || ss.generatingTabs.has(promptType)) return;
-      ss.startGeneration(promptType);
-      ss.clearError();
-      try {
-        await window.capty.summarize(
-          store.currentSessionId,
-          providerId,
-          model,
-          promptType,
-        );
-        // Reload summaries for the currently active tab (user may have switched)
-        const currentTab = useSummaryStore.getState().activePromptType;
-        await useSummaryStore.getState().loadSummaries(store.currentSessionId);
-        // Remember last used model selection
-        useSettingsStore
-          .getState()
-          .setSelectedSummaryModel({ providerId, model });
-        await useSettingsStore
-          .getState()
-          .saveConfig({ selectedSummaryModel: { providerId, model } });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to generate";
-        console.error("Summarize error:", err);
-        useSummaryStore.getState().setError(msg);
-      } finally {
-        useSummaryStore.getState().stopGeneration(promptType);
-      }
-    },
-    [store.currentSessionId],
-  );
-
-  const handleChangePromptType = useCallback(
-    async (promptType: string) => {
-      useSummaryStore.getState().setActivePromptType(promptType);
-      useSummaryStore.getState().clearError();
-      // Reload summaries for new prompt type
-      if (store.currentSessionId) {
-        try {
-          await useSummaryStore
-            .getState()
-            .loadSummaries(store.currentSessionId);
-        } catch {
-          useSummaryStore.getState().setSummaries([]);
-        }
-      }
-    },
-    [store.currentSessionId],
-  );
-
-  const handleSavePromptTypes = useCallback(async (types: PromptType[]) => {
-    await useSettingsStore.getState().savePromptTypes(types);
-  }, []);
-
-  // Layout width change handlers (debounced save via store)
-  const handleHistoryWidthChange = useCallback((newWidth: number) => {
-    useSettingsStore
-      .getState()
-      .saveLayoutWidths(
-        newWidth,
-        useSettingsStore.getState().summaryPanelWidth,
-      );
-  }, []);
-
-  const handleSummaryWidthChange = useCallback((newWidth: number) => {
-    useSettingsStore
-      .getState()
-      .saveLayoutWidths(
-        useSettingsStore.getState().historyPanelWidth,
-        newWidth,
-      );
-  }, []);
 
   // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0
   useEffect(() => {
@@ -1595,40 +1420,18 @@ function App(): React.JSX.Element {
       />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <HistoryPanel
-          sessions={store.sessions}
-          currentSessionId={store.currentSessionId}
           playingSessionId={audioPlayer.playingSessionId}
           regeneratingSessionId={regeneratingSessionId}
           regenerationProgress={regenerationProgress}
-          isRecording={store.isRecording}
-          width={historyPanelWidth}
-          onWidthChange={handleHistoryWidthChange}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onPlaySession={handlePlaySession}
           onStopPlayback={audioPlayer.stop}
-          onRenameSession={handleRenameSession}
           onRegenerateSubtitles={handleRegenerateSubtitles}
           onCancelRegeneration={handleCancelRegeneration}
-          onOpenFolder={(id) => window.capty.openAudioFolder(id)}
           onUploadAudio={handleUploadAudio}
-          onDownloadAudio={() =>
-            useDownloadStore.getState().setShowDownloadManager(true)
-          }
-          downloadBadge={downloadBadge}
-          onAiRename={
-            llmProviders.some((p) => (p.models?.length ?? 0) > 0)
-              ? handleAiRename
-              : undefined
-          }
+          onAiRename={handleAiRename}
           aiRenamingSessionId={aiRenamingSessionId}
-          onUpdateCategory={handleUpdateCategory}
-          onReorderSessions={handleReorderSessions}
-          categories={sessionCategories}
-          onAddCategory={handleAddCategory}
-          onDeleteCategory={handleDeleteCategory}
-          onReorderCategories={handleReorderCategories}
-          onEditSession={handleEditSession}
         />
         <TranscriptArea
           segments={store.segments}
@@ -1667,49 +1470,7 @@ function App(): React.JSX.Element {
           selectedTranslateModel={selectedTranslateModel}
           onChangeTranslateModel={handleChangeTranslateModel}
         />
-        <SummaryPanel
-          summaries={summaries}
-          isGenerating={generatingTabs.has(activePromptType)}
-          generatingPromptType={
-            generatingTabs.has(activePromptType) ? activePromptType : null
-          }
-          streamingContent={streamingContentMap[activePromptType] || ""}
-          generateError={generateError}
-          currentSessionId={store.currentSessionId}
-          hasSegments={store.segments.length > 0}
-          llmProviders={llmProviders}
-          selectedSummaryModel={selectedSummaryModel}
-          promptTypes={promptTypes}
-          activePromptType={activePromptType}
-          initialWidth={summaryPanelWidth}
-          ttsModels={ttsModels.filter((m) => m.downloaded)}
-          selectedTtsModelId={selectedTtsModelId}
-          selectedTtsVoice={selectedTtsVoice}
-          ttsVoices={ttsVoices}
-          ttsProviderReady={store.ttsProviderReady}
-          isSidecarTts={
-            ttsProviders.find((p) => p.id === selectedTtsProviderId)
-              ?.isSidecar ?? false
-          }
-          ttsProviderName={
-            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.name ??
-            null
-          }
-          ttsProviderModel={
-            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.model ??
-            ""
-          }
-          ttsProviderVoice={
-            ttsProviders.find((p) => p.id === selectedTtsProviderId)?.voice ??
-            ""
-          }
-          onWidthChange={handleSummaryWidthChange}
-          onSummarize={handleSummarize}
-          onChangePromptType={handleChangePromptType}
-          onSavePromptTypes={handleSavePromptTypes}
-          onChangeTtsModel={handleChangeTtsModelForPlay}
-          onChangeTtsVoice={handleChangeTtsVoice}
-        />
+        <SummaryPanel />
       </div>
       {/* ── Bottom bar: crossfade between RecordingControls and PlaybackBar ── */}
       <div

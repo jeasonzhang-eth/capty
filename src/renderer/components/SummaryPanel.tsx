@@ -8,72 +8,14 @@ import React, {
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { toPng, toBlob } from "html-to-image";
-import type { LlmProvider } from "./SettingsModal";
+import { useAppStore } from "../stores/appStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useSummaryStore } from "../stores/summaryStore";
+import { useTtsStore } from "../stores/ttsStore";
 
-export interface PromptType {
-  readonly id: string;
-  readonly label: string;
-  readonly systemPrompt: string;
-  readonly isBuiltin: boolean;
-}
-
-export interface Summary {
-  readonly id: number;
-  readonly session_id: number;
-  readonly content: string;
-  readonly model_name: string;
-  readonly provider_id: string;
-  readonly prompt_type: string;
-  readonly created_at: string;
-}
-
-interface TtsModelInfo {
-  readonly id: string;
-  readonly name: string;
-  readonly type: string;
-  readonly downloaded: boolean;
-}
-
-interface TtsVoiceInfo {
-  readonly id: string;
-  readonly name: string;
-  readonly lang: string;
-  readonly gender: string;
-}
-
-interface SummaryPanelProps {
-  readonly summaries: readonly Summary[];
-  readonly isGenerating: boolean;
-  readonly generatingPromptType: string | null;
-  readonly streamingContent: string;
-  readonly generateError: string | null;
-  readonly currentSessionId: number | null;
-  readonly hasSegments: boolean;
-  readonly llmProviders: readonly LlmProvider[];
-  readonly selectedSummaryModel: { providerId: string; model: string } | null;
-  readonly promptTypes: readonly PromptType[];
-  readonly activePromptType: string;
-  readonly initialWidth: number;
-  readonly ttsModels: readonly TtsModelInfo[];
-  readonly selectedTtsModelId: string;
-  readonly selectedTtsVoice: string;
-  readonly ttsVoices: readonly TtsVoiceInfo[];
-  readonly ttsProviderReady: boolean;
-  readonly isSidecarTts: boolean;
-  readonly ttsProviderName: string | null;
-  readonly ttsProviderModel: string;
-  readonly ttsProviderVoice: string;
-  readonly onWidthChange: (width: number) => void;
-  readonly onSummarize: (
-    providerId: string,
-    model: string,
-    promptType: string,
-  ) => void;
-  readonly onChangePromptType: (promptType: string) => void;
-  readonly onSavePromptTypes: (types: PromptType[]) => void;
-  readonly onChangeTtsModel: (modelId: string) => void;
-  readonly onChangeTtsVoice: (voice: string) => void;
-}
+import type { PromptType } from "../stores/settingsStore";
+export type { PromptType } from "../stores/settingsStore";
+export type { Summary } from "../stores/summaryStore";
 
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 600;
@@ -116,35 +58,141 @@ table { border-collapse: collapse; } th,td { border: 1px solid #ddd; padding: 8p
 </style></head><body>${htmlContent}</body></html>`;
 }
 
-export function SummaryPanel({
-  summaries,
-  isGenerating,
-  generatingPromptType,
-  streamingContent,
-  generateError,
-  currentSessionId,
-  hasSegments,
-  llmProviders,
-  selectedSummaryModel,
-  promptTypes,
-  activePromptType,
-  initialWidth,
-  ttsModels,
-  selectedTtsModelId,
-  selectedTtsVoice,
-  ttsVoices,
-  ttsProviderReady,
-  isSidecarTts,
-  ttsProviderName,
-  ttsProviderModel,
-  ttsProviderVoice,
-  onWidthChange,
-  onSummarize,
-  onChangePromptType,
-  onSavePromptTypes,
-  onChangeTtsModel,
-  onChangeTtsVoice,
-}: SummaryPanelProps): React.ReactElement {
+export function SummaryPanel(): React.ReactElement {
+  // ── Read state from stores ──
+  const currentSessionId = useAppStore((s) => s.currentSessionId);
+  const segments = useAppStore((s) => s.segments);
+  const ttsProviderReady = useAppStore((s) => s.ttsProviderReady);
+
+  const llmProviders = useSettingsStore((s) => s.llmProviders);
+  const selectedSummaryModel = useSettingsStore((s) => s.selectedSummaryModel);
+  const promptTypes = useSettingsStore((s) => s.promptTypes);
+  const initialWidth = useSettingsStore((s) => s.summaryPanelWidth);
+
+  const summaries = useSummaryStore((s) => s.summaries);
+  const generatingTabs = useSummaryStore((s) => s.generatingTabs);
+  const streamingContentMap = useSummaryStore((s) => s.streamingContentMap);
+  const generateError = useSummaryStore((s) => s.generateError);
+  const activePromptType = useSummaryStore((s) => s.activePromptType);
+
+  const ttsModelsRaw = useTtsStore((s) => s.ttsModels);
+  const selectedTtsModelId = useTtsStore((s) => s.selectedTtsModelId);
+  const selectedTtsVoice = useTtsStore((s) => s.selectedTtsVoice);
+  const ttsVoices = useTtsStore((s) => s.ttsVoices);
+  const ttsProviders = useTtsStore((s) => s.ttsProviders);
+  const selectedTtsProviderId = useTtsStore((s) => s.selectedTtsProviderId);
+
+  // ── Derived values ──
+  const hasSegments = segments.length > 0;
+  const isGenerating = generatingTabs.has(activePromptType);
+  const generatingPromptType = isGenerating ? activePromptType : null;
+  const streamingContent = streamingContentMap[activePromptType] || "";
+  const ttsModels = useMemo(
+    () => ttsModelsRaw.filter((m) => m.downloaded),
+    [ttsModelsRaw],
+  );
+  const selectedTtsProvider = useMemo(
+    () => ttsProviders.find((p) => p.id === selectedTtsProviderId) ?? null,
+    [ttsProviders, selectedTtsProviderId],
+  );
+  const isSidecarTts = selectedTtsProvider?.isSidecar ?? false;
+  const ttsProviderName = selectedTtsProvider?.name ?? null;
+  const ttsProviderModel = selectedTtsProvider?.model ?? "";
+  const ttsProviderVoice = selectedTtsProvider?.voice ?? "";
+
+  // ── Inline callbacks (formerly props from App.tsx) ──
+  const onWidthChange = useCallback((newWidth: number) => {
+    useSettingsStore
+      .getState()
+      .saveLayoutWidths(
+        useSettingsStore.getState().historyPanelWidth,
+        newWidth,
+      );
+  }, []);
+
+  const onSummarize = useCallback(
+    async (providerId: string, model: string, promptType: string) => {
+      const ss = useSummaryStore.getState();
+      if (!currentSessionId || ss.generatingTabs.has(promptType)) return;
+      ss.startGeneration(promptType);
+      ss.clearError();
+      try {
+        await window.capty.summarize(
+          currentSessionId,
+          providerId,
+          model,
+          promptType,
+        );
+        await useSummaryStore.getState().loadSummaries(currentSessionId);
+        useSettingsStore
+          .getState()
+          .setSelectedSummaryModel({ providerId, model });
+        await useSettingsStore
+          .getState()
+          .saveConfig({ selectedSummaryModel: { providerId, model } });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to generate";
+        console.error("Summarize error:", err);
+        useSummaryStore.getState().setError(msg);
+      } finally {
+        useSummaryStore.getState().stopGeneration(promptType);
+      }
+    },
+    [currentSessionId],
+  );
+
+  const onChangePromptType = useCallback(
+    async (promptType: string) => {
+      useSummaryStore.getState().setActivePromptType(promptType);
+      useSummaryStore.getState().clearError();
+      if (currentSessionId) {
+        try {
+          await useSummaryStore.getState().loadSummaries(currentSessionId);
+        } catch {
+          useSummaryStore.getState().setSummaries([]);
+        }
+      }
+    },
+    [currentSessionId],
+  );
+
+  const onSavePromptTypes = useCallback(async (types: PromptType[]) => {
+    await useSettingsStore.getState().savePromptTypes(types);
+  }, []);
+
+  const onChangeTtsModel = useCallback(async (modelId: string) => {
+    const ts = useTtsStore.getState();
+    ts.setSelectedTtsModel(modelId);
+    ts.setSelectedTtsVoice("");
+    ts.setTtsVoices([]);
+
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({
+      ...config,
+      selectedTtsModelId: modelId,
+      selectedTtsVoice: "",
+    });
+
+    try {
+      const result = await window.capty.ttsListVoices();
+      useTtsStore.getState().setTtsVoices(result.voices);
+      if (result.voices.length > 0) {
+        const firstVoice = result.voices[0].id;
+        useTtsStore.getState().setSelectedTtsVoice(firstVoice);
+        const cfg = await window.capty.getConfig();
+        await window.capty.setConfig({ ...cfg, selectedTtsVoice: firstVoice });
+      }
+    } catch {
+      useTtsStore.getState().setTtsVoices([]);
+    }
+  }, []);
+
+  const onChangeTtsVoice = useCallback(async (voice: string) => {
+    useTtsStore.getState().setSelectedTtsVoice(voice);
+    const config = await window.capty.getConfig();
+    await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
+  }, []);
+
   const availableProviders = useMemo(
     () => llmProviders.filter((p) => (p.models?.length ?? 0) > 0 || p.model),
     [llmProviders],

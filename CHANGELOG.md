@@ -6,6 +6,8 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: SummaryPanel + HistoryPanel read stores directly, ~50 more props eliminated
+- Refactor: remove 10 orphaned useCallback handlers + 14 unused store selectors from App.tsx
 - Refactor: SettingsModal reads from stores directly, ~50 props eliminated (3 remaining: initialTab, onTabChange, onClose)
 - Refactor: wire ttsStore, summaryStore, translationStore, downloadStore into App.tsx
 - Refactor: wire settingsStore into App.tsx, replace ~14 useState + ~20 useCallback with store reads/actions
