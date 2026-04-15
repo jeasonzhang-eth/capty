@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: SettingsModal reads from stores directly, ~50 props eliminated (3 remaining: initialTab, onTabChange, onClose)
 - Refactor: wire ttsStore, summaryStore, translationStore, downloadStore into App.tsx
 - Refactor: wire settingsStore into App.tsx, replace ~14 useState + ~20 useCallback with store reads/actions
 - Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles + localStorage mock)

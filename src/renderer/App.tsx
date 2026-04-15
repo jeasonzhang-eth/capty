@@ -5,7 +5,7 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import { SettingsModal, LlmProvider, TabId } from "./components/SettingsModal";
+import { SettingsModal, TabId } from "./components/SettingsModal";
 import { SummaryPanel, PromptType } from "./components/SummaryPanel";
 import type { TtsProviderConfig } from "./stores/ttsStore";
 import { useAppStore } from "./stores/appStore";
@@ -34,8 +34,6 @@ function App(): React.JSX.Element {
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     TabId | undefined
   >(undefined);
-  const autoStartSidecar = useSettingsStore((s) => s.autoStartSidecar);
-
   // Download store
   const downloads = useDownloadStore((s) => s.downloads);
   const audioDownloads = useDownloadStore((s) => s.audioDownloads);
@@ -175,35 +173,13 @@ function App(): React.JSX.Element {
   const selectedTtsModelId = useTtsStore((s) => s.selectedTtsModelId);
   const selectedTtsVoice = useTtsStore((s) => s.selectedTtsVoice);
   const ttsVoices = useTtsStore((s) => s.ttsVoices);
-  // Derive TTS download state for backward compatibility
-  const ttsDownloadEntries = Object.values(downloads).filter(
-    (d) =>
-      d.category === "tts" &&
-      (d.status === "downloading" || d.status === "paused"),
-  );
-  const isTtsDownloading = ttsDownloadEntries.some(
-    (d) => d.status === "downloading",
-  );
-  const ttsDownloadingModelId = ttsDownloadEntries[0]?.modelId ?? null;
-  const ttsDownloadProgress = ttsDownloadEntries[0]?.percent ?? 0;
-  const ttsDownloadError =
-    Object.values(downloads).find(
-      (d) => d.category === "tts" && d.status === "failed",
-    )?.error ?? null;
-
   // Settings from store
-  const configDir = useSettingsStore((s) => s.configDir);
-  const hfMirrorUrl = useSettingsStore((s) => s.hfMirrorUrl);
   const llmProviders = useSettingsStore((s) => s.llmProviders);
   const selectedSummaryModel = useSettingsStore((s) => s.selectedSummaryModel);
   const selectedTranslateModel = useSettingsStore(
     (s) => s.selectedTranslateModel,
   );
   const selectedRapidModel = useSettingsStore((s) => s.selectedRapidModel);
-  const rapidRenamePrompt = useSettingsStore((s) => s.rapidRenamePrompt);
-  const translatePrompt = useSettingsStore((s) => s.translatePrompt);
-
-  const DEFAULT_HF_URL = "https://huggingface.co";
 
   // Translation store
   const translationProgressMap = useTranslationStore(
@@ -1057,15 +1033,6 @@ function App(): React.JSX.Element {
     [audioCapture],
   );
 
-  const handleChangeDataDir = useCallback(async () => {
-    const dir = await window.capty.selectDirectory();
-    if (dir) {
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({ ...config, dataDir: dir });
-      store.setDataDir(dir);
-    }
-  }, [store]);
-
   const handleSelectModel = useCallback(
     async (modelId: string) => {
       store.setSelectedModelId(modelId);
@@ -1076,181 +1043,11 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleSettingsDownloadModel = useCallback(
-    async (model: {
-      readonly id: string;
-      readonly name: string;
-      readonly type: string;
-      readonly repo: string;
-      readonly size_gb: number;
-      readonly languages: readonly string[];
-      readonly description: string;
-    }) => {
-      if (
-        useDownloadStore.getState().downloads[model.id]?.status ===
-        "downloading"
-      )
-        return;
-
-      const dataDir = store.dataDir;
-      if (!dataDir) return;
-
-      useDownloadStore.getState().setDownload(model.id, {
-        modelId: model.id,
-        category: "asr" as const,
-        percent: 0,
-        status: "downloading",
-      });
-
-      try {
-        const destDir = `${dataDir}/models/asr/${model.id}`;
-        await window.capty.downloadModel(model.repo, destDir);
-
-        // Save model metadata so it's discoverable by models:list
-        await window.capty.saveModelMeta(model.id, {
-          id: model.id,
-          name: model.name,
-          type: model.type,
-          repo: model.repo,
-          size_gb: model.size_gb,
-          languages: [...model.languages],
-          description: model.description,
-        });
-
-        // Refresh models list (now includes both builtin + user-downloaded)
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "Download failed. Check network.";
-        console.error("Failed to download model:", err);
-        const currentDl = useDownloadStore.getState().downloads[model.id];
-        useDownloadStore.getState().setDownload(model.id, {
-          ...currentDl,
-          status: "failed",
-          error: msg,
-        });
-        return; // Don't clean up so error shows in UI
-      }
-      // Clean up on success
-      useDownloadStore.getState().removeDownload(model.id);
-    },
-    [store],
-  );
-
-  const handleDeleteModel = useCallback(
-    async (modelId: string) => {
-      try {
-        await window.capty.deleteModel(modelId);
-
-        // Refresh models list
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-
-        // If deleted model was selected, switch to first usable model or clear
-        if (store.selectedModelId === modelId) {
-          const firstUsable = (
-            models as { id: string; downloaded: boolean; supported?: boolean }[]
-          ).find((m) => m.downloaded && m.supported !== false);
-          store.setSelectedModelId(firstUsable ? firstUsable.id : "");
-        }
-      } catch (err) {
-        console.error("Failed to delete model:", err);
-      }
-    },
-    [store],
-  );
-
-  const handleSearchModels = useCallback(async (query: string) => {
-    const results = await window.capty.searchModels(query);
-    return results as Parameters<typeof store.setModels>[0];
-  }, []);
-
-  const handleChangeAutoStartSidecar = useCallback(async (value: boolean) => {
-    useSettingsStore.getState().setAutoStartSidecar(value);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      sidecar: { ...config.sidecar, autoStart: value },
-    });
-  }, []);
-
-  const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
-    useSettingsStore.getState().setHfMirrorUrl(url);
-    await useSettingsStore.getState().saveConfig({ hfMirrorUrl: url || null });
-  }, []);
-
-  const handleSaveAsrSettings = useCallback(
-    async (settings: {
-      asrProviders: import("./stores/appStore").AsrProviderState[];
-      selectedAsrProviderId: string | null;
-    }) => {
-      store.setAsrProviders(settings.asrProviders);
-      store.setSelectedAsrProviderId(settings.selectedAsrProviderId);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        asrProviders: settings.asrProviders,
-        selectedAsrProviderId: settings.selectedAsrProviderId,
-      });
-      // Always re-check sidecar health (sidecar is independent of provider list)
-      try {
-        const health = await window.capty.checkSidecarHealth();
-        store.setSidecarReady(health.online);
-      } catch {
-        store.setSidecarReady(false);
-      }
-    },
-    [store],
-  );
-
-  const handleSaveTtsSettings = useCallback(
-    async (settings: {
-      ttsProviders: TtsProviderConfig[];
-      selectedTtsProviderId: string | null;
-    }) => {
-      await useTtsStore.getState().saveTtsSettings(settings);
-    },
-    [],
-  );
-
-  const handleSelectTtsModel = useCallback(async (modelId: string) => {
-    const ts = useTtsStore.getState();
-    ts.setSelectedTtsModel(modelId);
-    await ts.saveTtsSettings({
-      ttsProviders: [...ts.ttsProviders],
-      selectedTtsProviderId: ts.selectedTtsProviderId,
-      selectedTtsModelId: modelId,
-    });
-  }, []);
-
   const handleChangeTtsVoice = useCallback(async (voice: string) => {
     useTtsStore.getState().setSelectedTtsVoice(voice);
     const config = await window.capty.getConfig();
     await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
   }, []);
-
-  const handleChangeSummaryModel = useCallback(
-    async (selection: { providerId: string; model: string }) => {
-      useSettingsStore.getState().setSelectedSummaryModel(selection);
-      await useSettingsStore
-        .getState()
-        .saveConfig({ selectedSummaryModel: selection });
-    },
-    [],
-  );
-
-  const handleChangeRapidModel = useCallback(
-    async (selection: { providerId: string; model: string }) => {
-      useSettingsStore.getState().setSelectedRapidModel(selection);
-      await useSettingsStore
-        .getState()
-        .saveConfig({ selectedRapidModel: selection });
-    },
-    [],
-  );
 
   const handleChangeTranslateModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
@@ -1261,16 +1058,6 @@ function App(): React.JSX.Element {
     },
     [],
   );
-
-  const handleChangeRapidRenamePrompt = useCallback(async (prompt: string) => {
-    useSettingsStore.getState().setRapidRenamePrompt(prompt);
-    await useSettingsStore.getState().saveConfig({ rapidRenamePrompt: prompt });
-  }, []);
-
-  const handleChangeTranslatePrompt = useCallback(async (prompt: string) => {
-    useSettingsStore.getState().setTranslatePrompt(prompt);
-    await useSettingsStore.getState().saveConfig({ translatePrompt: prompt });
-  }, []);
 
   const handleTranslate = useCallback(
     async (targetLanguage: string) => {
@@ -1462,184 +1249,6 @@ function App(): React.JSX.Element {
       useTtsStore.getState().setTtsVoices([]);
     }
   }, []);
-
-  const handleDownloadTtsModel = useCallback(
-    async (model: {
-      readonly id: string;
-      readonly name: string;
-      readonly type: string;
-      readonly repo: string;
-      readonly size_gb: number;
-      readonly languages: readonly string[];
-      readonly description: string;
-    }) => {
-      if (
-        useDownloadStore.getState().downloads[model.id]?.status ===
-        "downloading"
-      )
-        return;
-      const dataDir = store.dataDir;
-      if (!dataDir) return;
-
-      useDownloadStore.getState().setDownload(model.id, {
-        modelId: model.id,
-        category: "tts" as const,
-        percent: 0,
-        status: "downloading",
-      });
-
-      try {
-        const destDir = `${dataDir}/models/tts/${model.id}`;
-        await window.capty.downloadTtsModel(model.repo, destDir);
-
-        // Save model metadata
-        await window.capty.saveTtsModelMeta(model.id, {
-          id: model.id,
-          name: model.name,
-          type: model.type,
-          repo: model.repo,
-          size_gb: model.size_gb,
-          languages: [...model.languages],
-          description: model.description,
-        });
-
-        // Refresh TTS models list
-        const ttsList = await window.capty.listTtsModels();
-        useTtsStore.getState().setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "Download failed. Check network.";
-        console.error("Failed to download TTS model:", err);
-        const currentDl = useDownloadStore.getState().downloads[model.id];
-        useDownloadStore.getState().setDownload(model.id, {
-          ...currentDl,
-          status: "failed",
-          error: msg,
-        });
-        return;
-      }
-      // Clean up on success
-      useDownloadStore.getState().removeDownload(model.id);
-    },
-    [store],
-  );
-
-  // Download control handlers (pause / resume / cancel)
-  const handlePauseDownload = useCallback(async (modelId: string) => {
-    await window.capty.pauseDownload(modelId);
-    const dl = useDownloadStore.getState().downloads[modelId];
-    if (dl) {
-      useDownloadStore
-        .getState()
-        .setDownload(modelId, { ...dl, status: "paused" });
-    }
-  }, []);
-
-  const handleResumeDownload = useCallback(
-    async (modelId: string) => {
-      const dl = useDownloadStore.getState().downloads[modelId];
-      if (!dl) return;
-      useDownloadStore
-        .getState()
-        .setDownload(modelId, { ...dl, status: "downloading" });
-      try {
-        await window.capty.resumeDownload(modelId);
-        // On success, refresh model lists
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-        const ttsList = await window.capty.listTtsModels();
-        useTtsStore.getState().setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-      } catch (err) {
-        console.error("Failed to resume download:", err);
-      } finally {
-        useDownloadStore.getState().removeDownload(modelId);
-      }
-    },
-    [store],
-  );
-
-  const handleCancelDownload = useCallback(async (modelId: string) => {
-    await window.capty.cancelDownload(modelId);
-    useDownloadStore.getState().removeDownload(modelId);
-  }, []);
-
-  const handleDeleteTtsModel = useCallback(async (modelId: string) => {
-    try {
-      await window.capty.deleteTtsModel(modelId);
-      const ttsList = await window.capty.listTtsModels();
-      useTtsStore.getState().setTtsModels(
-        ttsList as Array<{
-          id: string;
-          name: string;
-          type: string;
-          repo: string;
-          downloaded: boolean;
-          size_gb: number;
-          languages: readonly string[];
-          description: string;
-        }>,
-      );
-      if (useTtsStore.getState().selectedTtsModelId === modelId) {
-        const firstDownloaded = (
-          ttsList as Array<{ id: string; downloaded: boolean }>
-        ).find((m) => m.downloaded);
-        const newId = firstDownloaded ? firstDownloaded.id : "";
-        useTtsStore.getState().setSelectedTtsModel(newId);
-        await window.capty.setConfig({
-          ...(await window.capty.getConfig()),
-          selectedTtsModelId: newId || null,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to delete TTS model:", err);
-    }
-  }, []);
-
-  const handleSearchTtsModels = useCallback(async (query: string) => {
-    const results = await window.capty.searchTtsModels(query);
-    return results as Array<{
-      id: string;
-      name: string;
-      type: string;
-      repo: string;
-      downloaded: boolean;
-      size_gb: number;
-      languages: readonly string[];
-      description: string;
-    }>;
-  }, []);
-
-  const handleSaveLlmProviders = useCallback(
-    async (providers: LlmProvider[]) => {
-      useSettingsStore.getState().setLlmProviders(providers);
-      await useSettingsStore.getState().saveConfig({ llmProviders: providers });
-    },
-    [],
-  );
 
   const handleSummarize = useCallback(
     async (providerId: string, model: string, promptType: string) => {
@@ -2166,62 +1775,6 @@ function App(): React.JSX.Element {
       </div>
       {showSettings && (
         <SettingsModal
-          dataDir={store.dataDir}
-          configDir={configDir}
-          models={store.models}
-          selectedModelId={store.selectedModelId}
-          isDownloading={isDownloading}
-          downloadingModelId={downloadingModelId}
-          downloadProgress={downloadProgress}
-          downloadError={downloadError}
-          isRecording={store.isRecording}
-          hfMirrorUrl={hfMirrorUrl}
-          defaultHfUrl={DEFAULT_HF_URL}
-          llmProviders={llmProviders}
-          asrProviders={store.asrProviders}
-          selectedAsrProviderId={store.selectedAsrProviderId}
-          sidecarReady={store.sidecarReady}
-          downloads={downloads}
-          onChangeDataDir={handleChangeDataDir}
-          onSelectModel={handleSelectModel}
-          onDownloadModel={handleSettingsDownloadModel}
-          onDeleteModel={handleDeleteModel}
-          onSearchModels={handleSearchModels}
-          onChangeHfMirrorUrl={handleChangeHfMirrorUrl}
-          onSaveLlmProviders={handleSaveLlmProviders}
-          onSaveAsrSettings={handleSaveAsrSettings}
-          onPauseDownload={handlePauseDownload}
-          onResumeDownload={handleResumeDownload}
-          onCancelDownload={handleCancelDownload}
-          ttsProviders={ttsProviders}
-          selectedTtsProviderId={selectedTtsProviderId}
-          ttsModels={ttsModels}
-          selectedTtsModelId={selectedTtsModelId}
-          isTtsDownloading={isTtsDownloading}
-          ttsDownloadingModelId={ttsDownloadingModelId}
-          ttsDownloadProgress={ttsDownloadProgress}
-          ttsDownloadError={ttsDownloadError}
-          onSaveTtsSettings={handleSaveTtsSettings}
-          onSelectTtsModel={handleSelectTtsModel}
-          onDownloadTtsModel={handleDownloadTtsModel}
-          onDeleteTtsModel={handleDeleteTtsModel}
-          onSearchTtsModels={handleSearchTtsModels}
-          selectedTtsVoice={selectedTtsVoice}
-          ttsVoices={ttsVoices}
-          onChangeTtsVoice={handleChangeTtsVoice}
-          onChangeTtsModel={handleChangeTtsModelForPlay}
-          selectedSummaryModel={selectedSummaryModel}
-          onChangeSummaryModel={handleChangeSummaryModel}
-          selectedRapidModel={selectedRapidModel}
-          onChangeRapidModel={handleChangeRapidModel}
-          rapidRenamePrompt={rapidRenamePrompt}
-          onChangeRapidRenamePrompt={handleChangeRapidRenamePrompt}
-          selectedTranslateModel={selectedTranslateModel}
-          onChangeTranslateModel={handleChangeTranslateModel}
-          translatePrompt={translatePrompt}
-          onChangeTranslatePrompt={handleChangeTranslatePrompt}
-          autoStartSidecar={autoStartSidecar}
-          onChangeAutoStartSidecar={handleChangeAutoStartSidecar}
           initialTab={settingsInitialTab}
           onTabChange={setSettingsInitialTab}
           onClose={() => setShowSettings(false)}
