@@ -414,6 +414,7 @@ const api = {
       content: string;
       done: boolean;
       promptType: string;
+      sessionId: number;
     }) => void,
   ) => {
     const handler = (_event: any, data: any) => callback(data);

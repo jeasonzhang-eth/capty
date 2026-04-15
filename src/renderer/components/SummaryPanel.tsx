@@ -476,6 +476,7 @@ export function SummaryPanel({
             </select>
           )}
           <button
+            data-testid="summary-generate-btn"
             onClick={() => {
               if (localSelection) {
                 onSummarize(
@@ -1010,6 +1011,7 @@ function StreamingCard({
 
   return (
     <div
+      data-testid="streaming-card"
       style={{
         marginBottom: "16px",
         padding: "12px",

@@ -13,6 +13,8 @@ All notable changes to Capty are documented in this file.
 
 ### Fixed
 
+- Fix summary streaming leaking across sessions: switching session during LLM generation no longer shows the old session's streaming content in the new session's SummaryPanel. Covered by E2E test `tests/e2e/smoke/summary-session-switch.spec.ts` which uses a local mock SSE server to exercise the full flow
+
 - B1: fix stop-recording segment loss — use ref-captured sessionId so late ASR callbacks save to the correct session
 - B2: `gracefulDisconnect` now drains ALL in-flight transcription requests before resolving (not just its own)
 - B3: add null-safety (`?.`) for yt-dlp `stdout`/`stderr` access to prevent TypeError crashes

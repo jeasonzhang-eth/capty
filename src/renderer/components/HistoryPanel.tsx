@@ -708,6 +708,7 @@ export function HistoryPanel({
         {showDropBefore && <div className="drop-indicator-line" />}
         <div
           className={`session-row${isDragged ? " dragging" : ""}`}
+          data-testid={`session-row-${session.id}`}
           draggable
           onDragStart={(e) => {
             setDragSessionId(session.id);
@@ -1253,6 +1254,7 @@ export function HistoryPanel({
                 )}
               {/* Category header */}
               <div
+                data-testid={`category-header-${catGroup.category.id}`}
                 draggable
                 onDragStart={(e) => {
                   // Only allow category drag when not already dragging a session

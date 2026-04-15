@@ -292,7 +292,9 @@ function App(): React.JSX.Element {
     null,
   );
 
-  // Summary state (per-tab generation support)
+  // Summary state (per-session × per-tab generation support).
+  // Keys are `${sessionId}:${promptType}` so multiple sessions can generate
+  // simultaneously without leaking into each other.
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [generatingTabs, setGeneratingTabs] = useState<Set<string>>(new Set());
   const generatingTabsRef = useRef(generatingTabs);
@@ -815,6 +817,7 @@ function App(): React.JSX.Element {
           audioPlayer.stop();
         }
         store.setCurrentSessionId(sessionId);
+        setGenerateError(null);
         const segments = await window.capty.listSegments(sessionId);
         store.setSegments(
           segments.map((s) => ({
@@ -1911,32 +1914,37 @@ function App(): React.JSX.Element {
 
   const handleSummarize = useCallback(
     async (providerId: string, model: string, promptType: string) => {
-      if (!store.currentSessionId || generatingTabsRef.current.has(promptType))
-        return;
-      setStreamingContentMap((prev) => ({ ...prev, [promptType]: "" }));
-      setGeneratingTabs((prev) => new Set(prev).add(promptType));
+      const originSessionId = store.currentSessionId;
+      if (!originSessionId) return;
+      const key = `${originSessionId}:${promptType}`;
+      if (generatingTabsRef.current.has(key)) return;
+      setStreamingContentMap((prev) => ({ ...prev, [key]: "" }));
+      setGeneratingTabs((prev) => new Set(prev).add(key));
       setGenerateError(null);
       try {
         await window.capty.summarize(
-          store.currentSessionId,
+          originSessionId,
           providerId,
           model,
           promptType,
         );
-        // Clear streaming content for this tab
+        // Clear streaming content for this session:tab
         setStreamingContentMap((prev) => {
           const next = { ...prev };
-          delete next[promptType];
+          delete next[key];
           return next;
         });
-        // Reload summaries for the currently active tab (user may have switched)
-        const currentTab = activePromptTypeRef.current;
-        const freshSummaries = await window.capty.listSummaries(
-          store.currentSessionId,
-          currentTab,
-        );
-        setSummaries(freshSummaries as Summary[]);
-        // Remember last used model selection
+        // Reload summaries if still viewing the origin session
+        const currentId = useAppStore.getState().currentSessionId;
+        if (currentId === originSessionId) {
+          const currentTab = activePromptTypeRef.current;
+          const freshSummaries = await window.capty.listSummaries(
+            originSessionId,
+            currentTab,
+          );
+          setSummaries(freshSummaries as Summary[]);
+        }
+        // Remember last used model selection (always, regardless of session switch)
         setSelectedSummaryModel({ providerId, model });
         const config = await window.capty.getConfig();
         await window.capty.setConfig({
@@ -1946,16 +1954,18 @@ function App(): React.JSX.Element {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
-        setGenerateError(msg);
+        if (useAppStore.getState().currentSessionId === originSessionId) {
+          setGenerateError(msg);
+        }
       } finally {
         setGeneratingTabs((prev) => {
           const next = new Set(prev);
-          next.delete(promptType);
+          next.delete(key);
           return next;
         });
         setStreamingContentMap((prev) => {
           const next = { ...prev };
-          delete next[promptType];
+          delete next[key];
           return next;
         });
       }
@@ -2135,14 +2145,17 @@ function App(): React.JSX.Element {
     validateSelection(selectedRapidModel, setSelectedRapidModel);
   }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for LLM streaming chunks (routed per-tab by promptType)
+  // Listen for LLM streaming chunks. Each chunk is keyed by (sessionId, promptType)
+  // so background generation for a different session accumulates into its own
+  // buffer without affecting what the user currently sees.
   useEffect(() => {
     const unsub = window.capty.onSummaryChunk(
-      ({ content, done, promptType }) => {
+      ({ content, done, promptType, sessionId }) => {
         if (done) return;
+        const key = `${sessionId}:${promptType}`;
         setStreamingContentMap((prev) => ({
           ...prev,
-          [promptType]: (prev[promptType] || "") + content,
+          [key]: (prev[key] || "") + content,
         }));
       },
     );
@@ -2354,11 +2367,23 @@ function App(): React.JSX.Element {
         />
         <SummaryPanel
           summaries={summaries}
-          isGenerating={generatingTabs.has(activePromptType)}
-          generatingPromptType={
-            generatingTabs.has(activePromptType) ? activePromptType : null
+          isGenerating={
+            store.currentSessionId !== null &&
+            generatingTabs.has(`${store.currentSessionId}:${activePromptType}`)
           }
-          streamingContent={streamingContentMap[activePromptType] || ""}
+          generatingPromptType={
+            store.currentSessionId !== null &&
+            generatingTabs.has(`${store.currentSessionId}:${activePromptType}`)
+              ? activePromptType
+              : null
+          }
+          streamingContent={
+            store.currentSessionId !== null
+              ? (streamingContentMap[
+                  `${store.currentSessionId}:${activePromptType}`
+                ] ?? "")
+              : ""
+          }
           generateError={generateError}
           currentSessionId={store.currentSessionId}
           hasSegments={store.segments.length > 0}
