@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-15
 
+### Fixed
+
+- Fix HistoryPanel runtime crash: component destructured 28 props but only 11 were passed after store refactor, causing `sessions.filter()` TypeError on undefined. Now reads sessions/width/categories/downloadBadge from stores and defines handlers (rename/edit/reorder/category CRUD) internally.
+
 ### Changed
 
 - Refactor: SummaryPanel + HistoryPanel read stores directly, ~50 more props eliminated

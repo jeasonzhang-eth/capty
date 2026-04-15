@@ -201,35 +201,141 @@ if (typeof document !== "undefined" && !document.getElementById(styleTagId)) {
 }
 
 export function HistoryPanel({
-  sessions,
-  currentSessionId,
   playingSessionId,
   regeneratingSessionId,
   regenerationProgress,
-  isRecording,
-  width,
-  onWidthChange,
   onSelectSession,
   onDeleteSession,
   onPlaySession,
   onStopPlayback,
-  onRenameSession,
   onRegenerateSubtitles,
   onCancelRegeneration,
-  onOpenFolder,
   onUploadAudio,
-  onDownloadAudio,
-  downloadBadge,
   onAiRename,
   aiRenamingSessionId,
-  onUpdateCategory,
-  onReorderSessions,
-  categories,
-  onAddCategory,
-  onDeleteCategory,
-  onReorderCategories,
-  onEditSession,
 }: HistoryPanelProps): React.ReactElement {
+  // Read state from stores (replaces removed props)
+  const sessions = useAppStore((s) => s.sessions);
+  const currentSessionId = useAppStore((s) => s.currentSessionId);
+  const isRecording = useAppStore((s) => s.isRecording);
+  const width = useSettingsStore((s) => s.historyPanelWidth);
+  const categories = useSettingsStore((s) => s.sessionCategories);
+  const downloadBadge = useDownloadStore((s) => s.downloadBadge);
+
+  const onWidthChange = useCallback((w: number) => {
+    useSettingsStore.getState().setHistoryPanelWidth(w);
+    useSettingsStore
+      .getState()
+      .saveLayoutWidths(w, useSettingsStore.getState().summaryPanelWidth);
+  }, []);
+
+  const onRenameSession = useCallback(
+    async (sessionId: number, newTitle: string) => {
+      try {
+        await window.capty.renameSession(sessionId, newTitle);
+        await useAppStore.getState().loadSessions();
+      } catch (err) {
+        console.error("Failed to rename session:", err);
+      }
+    },
+    [],
+  );
+
+  const onUpdateCategory = useCallback(
+    async (sessionId: number, category: string) => {
+      try {
+        await window.capty.updateSessionCategory(sessionId, category);
+        await useAppStore.getState().loadSessions();
+      } catch (err) {
+        console.error("Failed to update session category:", err);
+      }
+    },
+    [],
+  );
+
+  const onReorderSessions = useCallback(async (sessionIds: number[]) => {
+    try {
+      await window.capty.reorderSessions(sessionIds);
+      await useAppStore.getState().loadSessions();
+    } catch (err) {
+      console.error("Failed to reorder sessions:", err);
+    }
+  }, []);
+
+  const onAddCategory = useCallback(
+    async (cat: { label: string; icon: string }) => {
+      try {
+        await useSettingsStore.getState().addCategory(cat);
+      } catch (err) {
+        console.error("Failed to add category:", err);
+      }
+    },
+    [],
+  );
+
+  const onDeleteCategory = useCallback(async (id: string) => {
+    try {
+      await useSettingsStore.getState().deleteCategory(id);
+    } catch (err) {
+      console.error("Failed to delete category:", err);
+    }
+  }, []);
+
+  const onReorderCategories = useCallback(async (cats: SessionCategory[]) => {
+    try {
+      await window.capty.saveSessionCategories(cats);
+      const updated = await window.capty.listSessionCategories();
+      useSettingsStore
+        .getState()
+        .setSessionCategories(updated as SessionCategory[]);
+    } catch (err) {
+      console.error("Failed to reorder categories:", err);
+    }
+  }, []);
+
+  const onOpenFolder = useCallback(async (sessionId: number) => {
+    try {
+      await window.capty.openAudioFolder(sessionId);
+    } catch (err) {
+      console.error("Failed to open folder:", err);
+    }
+  }, []);
+
+  const onDownloadAudio = useCallback(async (sessionId: number) => {
+    try {
+      await window.capty.downloadAudio(sessionId);
+    } catch (err) {
+      console.error("Failed to download audio:", err);
+    }
+  }, []);
+
+  const onEditSession = useCallback(
+    async (sessionId: number, newTitle: string, newStartedAt: string) => {
+      try {
+        const latest = useAppStore.getState().sessions;
+        const session = latest.find((s) => s.id === sessionId);
+        if (session && newTitle !== session.title) {
+          await window.capty.renameSession(sessionId, newTitle);
+        }
+        const startedAtDb = newStartedAt.replace("T", " ");
+        const durationSeconds = session?.duration_seconds ?? 0;
+        const endedAtDate = new Date(newStartedAt);
+        endedAtDate.setSeconds(endedAtDate.getSeconds() + durationSeconds);
+        const endedAt = endedAtDate
+          .toLocaleString("sv-SE")
+          .replace("T", " ")
+          .slice(0, 19);
+        await window.capty.updateSession(sessionId, {
+          startedAt: startedAtDb,
+          endedAt,
+        });
+        await useAppStore.getState().loadSessions();
+      } catch (err) {
+        console.error("Failed to edit session:", err);
+      }
+    },
+    [],
+  );
   // Drag handle for resizing
   const isDragging = useRef(false);
   const startX = useRef(0);
