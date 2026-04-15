@@ -20,6 +20,7 @@ import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
 import { useAudioDownloads } from "./hooks/useAudioDownloads";
+import { useSettings } from "./hooks/useSettings";
 
 const DEFAULT_RAPID_RENAME_PROMPT =
   "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
@@ -35,12 +36,29 @@ function App(): React.JSX.Element {
   const audioPlayerRef = useRef(audioPlayer);
   audioPlayerRef.current = audioPlayer;
 
-  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    TabId | undefined
-  >(undefined);
-  const [autoStartSidecar, setAutoStartSidecar] = useState(true);
+  const settings = useSettings({ store, audioCapture });
+  const {
+    needsSetup,
+    setNeedsSetup,
+    showSettings,
+    setShowSettings,
+    settingsInitialTab,
+    setSettingsInitialTab,
+    autoStartSidecar,
+    configDir,
+    hfMirrorUrl,
+    DEFAULT_HF_URL,
+    historyPanelWidth,
+    summaryPanelWidth,
+    handleStartSidecar,
+    handleStopSidecar,
+    handleDeviceChange,
+    handleChangeDataDir,
+    handleChangeAutoStartSidecar,
+    handleChangeHfMirrorUrl,
+    handleHistoryWidthChange,
+    handleSummaryWidthChange,
+  } = settings;
 
   // Forward-declare ref so useAudioDownloads can call handleSelectSession
   // which is defined further down (circular dependency broken via ref)
@@ -64,41 +82,6 @@ function App(): React.JSX.Element {
     handleRemoveAudioDownload,
     handleAudioDownloadSelectSession,
   } = audioDownloadsHook;
-
-  const handleStartSidecar = useCallback(async () => {
-    store.setSidecarStarting(true);
-    try {
-      const result = (await window.capty.startSidecar()) as {
-        ok: boolean;
-        error?: string;
-      };
-      if (result.ok) {
-        const health = await window.capty.checkSidecarHealth();
-        store.setSidecarReady(health.online);
-        try {
-          const tts = await window.capty.checkTtsProvider();
-          store.setTtsProviderReady(tts.ready);
-        } catch {
-          // TTS check is best-effort
-        }
-      } else {
-        console.warn("[sidecar] start failed:", result.error);
-      }
-    } catch (err) {
-      console.error("Failed to start sidecar:", err);
-    } finally {
-      store.setSidecarStarting(false);
-    }
-  }, [store]);
-
-  const handleStopSidecar = useCallback(async () => {
-    try {
-      await window.capty.stopSidecar();
-      store.setSidecarReady(false);
-    } catch (err) {
-      console.error("Failed to stop sidecar:", err);
-    }
-  }, [store]);
 
   // Monotonic counter for segment IDs (avoids Date.now() collisions)
   const segmentIdCounter = useRef(0);
@@ -239,13 +222,6 @@ function App(): React.JSX.Element {
       (d) => d.category === "tts" && d.status === "failed",
     )?.error ?? null;
 
-  // Config directory path
-  const [configDir, setConfigDir] = useState<string | null>(null);
-
-  // HuggingFace mirror URL
-  const DEFAULT_HF_URL = "https://huggingface.co";
-  const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
-
   // LLM provider state
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   // Provider + model pair per feature
@@ -315,18 +291,6 @@ function App(): React.JSX.Element {
   const [sessionCategories, setSessionCategories] = useState<SessionCategory[]>(
     [],
   );
-
-  // Layout persistence state
-  const DEFAULT_HISTORY_WIDTH = 240;
-  const DEFAULT_SUMMARY_WIDTH = 320;
-  const [historyPanelWidth, setHistoryPanelWidth] = useState(
-    DEFAULT_HISTORY_WIDTH,
-  );
-  const [summaryPanelWidth, setSummaryPanelWidth] = useState(
-    DEFAULT_SUMMARY_WIDTH,
-  );
-  const [zoomFactor, setZoomFactor] = useState(1.0);
-  const layoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscribe to unified download events (manages the `downloads` state)
   useEffect(() => {
@@ -426,34 +390,14 @@ function App(): React.JSX.Element {
         }
         setNeedsSetup(false);
         store.setDataDir(dataDir);
-        setConfigDir(await window.capty.getConfigDir());
         await store.loadSessions();
         await audioCapture.loadDevices();
 
         // Restore saved config
         const config = await window.capty.getConfig();
 
-        // Restore layout settings
-        const savedHistoryWidth = config.historyPanelWidth as number | null;
-        if (savedHistoryWidth !== null) {
-          setHistoryPanelWidth(savedHistoryWidth);
-        }
-        const savedSummaryWidth = config.summaryPanelWidth as number | null;
-        if (savedSummaryWidth !== null) {
-          setSummaryPanelWidth(savedSummaryWidth);
-        }
-
-        // Restore zoom factor
-        const savedZoom = await window.capty.getZoomFactor();
-        if (savedZoom && savedZoom !== 1.0) {
-          setZoomFactor(savedZoom);
-        }
-
-        // Restore HuggingFace mirror URL
-        const savedHfUrl = config.hfMirrorUrl as string | null;
-        if (savedHfUrl) {
-          setHfMirrorUrl(savedHfUrl);
-        }
+        // Restore settings (layout, zoom, hfMirror, configDir)
+        await settings.initFromConfig(config);
 
         // Restore LLM providers
         const savedProviders = config.llmProviders as LlmProvider[] | undefined;
@@ -555,51 +499,8 @@ function App(): React.JSX.Element {
           setSelectedTtsVoice(savedTtsVoice);
         }
 
-        // Restore sidecar config
-        const sidecarCfg = config.sidecar as
-          | { port: number; autoStart: boolean }
-          | undefined;
-        if (sidecarCfg) {
-          store.setSidecarPort(sidecarCfg.port ?? 8765);
-          setAutoStartSidecar(sidecarCfg.autoStart !== false);
-        }
-
-        // Check sidecar health
-        let sidecarOnline = false;
-        try {
-          const health = await window.capty.checkSidecarHealth();
-          sidecarOnline = health.online;
-          store.setSidecarReady(health.online);
-        } catch {
-          store.setSidecarReady(false);
-        }
-
-        // Auto-start sidecar if configured and not already running
-        if (sidecarCfg?.autoStart !== false && !sidecarOnline) {
-          store.setSidecarStarting(true);
-          try {
-            const result = (await window.capty.startSidecar()) as {
-              ok: boolean;
-              error?: string;
-            };
-            if (result.ok) {
-              const h = await window.capty.checkSidecarHealth();
-              store.setSidecarReady(h.online);
-              try {
-                const tts = await window.capty.checkTtsProvider();
-                store.setTtsProviderReady(tts.ready);
-              } catch {
-                /* best-effort */
-              }
-            } else {
-              console.warn("[sidecar] auto-start failed:", result.error);
-            }
-          } catch {
-            /* silent — IPC transport error */
-          } finally {
-            store.setSidecarStarting(false);
-          }
-        }
+        // Restore sidecar config + health check + auto-start
+        await settings.initSidecar(config);
 
         // Load ASR models and restore selected model
         try {
@@ -1168,29 +1069,6 @@ function App(): React.JSX.Element {
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);
 
-  const handleDeviceChange = useCallback(
-    async (deviceId: string) => {
-      const effectiveId = deviceId || null;
-      audioCapture.setSelectedDevice(effectiveId);
-      // Persist to config
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedAudioDeviceId: effectiveId,
-      });
-    },
-    [audioCapture],
-  );
-
-  const handleChangeDataDir = useCallback(async () => {
-    const dir = await window.capty.selectDirectory();
-    if (dir) {
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({ ...config, dataDir: dir });
-      store.setDataDir(dir);
-    }
-  }, [store]);
-
   const handleSelectModel = useCallback(
     async (modelId: string) => {
       store.setSelectedModelId(modelId);
@@ -1296,24 +1174,6 @@ function App(): React.JSX.Element {
   const handleSearchModels = useCallback(async (query: string) => {
     const results = await window.capty.searchModels(query);
     return results as Parameters<typeof store.setModels>[0];
-  }, []);
-
-  const handleChangeAutoStartSidecar = useCallback(async (value: boolean) => {
-    setAutoStartSidecar(value);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      sidecar: { ...config.sidecar, autoStart: value },
-    });
-  }, []);
-
-  const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
-    setHfMirrorUrl(url);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      hfMirrorUrl: url || null,
-    });
   }, []);
 
   const handleSaveAsrSettings = useCallback(
@@ -1918,73 +1778,6 @@ function App(): React.JSX.Element {
     setPromptTypes(effective as PromptType[]);
   }, []);
 
-  // Layout width change handlers (debounced save)
-  const handleHistoryWidthChange = useCallback((newWidth: number) => {
-    setHistoryPanelWidth(newWidth);
-    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
-    layoutTimerRef.current = setTimeout(() => {
-      window.capty.saveLayout({ historyPanelWidth: newWidth });
-    }, 500);
-  }, []);
-
-  const handleSummaryWidthChange = useCallback((newWidth: number) => {
-    setSummaryPanelWidth(newWidth);
-    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
-    layoutTimerRef.current = setTimeout(() => {
-      window.capty.saveLayout({ summaryPanelWidth: newWidth });
-    }, 500);
-  }, []);
-
-  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-
-      if (e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        setZoomFactor((prev) => {
-          const next = Math.min(3.0, Math.round((prev + 0.1) * 10) / 10);
-          window.capty.setZoomFactor(next);
-          return next;
-        });
-      } else if (e.key === "-") {
-        e.preventDefault();
-        setZoomFactor((prev) => {
-          const next = Math.max(0.5, Math.round((prev - 0.1) * 10) / 10);
-          window.capty.setZoomFactor(next);
-          return next;
-        });
-      } else if (e.key === "0") {
-        e.preventDefault();
-        setZoomFactor(1.0);
-        window.capty.setZoomFactor(1.0);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  // Sidecar health polling (every 10s, unconditional — sidecar is independent)
-  useEffect(() => {
-    let ignore = false;
-    const poll = async (): Promise<void> => {
-      try {
-        const health = await window.capty.checkSidecarHealth();
-        if (!ignore) store.setSidecarReady(health.online);
-      } catch {
-        if (!ignore) store.setSidecarReady(false);
-      }
-    };
-    poll(); // check immediately on mount
-    const timer = setInterval(poll, 10000);
-    return () => {
-      ignore = true;
-      clearInterval(timer);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // TTS provider health polling (every 10s when a TTS provider is selected)
   useEffect(() => {
     if (!selectedTtsProviderId || ttsProviders.length === 0) {
@@ -2079,16 +1872,6 @@ function App(): React.JSX.Element {
     );
     return unsub;
   }, []);
-
-  // When a selected device is unplugged, clear the persisted config
-  useEffect(() => {
-    audioCapture.setOnDeviceRemoved(() => {
-      window.capty.getConfig().then((config) => {
-        window.capty.setConfig({ ...config, selectedAudioDeviceId: null });
-      });
-    });
-    return () => audioCapture.setOnDeviceRemoved(null);
-  }, [audioCapture]);
 
   // No streaming partial text with HTTP-based transcription
 
