@@ -4,6 +4,11 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-15
 
+### Chore
+
+- Ignore `sidecar/build/` and `.superpowers/` in `.gitignore`
+- Add dev helper script `scripts/test-fresh.sh` and planning/review docs
+
 ### Added
 
 - Add component contract tests for HistoryPanel, SummaryPanel, SettingsModal (28 tests) — verifies components mount without crashing when reading from Zustand stores with both empty and seeded state

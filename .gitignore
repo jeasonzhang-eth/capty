@@ -45,3 +45,9 @@ coverage/
 /playwright-report/
 /tests/e2e/.artifacts/
 /playwright/.cache/
+
+# Sidecar build output
+sidecar/build/
+
+# Superpowers (local skill state)
+.superpowers/

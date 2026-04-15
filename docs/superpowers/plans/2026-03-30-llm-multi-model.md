@@ -1259,7 +1259,7 @@ git commit -m "feat: update LanguageModelsTab with model list and fetch dialog"
 **Files:**
 - Modify: `src/renderer/components/SettingsModal.tsx`
 
-- [ ] **Step 1: Add UnifiedModelSelector component**
+- [x] **Step 1: Add UnifiedModelSelector component**
 
 Add before `DefaultModelsTab`:
 
@@ -1545,7 +1545,7 @@ function UnifiedModelSelector({
 }
 ```
 
-- [ ] **Step 2: Update DefaultModelsTab props and UI**
+- [x] **Step 2: Update DefaultModelsTab props and UI**
 
 Update `DefaultModelsTab` props to use new types:
 
@@ -1601,7 +1601,7 @@ Replace each `<select>` for Summary, Rapid, and Translate models with `<UnifiedM
 
 Same pattern for Rapid Model and Translate Model, using their respective props. All three pass `onGearClick={() => onSwitchToTab("languageModels")}` to navigate to the Language Models tab. The `onSwitchToTab` callback should already exist or be added to `DefaultModelsTab` props.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/renderer/components/SettingsModal.tsx
