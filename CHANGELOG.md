@@ -2,6 +2,12 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-16
+
+### Changed
+
+- Refactor: extract `useAudioDownloads` hook — moves audio download state, handlers, and 3 effect listeners from App.tsx into `src/renderer/hooks/useAudioDownloads.ts` (~180 lines). App.tsx reduced from 2564 → 2413 lines. Part 1 of 7 in the App.tsx hook-extraction refactor.
+
 ## 2026-04-15
 
 ### Security
