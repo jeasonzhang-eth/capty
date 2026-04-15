@@ -9,6 +9,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: extract `useAudioDownloads` hook — moves audio download state, handlers, and 3 effect listeners from App.tsx into `src/renderer/hooks/useAudioDownloads.ts` (~180 lines). App.tsx reduced from 2564 → 2413 lines. Part 1 of 7 in the App.tsx hook-extraction refactor.
 - Refactor: extract `useSettings` hook — moves needsSetup, sidecar start/stop, device change, layout/zoom/hfMirror state + handlers + 3 effects + init into `src/renderer/hooks/useSettings.ts` (~217 lines). App.tsx: 2413 → 2196 lines. Part 2/7.
 - Refactor: extract `useModelDownloads` hook — moves downloads state, ASR derived values, 8 model download handlers, 2 effect listeners + initModels into `src/renderer/hooks/useModelDownloads.ts` (~256 lines). App.tsx: 2196 → 1940 lines. Part 3/7.
+- Refactor: extract `useTtsSettings` hook — moves TTS provider/model/voice state, 7 handlers, 2 effects + initTts into `src/renderer/hooks/useTtsSettings.ts` (~373 lines). App.tsx: 1940 → 1599 lines. Part 4/7.
 
 ## 2026-04-15
 

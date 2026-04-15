@@ -5,12 +5,7 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import {
-  SettingsModal,
-  LlmProvider,
-  TtsProviderConfig,
-  TabId,
-} from "./components/SettingsModal";
+import { SettingsModal, LlmProvider, TabId } from "./components/SettingsModal";
 import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
@@ -22,6 +17,7 @@ import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
 import { useAudioDownloads } from "./hooks/useAudioDownloads";
 import { useSettings } from "./hooks/useSettings";
 import { useModelDownloads } from "./hooks/useModelDownloads";
+import { useTtsSettings } from "./hooks/useTtsSettings";
 
 const DEFAULT_RAPID_RENAME_PROMPT =
   "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
@@ -185,60 +181,28 @@ function App(): React.JSX.Element {
   const [regenerationProgress, setRegenerationProgress] = useState(0);
   const cancelRegenerationRef = useRef(false);
 
-  // TTS state
-  const [ttsProviders, setTtsProviders] = useState<TtsProviderConfig[]>([]);
-  const [selectedTtsProviderId, setSelectedTtsProviderId] = useState<
-    string | null
-  >(null);
-  const [ttsModels, setTtsModels] = useState<
-    Array<{
-      id: string;
-      name: string;
-      type: string;
-      repo: string;
-      downloaded: boolean;
-      size_gb: number;
-      languages: readonly string[];
-      description: string;
-    }>
-  >([]);
-  const [selectedTtsModelId, setSelectedTtsModelId] = useState("");
-  const [selectedTtsVoice, setSelectedTtsVoice] = useState("");
-  const [ttsVoices, setTtsVoices] = useState<
-    Array<{ id: string; name: string; lang: string; gender: string }>
-  >([]);
+  const ttsSettingsHook = useTtsSettings({ store, downloads, setDownloads });
+  const {
+    ttsProviders,
+    selectedTtsProviderId,
+    ttsModels,
+    selectedTtsModelId,
+    selectedTtsVoice,
+    ttsVoices,
+    isTtsDownloading,
+    ttsDownloadingModelId,
+    ttsDownloadProgress,
+    ttsDownloadError,
+    handleSaveTtsSettings,
+    handleSelectTtsModel,
+    handleChangeTtsVoice,
+    handleChangeTtsModelForPlay,
+    handleDownloadTtsModel,
+    handleDeleteTtsModel,
+    handleSearchTtsModels,
+  } = ttsSettingsHook;
   // Wire up refreshTtsModels for useModelDownloads resume handler
-  refreshTtsModelsRef.current = async () => {
-    const ttsList = await window.capty.listTtsModels();
-    setTtsModels(
-      ttsList as Array<{
-        id: string;
-        name: string;
-        type: string;
-        repo: string;
-        downloaded: boolean;
-        size_gb: number;
-        languages: readonly string[];
-        description: string;
-      }>,
-    );
-  };
-
-  // Derive TTS download state for backward compatibility
-  const ttsDownloadEntries = Object.values(downloads).filter(
-    (d) =>
-      d.category === "tts" &&
-      (d.status === "downloading" || d.status === "paused"),
-  );
-  const isTtsDownloading = ttsDownloadEntries.some(
-    (d) => d.status === "downloading",
-  );
-  const ttsDownloadingModelId = ttsDownloadEntries[0]?.modelId ?? null;
-  const ttsDownloadProgress = ttsDownloadEntries[0]?.percent ?? 0;
-  const ttsDownloadError =
-    Object.values(downloads).find(
-      (d) => d.category === "tts" && d.status === "failed",
-    )?.error ?? null;
+  refreshTtsModelsRef.current = ttsSettingsHook.refreshTtsModels;
 
   // LLM provider state
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
@@ -414,82 +378,14 @@ function App(): React.JSX.Element {
           store.setSelectedAsrProviderId(savedAsrProviderId);
         }
 
-        // Restore TTS providers
-        const savedTtsProviders = config.ttsProviders as
-          | TtsProviderConfig[]
-          | undefined;
-        if (savedTtsProviders?.length) {
-          setTtsProviders(savedTtsProviders);
-        }
-        const savedTtsProviderId = config.selectedTtsProviderId as
-          | string
-          | null
-          | undefined;
-        if (savedTtsProviderId !== undefined) {
-          setSelectedTtsProviderId(savedTtsProviderId);
-        }
-        const savedTtsModelId = config.selectedTtsModelId as string | null;
-        if (savedTtsModelId) {
-          setSelectedTtsModelId(savedTtsModelId);
-        }
-        const savedTtsVoice = config.selectedTtsVoice as string | undefined;
-        if (savedTtsVoice) {
-          setSelectedTtsVoice(savedTtsVoice);
-        }
-
         // Restore sidecar config + health check + auto-start
         await settings.initSidecar(config);
 
         // Load ASR models and restore selected model
         await modelDownloadsHook.initModels(config);
 
-        // Load TTS models
-        try {
-          const ttsList = await window.capty.listTtsModels();
-          setTtsModels(
-            ttsList as Array<{
-              id: string;
-              name: string;
-              type: string;
-              repo: string;
-              downloaded: boolean;
-              size_gb: number;
-              languages: readonly string[];
-              description: string;
-            }>,
-          );
-          // Auto-select first downloaded TTS model if none selected
-          const effectiveTtsModelId =
-            savedTtsModelId ??
-            (ttsList as Array<{ id: string; downloaded: boolean }>).find(
-              (m) => m.downloaded,
-            )?.id;
-          if (!savedTtsModelId && effectiveTtsModelId) {
-            setSelectedTtsModelId(effectiveTtsModelId);
-          }
-
-          // Fetch voice list for the selected TTS model
-          if (effectiveTtsModelId) {
-            try {
-              const voiceResult = await window.capty.ttsListVoices();
-              setTtsVoices(voiceResult.voices);
-              // Validate saved voice — fall back to first voice if invalid
-              const currentVoice = savedTtsVoice ?? "";
-              if (
-                voiceResult.voices.length > 0 &&
-                !voiceResult.voices.some(
-                  (v: { id: string }) => v.id === currentVoice,
-                )
-              ) {
-                setSelectedTtsVoice(voiceResult.voices[0].id);
-              }
-            } catch {
-              // Voice listing not available
-            }
-          }
-        } catch {
-          // TTS models not available yet
-        }
+        // Restore TTS providers/model/voice + load TTS models + voices
+        await ttsSettingsHook.initTts(config);
       } catch (err) {
         console.error("Init error:", err);
       }
@@ -1001,39 +897,6 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleSaveTtsSettings = useCallback(
-    async (settings: {
-      ttsProviders: TtsProviderConfig[];
-      selectedTtsProviderId: string | null;
-    }) => {
-      setTtsProviders(settings.ttsProviders);
-      setSelectedTtsProviderId(settings.selectedTtsProviderId);
-      await window.capty.saveTtsSettings({
-        ...settings,
-        selectedTtsModelId,
-      });
-    },
-    [selectedTtsModelId],
-  );
-
-  const handleSelectTtsModel = useCallback(
-    async (modelId: string) => {
-      setSelectedTtsModelId(modelId);
-      await window.capty.saveTtsSettings({
-        ttsProviders,
-        selectedTtsProviderId,
-        selectedTtsModelId: modelId,
-      });
-    },
-    [ttsProviders, selectedTtsProviderId],
-  );
-
-  const handleChangeTtsVoice = useCallback(async (voice: string) => {
-    setSelectedTtsVoice(voice);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({ ...config, selectedTtsVoice: voice });
-  }, []);
-
   const handleChangeSummaryModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
       setSelectedSummaryModel(selection);
@@ -1266,162 +1129,6 @@ function App(): React.JSX.Element {
     ],
   );
 
-  const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
-    // Immediately reset voice to "auto" to avoid stale voice for new model
-    setSelectedTtsModelId(modelId);
-    setSelectedTtsVoice("");
-    setTtsVoices([]);
-
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      selectedTtsModelId: modelId,
-      selectedTtsVoice: "",
-    });
-
-    // Fetch voice list for the new model and default to first voice
-    try {
-      const result = await window.capty.ttsListVoices();
-      setTtsVoices(result.voices);
-      if (result.voices.length > 0) {
-        const firstVoice = result.voices[0].id;
-        setSelectedTtsVoice(firstVoice);
-        const cfg = await window.capty.getConfig();
-        await window.capty.setConfig({ ...cfg, selectedTtsVoice: firstVoice });
-      }
-    } catch {
-      setTtsVoices([]);
-    }
-  }, []);
-
-  const handleDownloadTtsModel = useCallback(
-    async (model: {
-      readonly id: string;
-      readonly name: string;
-      readonly type: string;
-      readonly repo: string;
-      readonly size_gb: number;
-      readonly languages: readonly string[];
-      readonly description: string;
-    }) => {
-      if (downloads[model.id]?.status === "downloading") return;
-      const dataDir = store.dataDir;
-      if (!dataDir) return;
-
-      setDownloads((prev) => ({
-        ...prev,
-        [model.id]: {
-          modelId: model.id,
-          category: "tts" as const,
-          percent: 0,
-          status: "downloading",
-        },
-      }));
-
-      try {
-        const destDir = `${dataDir}/models/tts/${model.id}`;
-        await window.capty.downloadTtsModel(model.repo, destDir);
-
-        // Save model metadata
-        await window.capty.saveTtsModelMeta(model.id, {
-          id: model.id,
-          name: model.name,
-          type: model.type,
-          repo: model.repo,
-          size_gb: model.size_gb,
-          languages: [...model.languages],
-          description: model.description,
-        });
-
-        // Refresh TTS models list
-        const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "Download failed. Check network.";
-        console.error("Failed to download TTS model:", err);
-        setDownloads((prev) => ({
-          ...prev,
-          [model.id]: {
-            ...prev[model.id],
-            status: "failed",
-            error: msg,
-          },
-        }));
-        return;
-      }
-      // Clean up on success
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
-    },
-    [store, downloads],
-  );
-
-  const handleDeleteTtsModel = useCallback(
-    async (modelId: string) => {
-      try {
-        await window.capty.deleteTtsModel(modelId);
-        const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-        if (selectedTtsModelId === modelId) {
-          const firstDownloaded = (
-            ttsList as Array<{ id: string; downloaded: boolean }>
-          ).find((m) => m.downloaded);
-          const newId = firstDownloaded ? firstDownloaded.id : "";
-          setSelectedTtsModelId(newId);
-          await window.capty.setConfig({
-            ...(await window.capty.getConfig()),
-            selectedTtsModelId: newId || null,
-          });
-        }
-      } catch (err) {
-        console.error("Failed to delete TTS model:", err);
-      }
-    },
-    [selectedTtsModelId],
-  );
-
-  const handleSearchTtsModels = useCallback(async (query: string) => {
-    const results = await window.capty.searchTtsModels(query);
-    return results as Array<{
-      id: string;
-      name: string;
-      type: string;
-      repo: string;
-      downloaded: boolean;
-      size_gb: number;
-      languages: readonly string[];
-      description: string;
-    }>;
-  }, []);
-
   const handleSaveLlmProviders = useCallback(
     async (providers: LlmProvider[]) => {
       setLlmProviders(providers);
@@ -1521,54 +1228,6 @@ function App(): React.JSX.Element {
     const effective = await window.capty.listPromptTypes();
     setPromptTypes(effective as PromptType[]);
   }, []);
-
-  // TTS provider health polling (every 10s when a TTS provider is selected)
-  useEffect(() => {
-    if (!selectedTtsProviderId || ttsProviders.length === 0) {
-      store.setTtsProviderReady(false);
-      return;
-    }
-    const poll = async (): Promise<void> => {
-      try {
-        const result = await window.capty.checkTtsProvider();
-        store.setTtsProviderReady(result.ready);
-      } catch {
-        store.setTtsProviderReady(false);
-      }
-    };
-    poll(); // Check immediately on mount/change
-    const timer = setInterval(poll, 10000);
-    return () => clearInterval(timer);
-  }, [selectedTtsProviderId, ttsProviders]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Refresh voice list when TTS provider changes
-  useEffect(() => {
-    if (!selectedTtsProviderId) return;
-    const provider = ttsProviders.find((p) => p.id === selectedTtsProviderId);
-    if (!provider?.isSidecar) {
-      // External providers don't use voice selectors
-      setTtsVoices([]);
-      return;
-    }
-    (async () => {
-      try {
-        const result = await window.capty.ttsListVoices();
-        setTtsVoices(result.voices);
-        // If saved voice not in list, default to first
-        if (
-          result.voices.length > 0 &&
-          !result.voices.some((v) => v.id === selectedTtsVoice)
-        ) {
-          const first = result.voices[0].id;
-          setSelectedTtsVoice(first);
-          const config = await window.capty.getConfig();
-          await window.capty.setConfig({ ...config, selectedTtsVoice: first });
-        }
-      } catch {
-        setTtsVoices([]);
-      }
-    })();
-  }, [selectedTtsProviderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Validate model selections when providers change
   useEffect(() => {
