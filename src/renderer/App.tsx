@@ -21,6 +21,7 @@ import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
 import { useAudioDownloads } from "./hooks/useAudioDownloads";
 import { useSettings } from "./hooks/useSettings";
+import { useModelDownloads } from "./hooks/useModelDownloads";
 
 const DEFAULT_RAPID_RENAME_PROMPT =
   "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
@@ -82,6 +83,32 @@ function App(): React.JSX.Element {
     handleRemoveAudioDownload,
     handleAudioDownloadSelectSession,
   } = audioDownloadsHook;
+
+  // Forward-declare ref for TTS model refresh (used by useModelDownloads resume)
+  const refreshTtsModelsRef = useRef<() => Promise<void>>(
+    async () => undefined,
+  );
+
+  const modelDownloadsHook = useModelDownloads({
+    store,
+    onRefreshTtsModels: () => refreshTtsModelsRef.current(),
+  });
+  const {
+    downloads,
+    setDownloads,
+    isDownloading,
+    downloadingModelId,
+    downloadProgress,
+    downloadError,
+    handleDownloadModel,
+    handleSelectModel,
+    handleSettingsDownloadModel,
+    handleDeleteModel,
+    handleSearchModels,
+    handlePauseDownload,
+    handleResumeDownload,
+    handleCancelDownload,
+  } = modelDownloadsHook;
 
   // Monotonic counter for segment IDs (avoids Date.now() collisions)
   const segmentIdCounter = useRef(0);
@@ -158,32 +185,6 @@ function App(): React.JSX.Element {
   const [regenerationProgress, setRegenerationProgress] = useState(0);
   const cancelRegenerationRef = useRef(false);
 
-  // Unified download tracking (supports multi-model, pause/cancel)
-  interface DownloadInfo {
-    readonly modelId: string;
-    readonly category: "asr" | "tts";
-    readonly percent: number;
-    readonly status: string; // downloading | paused | failed | completed | pending
-    readonly error?: string;
-  }
-  const [downloads, setDownloads] = useState<Record<string, DownloadInfo>>({});
-
-  // Derive ASR download state for backward compatibility
-  const asrDownloadEntries = Object.values(downloads).filter(
-    (d) =>
-      d.category === "asr" &&
-      (d.status === "downloading" || d.status === "paused"),
-  );
-  const isDownloading = asrDownloadEntries.some(
-    (d) => d.status === "downloading",
-  );
-  const downloadingModelId = asrDownloadEntries[0]?.modelId ?? null;
-  const downloadProgress = asrDownloadEntries[0]?.percent ?? 0;
-  const downloadError =
-    Object.values(downloads).find(
-      (d) => d.category === "asr" && d.status === "failed",
-    )?.error ?? null;
-
   // TTS state
   const [ttsProviders, setTtsProviders] = useState<TtsProviderConfig[]>([]);
   const [selectedTtsProviderId, setSelectedTtsProviderId] = useState<
@@ -206,6 +207,23 @@ function App(): React.JSX.Element {
   const [ttsVoices, setTtsVoices] = useState<
     Array<{ id: string; name: string; lang: string; gender: string }>
   >([]);
+  // Wire up refreshTtsModels for useModelDownloads resume handler
+  refreshTtsModelsRef.current = async () => {
+    const ttsList = await window.capty.listTtsModels();
+    setTtsModels(
+      ttsList as Array<{
+        id: string;
+        name: string;
+        type: string;
+        repo: string;
+        downloaded: boolean;
+        size_gb: number;
+        languages: readonly string[];
+        description: string;
+      }>,
+    );
+  };
+
   // Derive TTS download state for backward compatibility
   const ttsDownloadEntries = Object.values(downloads).filter(
     (d) =>
@@ -291,86 +309,6 @@ function App(): React.JSX.Element {
   const [sessionCategories, setSessionCategories] = useState<SessionCategory[]>(
     [],
   );
-
-  // Subscribe to unified download events (manages the `downloads` state)
-  useEffect(() => {
-    const unsubscribe = window.capty.onDownloadEvent((progress) => {
-      setDownloads((prev) => {
-        if (progress.status === "completed") {
-          // Remove completed downloads from tracking
-          const next = { ...prev };
-          delete next[progress.modelId];
-          return next;
-        }
-        return {
-          ...prev,
-          [progress.modelId]: {
-            modelId: progress.modelId,
-            category: progress.category,
-            percent: progress.percent,
-            status: progress.status,
-            error: progress.error,
-          },
-        };
-      });
-    });
-    return unsubscribe;
-  }, []);
-
-  // Check for incomplete downloads on startup
-  useEffect(() => {
-    if (!store.dataDir) return;
-    window.capty.getIncompleteDownloads().then((incompletes) => {
-      if (incompletes.length === 0) return;
-      const initial: Record<string, DownloadInfo> = {};
-      for (const d of incompletes) {
-        initial[d.modelId] = {
-          modelId: d.modelId,
-          category: d.category,
-          percent: d.percent,
-          status: d.status,
-        };
-      }
-      setDownloads((prev) => ({ ...prev, ...initial }));
-    });
-  }, [store.dataDir]);
-
-  const handleDownloadModel = useCallback(async () => {
-    const model = store.models.find(
-      (m: { id: string }) => m.id === store.selectedModelId,
-    );
-    if (!model || model.downloaded || isDownloading) return;
-
-    const dataDir = store.dataDir;
-    if (!dataDir) return;
-
-    setDownloads((prev) => ({
-      ...prev,
-      [model.id]: {
-        modelId: model.id,
-        category: "asr" as const,
-        percent: 0,
-        status: "downloading",
-      },
-    }));
-
-    try {
-      const destDir = `${dataDir}/models/asr/${model.id}`;
-      await window.capty.downloadModel(model.repo, destDir);
-
-      // Refresh models list
-      const models = await window.capty.listModels();
-      store.setModels(models as Parameters<typeof store.setModels>[0]);
-    } catch (err) {
-      console.error("Failed to download model:", err);
-    } finally {
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
-    }
-  }, [store, isDownloading]);
 
   // Audio level for visualization
   const [audioLevel, setAudioLevel] = useState(0);
@@ -503,37 +441,7 @@ function App(): React.JSX.Element {
         await settings.initSidecar(config);
 
         // Load ASR models and restore selected model
-        try {
-          const models = await window.capty.listModels();
-          store.setModels(models as Parameters<typeof store.setModels>[0]);
-
-          const modelsList = models as Array<{
-            id: string;
-            downloaded: boolean;
-            supported?: boolean;
-          }>;
-          const isUsable = (m: { downloaded: boolean; supported?: boolean }) =>
-            m.downloaded && m.supported !== false;
-          const savedModelId = config.selectedModelId as string | null;
-          if (savedModelId) {
-            const exists = modelsList.some(
-              (m) => m.id === savedModelId && isUsable(m),
-            );
-            if (exists) {
-              store.setSelectedModelId(savedModelId);
-            } else {
-              // Saved model no longer exists — auto-select first usable
-              const first = modelsList.find(isUsable);
-              if (first) store.setSelectedModelId(first.id);
-            }
-          } else {
-            // No saved model — auto-select first usable
-            const first = modelsList.find(isUsable);
-            if (first) store.setSelectedModelId(first.id);
-          }
-        } catch {
-          // Models not available yet
-        }
+        await modelDownloadsHook.initModels(config);
 
         // Load TTS models
         try {
@@ -1069,113 +977,6 @@ function App(): React.JSX.Element {
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);
 
-  const handleSelectModel = useCallback(
-    async (modelId: string) => {
-      store.setSelectedModelId(modelId);
-      // Persist to config
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({ ...config, selectedModelId: modelId });
-    },
-    [store],
-  );
-
-  const handleSettingsDownloadModel = useCallback(
-    async (model: {
-      readonly id: string;
-      readonly name: string;
-      readonly type: string;
-      readonly repo: string;
-      readonly size_gb: number;
-      readonly languages: readonly string[];
-      readonly description: string;
-    }) => {
-      if (downloads[model.id]?.status === "downloading") return;
-
-      const dataDir = store.dataDir;
-      if (!dataDir) return;
-
-      setDownloads((prev) => ({
-        ...prev,
-        [model.id]: {
-          modelId: model.id,
-          category: "asr" as const,
-          percent: 0,
-          status: "downloading",
-        },
-      }));
-
-      try {
-        const destDir = `${dataDir}/models/asr/${model.id}`;
-        await window.capty.downloadModel(model.repo, destDir);
-
-        // Save model metadata so it's discoverable by models:list
-        await window.capty.saveModelMeta(model.id, {
-          id: model.id,
-          name: model.name,
-          type: model.type,
-          repo: model.repo,
-          size_gb: model.size_gb,
-          languages: [...model.languages],
-          description: model.description,
-        });
-
-        // Refresh models list (now includes both builtin + user-downloaded)
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "Download failed. Check network.";
-        console.error("Failed to download model:", err);
-        setDownloads((prev) => ({
-          ...prev,
-          [model.id]: {
-            ...prev[model.id],
-            status: "failed",
-            error: msg,
-          },
-        }));
-        return; // Don't clean up so error shows in UI
-      }
-      // Clean up on success
-      setDownloads((prev) => {
-        const next = { ...prev };
-        delete next[model.id];
-        return next;
-      });
-    },
-    [store, downloads],
-  );
-
-  const handleDeleteModel = useCallback(
-    async (modelId: string) => {
-      try {
-        await window.capty.deleteModel(modelId);
-
-        // Refresh models list
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-
-        // If deleted model was selected, switch to first usable model or clear
-        if (store.selectedModelId === modelId) {
-          const firstUsable = (
-            models as { id: string; downloaded: boolean; supported?: boolean }[]
-          ).find((m) => m.downloaded && m.supported !== false);
-          store.setSelectedModelId(firstUsable ? firstUsable.id : "");
-        }
-      } catch (err) {
-        console.error("Failed to delete model:", err);
-      }
-    },
-    [store],
-  );
-
-  const handleSearchModels = useCallback(async (query: string) => {
-    const results = await window.capty.searchModels(query);
-    return results as Parameters<typeof store.setModels>[0];
-  }, []);
-
   const handleSaveAsrSettings = useCallback(
     async (settings: {
       asrProviders: import("./stores/appStore").AsrProviderState[];
@@ -1571,63 +1372,6 @@ function App(): React.JSX.Element {
     },
     [store, downloads],
   );
-
-  // Download control handlers (pause / resume / cancel)
-  const handlePauseDownload = useCallback(async (modelId: string) => {
-    await window.capty.pauseDownload(modelId);
-    setDownloads((prev) => ({
-      ...prev,
-      [modelId]: { ...prev[modelId], status: "paused" },
-    }));
-  }, []);
-
-  const handleResumeDownload = useCallback(
-    async (modelId: string) => {
-      const dl = downloads[modelId];
-      if (!dl) return;
-      setDownloads((prev) => ({
-        ...prev,
-        [modelId]: { ...prev[modelId], status: "downloading" },
-      }));
-      try {
-        await window.capty.resumeDownload(modelId);
-        // On success, refresh model lists
-        const models = await window.capty.listModels();
-        store.setModels(models as Parameters<typeof store.setModels>[0]);
-        const ttsList = await window.capty.listTtsModels();
-        setTtsModels(
-          ttsList as Array<{
-            id: string;
-            name: string;
-            type: string;
-            repo: string;
-            downloaded: boolean;
-            size_gb: number;
-            languages: readonly string[];
-            description: string;
-          }>,
-        );
-      } catch (err) {
-        console.error("Failed to resume download:", err);
-      } finally {
-        setDownloads((prev) => {
-          const next = { ...prev };
-          delete next[modelId];
-          return next;
-        });
-      }
-    },
-    [store, downloads],
-  );
-
-  const handleCancelDownload = useCallback(async (modelId: string) => {
-    await window.capty.cancelDownload(modelId);
-    setDownloads((prev) => {
-      const next = { ...prev };
-      delete next[modelId];
-      return next;
-    });
-  }, []);
 
   const handleDeleteTtsModel = useCallback(
     async (modelId: string) => {
