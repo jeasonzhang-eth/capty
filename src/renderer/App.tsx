@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useRef, useState } from "react";
 import { ControlBar } from "./components/ControlBar";
-import { HistoryPanel, SessionCategory } from "./components/HistoryPanel";
+import { HistoryPanel } from "./components/HistoryPanel";
 import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
@@ -13,6 +13,7 @@ import {
 } from "./components/SettingsModal";
 import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
+import { useSettingsStore } from "./stores/settingsStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
 import { useTranscription } from "./hooks/useTranscription";
@@ -22,12 +23,6 @@ import {
   DownloadManagerDialog,
   DownloadItem,
 } from "./components/DownloadManagerDialog";
-
-const DEFAULT_RAPID_RENAME_PROMPT =
-  "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
-
-const DEFAULT_TRANSLATE_PROMPT =
-  "You are a professional translator. Translate the following text to {{target_language}}. Rules:\n1. Translate ONLY the text content, preserving the exact number of lines\n2. Each line in the output corresponds to the same line in the input\n3. Do NOT add, remove, or merge lines\n4. Do NOT add any explanations, notes, or extra text\n5. Maintain the original tone and meaning\n\n{{text}}";
 
 function App(): React.JSX.Element {
   const store = useAppStore();
@@ -47,7 +42,7 @@ function App(): React.JSX.Element {
   const [downloadBadge, setDownloadBadge] = useState<
     "active" | "failed" | null
   >(null);
-  const [autoStartSidecar, setAutoStartSidecar] = useState(true);
+  const autoStartSidecar = useSettingsStore((s) => s.autoStartSidecar);
 
   const computeDownloadBadge = useCallback(
     (list: readonly DownloadItem[]): "active" | "failed" | null => {
@@ -238,29 +233,19 @@ function App(): React.JSX.Element {
       (d) => d.category === "tts" && d.status === "failed",
     )?.error ?? null;
 
-  // Config directory path
-  const [configDir, setConfigDir] = useState<string | null>(null);
+  // Settings from store
+  const configDir = useSettingsStore((s) => s.configDir);
+  const hfMirrorUrl = useSettingsStore((s) => s.hfMirrorUrl);
+  const llmProviders = useSettingsStore((s) => s.llmProviders);
+  const selectedSummaryModel = useSettingsStore((s) => s.selectedSummaryModel);
+  const selectedTranslateModel = useSettingsStore(
+    (s) => s.selectedTranslateModel,
+  );
+  const selectedRapidModel = useSettingsStore((s) => s.selectedRapidModel);
+  const rapidRenamePrompt = useSettingsStore((s) => s.rapidRenamePrompt);
+  const translatePrompt = useSettingsStore((s) => s.translatePrompt);
 
-  // HuggingFace mirror URL
   const DEFAULT_HF_URL = "https://huggingface.co";
-  const [hfMirrorUrl, setHfMirrorUrl] = useState(DEFAULT_HF_URL);
-
-  // LLM provider state
-  const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
-  // Provider + model pair per feature
-  type ModelSelection = { providerId: string; model: string } | null;
-  const [selectedSummaryModel, setSelectedSummaryModel] =
-    useState<ModelSelection>(null);
-  const [selectedTranslateModel, setSelectedTranslateModel] =
-    useState<ModelSelection>(null);
-  const [selectedRapidModel, setSelectedRapidModel] =
-    useState<ModelSelection>(null);
-  const [rapidRenamePrompt, setRapidRenamePrompt] = useState(
-    DEFAULT_RAPID_RENAME_PROMPT,
-  );
-  const [translatePrompt, setTranslatePrompt] = useState(
-    DEFAULT_TRANSLATE_PROMPT,
-  );
   // Per-session translation tracking: sessionId → progress%
   const [translationProgressMap, setTranslationProgressMap] = useState<
     Record<number, number>
@@ -302,28 +287,19 @@ function App(): React.JSX.Element {
   >({});
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  // Prompt type state
-  const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
+  // Prompt type state (activePromptType is local UI state, not persisted)
+  const promptTypes = useSettingsStore((s) => s.promptTypes);
   const [activePromptType, setActivePromptType] = useState("summarize");
   const activePromptTypeRef = useRef(activePromptType);
   activePromptTypeRef.current = activePromptType;
 
-  // Session categories state
-  const [sessionCategories, setSessionCategories] = useState<SessionCategory[]>(
-    [],
-  );
+  // Session categories from store
+  const sessionCategories = useSettingsStore((s) => s.sessionCategories);
 
-  // Layout persistence state
-  const DEFAULT_HISTORY_WIDTH = 240;
-  const DEFAULT_SUMMARY_WIDTH = 320;
-  const [historyPanelWidth, setHistoryPanelWidth] = useState(
-    DEFAULT_HISTORY_WIDTH,
-  );
-  const [summaryPanelWidth, setSummaryPanelWidth] = useState(
-    DEFAULT_SUMMARY_WIDTH,
-  );
-  const [zoomFactor, setZoomFactor] = useState(1.0);
-  const layoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Layout from store
+  const historyPanelWidth = useSettingsStore((s) => s.historyPanelWidth);
+  const summaryPanelWidth = useSettingsStore((s) => s.summaryPanelWidth);
+  const zoomFactor = useSettingsStore((s) => s.zoomFactor);
 
   // Subscribe to unified download events (manages the `downloads` state)
   useEffect(() => {
@@ -423,82 +399,15 @@ function App(): React.JSX.Element {
         }
         setNeedsSetup(false);
         store.setDataDir(dataDir);
-        setConfigDir(await window.capty.getConfigDir());
+
+        // Load all settings from config via the settings store
+        await useSettingsStore.getState().loadConfig();
+
         await store.loadSessions();
         await audioCapture.loadDevices();
 
-        // Restore saved config
+        // Restore saved config (non-settings fields still need the raw config)
         const config = await window.capty.getConfig();
-
-        // Restore layout settings
-        const savedHistoryWidth = config.historyPanelWidth as number | null;
-        if (savedHistoryWidth !== null) {
-          setHistoryPanelWidth(savedHistoryWidth);
-        }
-        const savedSummaryWidth = config.summaryPanelWidth as number | null;
-        if (savedSummaryWidth !== null) {
-          setSummaryPanelWidth(savedSummaryWidth);
-        }
-
-        // Restore zoom factor
-        const savedZoom = await window.capty.getZoomFactor();
-        if (savedZoom && savedZoom !== 1.0) {
-          setZoomFactor(savedZoom);
-        }
-
-        // Restore HuggingFace mirror URL
-        const savedHfUrl = config.hfMirrorUrl as string | null;
-        if (savedHfUrl) {
-          setHfMirrorUrl(savedHfUrl);
-        }
-
-        // Restore LLM providers
-        const savedProviders = config.llmProviders as LlmProvider[] | undefined;
-        if (savedProviders?.length) {
-          setLlmProviders(savedProviders);
-        }
-        // Restore model selections (new format)
-        if (config.selectedSummaryModel) {
-          setSelectedSummaryModel(
-            config.selectedSummaryModel as ModelSelection,
-          );
-        }
-        if (config.selectedTranslateModel) {
-          setSelectedTranslateModel(
-            config.selectedTranslateModel as ModelSelection,
-          );
-        }
-        if (config.selectedRapidModel) {
-          setSelectedRapidModel(config.selectedRapidModel as ModelSelection);
-        }
-        const savedRenamePrompt = config.rapidRenamePrompt as
-          | string
-          | undefined;
-        if (savedRenamePrompt) {
-          setRapidRenamePrompt(savedRenamePrompt);
-        }
-        const savedTranslatePrompt = config.translatePrompt as
-          | string
-          | undefined;
-        if (savedTranslatePrompt) {
-          setTranslatePrompt(savedTranslatePrompt);
-        }
-
-        // Load prompt types
-        try {
-          const types = await window.capty.listPromptTypes();
-          setPromptTypes(types as PromptType[]);
-        } catch {
-          // Prompt types not available
-        }
-
-        // Load session categories
-        try {
-          const cats = await window.capty.listSessionCategories();
-          setSessionCategories(cats as SessionCategory[]);
-        } catch {
-          // Session categories not available
-        }
 
         const savedDeviceId = config.selectedAudioDeviceId as string | null;
         if (savedDeviceId) {
@@ -552,13 +461,12 @@ function App(): React.JSX.Element {
           setSelectedTtsVoice(savedTtsVoice);
         }
 
-        // Restore sidecar config
+        // Restore sidecar config (autoStartSidecar already loaded by settingsStore)
         const sidecarCfg = config.sidecar as
           | { port: number; autoStart: boolean }
           | undefined;
         if (sidecarCfg) {
           store.setSidecarPort(sidecarCfg.port ?? 8765);
-          setAutoStartSidecar(sidecarCfg.autoStart !== false);
         }
 
         // Check sidecar health
@@ -964,30 +872,18 @@ function App(): React.JSX.Element {
   const handleAddCategory = useCallback(
     async (cat: { label: string; icon: string }) => {
       try {
-        const id = `custom-${Date.now()}`;
-        const newCat: SessionCategory = {
-          id,
-          label: cat.label,
-          icon: cat.icon,
-          isBuiltin: false,
-        };
-        const updated = [...sessionCategories, newCat];
-        await window.capty.saveSessionCategories(updated);
-        const cats = await window.capty.listSessionCategories();
-        setSessionCategories(cats as SessionCategory[]);
+        await useSettingsStore.getState().addCategory(cat);
       } catch (err) {
         console.error("Failed to add category:", err);
       }
     },
-    [sessionCategories],
+    [],
   );
 
   const handleDeleteCategory = useCallback(
     async (categoryId: string) => {
       try {
-        await window.capty.deleteSessionCategory(categoryId);
-        const cats = await window.capty.listSessionCategories();
-        setSessionCategories(cats as SessionCategory[]);
+        await useSettingsStore.getState().deleteCategory(categoryId);
         await store.loadSessions(); // refresh since sessions moved to "recording"
       } catch (err) {
         console.error("Failed to delete category:", err);
@@ -996,21 +892,20 @@ function App(): React.JSX.Element {
     [store],
   );
 
-  const handleReorderCategories = useCallback(
-    async (categoryIds: string[]) => {
-      try {
-        // Reorder categories array to match the new order
-        const reordered = categoryIds
-          .map((id) => sessionCategories.find((c) => c.id === id))
-          .filter(Boolean) as SessionCategory[];
-        setSessionCategories(reordered);
-        await window.capty.saveSessionCategories(reordered);
-      } catch (err) {
-        console.error("Failed to reorder categories:", err);
-      }
-    },
-    [sessionCategories],
-  );
+  const handleReorderCategories = useCallback(async (categoryIds: string[]) => {
+    try {
+      const cats = useSettingsStore.getState().sessionCategories;
+      const reordered = categoryIds
+        .map((id) => cats.find((c) => c.id === id))
+        .filter(
+          Boolean,
+        ) as import("./components/HistoryPanel").SessionCategory[];
+      useSettingsStore.getState().setSessionCategories(reordered);
+      await window.capty.saveSessionCategories(reordered);
+    } catch (err) {
+      console.error("Failed to reorder categories:", err);
+    }
+  }, []);
 
   const handleRegenerateSubtitles = useCallback(
     async (sessionId: number) => {
@@ -1378,7 +1273,7 @@ function App(): React.JSX.Element {
   }, []);
 
   const handleChangeAutoStartSidecar = useCallback(async (value: boolean) => {
-    setAutoStartSidecar(value);
+    useSettingsStore.getState().setAutoStartSidecar(value);
     const config = await window.capty.getConfig();
     await window.capty.setConfig({
       ...config,
@@ -1387,12 +1282,8 @@ function App(): React.JSX.Element {
   }, []);
 
   const handleChangeHfMirrorUrl = useCallback(async (url: string) => {
-    setHfMirrorUrl(url);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      hfMirrorUrl: url || null,
-    });
+    useSettingsStore.getState().setHfMirrorUrl(url);
+    await useSettingsStore.getState().saveConfig({ hfMirrorUrl: url || null });
   }, []);
 
   const handleSaveAsrSettings = useCallback(
@@ -1454,56 +1345,42 @@ function App(): React.JSX.Element {
 
   const handleChangeSummaryModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
-      setSelectedSummaryModel(selection);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedSummaryModel: selection,
-      });
+      useSettingsStore.getState().setSelectedSummaryModel(selection);
+      await useSettingsStore
+        .getState()
+        .saveConfig({ selectedSummaryModel: selection });
     },
     [],
   );
 
   const handleChangeRapidModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
-      setSelectedRapidModel(selection);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedRapidModel: selection,
-      });
+      useSettingsStore.getState().setSelectedRapidModel(selection);
+      await useSettingsStore
+        .getState()
+        .saveConfig({ selectedRapidModel: selection });
     },
     [],
   );
 
   const handleChangeTranslateModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
-      setSelectedTranslateModel(selection);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedTranslateModel: selection,
-      });
+      useSettingsStore.getState().setSelectedTranslateModel(selection);
+      await useSettingsStore
+        .getState()
+        .saveConfig({ selectedTranslateModel: selection });
     },
     [],
   );
 
   const handleChangeRapidRenamePrompt = useCallback(async (prompt: string) => {
-    setRapidRenamePrompt(prompt);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      rapidRenamePrompt: prompt,
-    });
+    useSettingsStore.getState().setRapidRenamePrompt(prompt);
+    await useSettingsStore.getState().saveConfig({ rapidRenamePrompt: prompt });
   }, []);
 
   const handleChangeTranslatePrompt = useCallback(async (prompt: string) => {
-    setTranslatePrompt(prompt);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      translatePrompt: prompt,
-    });
+    useSettingsStore.getState().setTranslatePrompt(prompt);
+    await useSettingsStore.getState().saveConfig({ translatePrompt: prompt });
   }, []);
 
   const handleTranslate = useCallback(
@@ -1514,11 +1391,14 @@ function App(): React.JSX.Element {
       // Already translating this session
       if (sessionId in translateAbortMapRef.current) return;
 
-      // Resolve provider + model for translation
-      const sel = selectedTranslateModel;
+      // Resolve provider + model for translation (read from store to avoid stale closures)
+      const settings = useSettingsStore.getState();
+      const sel = settings.selectedTranslateModel;
+      const providers = settings.llmProviders;
+      const currentTranslatePrompt = settings.translatePrompt;
       const provider = sel
-        ? llmProviders.find((p) => p.id === sel.providerId)
-        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
+        ? providers.find((p) => p.id === sel.providerId)
+        : providers.find((p) => (p.models?.length ?? 0) > 0);
       if (!provider) {
         console.warn("Translate: no LLM provider configured");
         return;
@@ -1547,7 +1427,7 @@ function App(): React.JSX.Element {
             modelToUse,
             seg.text,
             targetLanguage,
-            translatePrompt,
+            currentTranslatePrompt,
           );
           if (translateAbortMapRef.current[sessionId]) return;
 
@@ -1604,7 +1484,7 @@ function App(): React.JSX.Element {
         }
       }
     },
-    [store, selectedTranslateModel, llmProviders, translatePrompt],
+    [store],
   );
 
   const handleStopTranslation = useCallback(() => {
@@ -1638,10 +1518,14 @@ function App(): React.JSX.Element {
   const handleAiRename = useCallback(
     async (sessionId: number) => {
       if (aiRenamingSessionId) return;
-      const sel = selectedRapidModel;
+      // Read from store to avoid stale closures
+      const settings = useSettingsStore.getState();
+      const sel = settings.selectedRapidModel;
+      const providers = settings.llmProviders;
+      const currentRenamePrompt = settings.rapidRenamePrompt;
       const provider = sel
-        ? llmProviders.find((p) => p.id === sel.providerId)
-        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
+        ? providers.find((p) => p.id === sel.providerId)
+        : providers.find((p) => (p.models?.length ?? 0) > 0);
       if (!provider) {
         console.warn("AI rename: no LLM provider configured");
         return;
@@ -1653,7 +1537,7 @@ function App(): React.JSX.Element {
           sessionId,
           provider.id,
           modelToUse,
-          rapidRenamePrompt,
+          currentRenamePrompt,
         );
         if (rawTitle) {
           const sess = store.sessions.find(
@@ -1675,13 +1559,7 @@ function App(): React.JSX.Element {
         setAiRenamingSessionId(null);
       }
     },
-    [
-      selectedRapidModel,
-      llmProviders,
-      rapidRenamePrompt,
-      aiRenamingSessionId,
-      store,
-    ],
+    [aiRenamingSessionId, store],
   );
 
   const handleChangeTtsModelForPlay = useCallback(async (modelId: string) => {
@@ -1899,12 +1777,8 @@ function App(): React.JSX.Element {
 
   const handleSaveLlmProviders = useCallback(
     async (providers: LlmProvider[]) => {
-      setLlmProviders(providers);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        llmProviders: providers,
-      });
+      useSettingsStore.getState().setLlmProviders(providers);
+      await useSettingsStore.getState().saveConfig({ llmProviders: providers });
     },
     [],
   );
@@ -1937,12 +1811,12 @@ function App(): React.JSX.Element {
         );
         setSummaries(freshSummaries as Summary[]);
         // Remember last used model selection
-        setSelectedSummaryModel({ providerId, model });
-        const config = await window.capty.getConfig();
-        await window.capty.setConfig({
-          ...config,
-          selectedSummaryModel: { providerId, model },
-        });
+        useSettingsStore
+          .getState()
+          .setSelectedSummaryModel({ providerId, model });
+        await useSettingsStore
+          .getState()
+          .saveConfig({ selectedSummaryModel: { providerId, model } });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to generate";
         console.error("Summarize error:", err);
@@ -1984,27 +1858,26 @@ function App(): React.JSX.Element {
   );
 
   const handleSavePromptTypes = useCallback(async (types: PromptType[]) => {
-    await window.capty.savePromptTypes(types);
-    // Reload effective prompt types from backend
-    const effective = await window.capty.listPromptTypes();
-    setPromptTypes(effective as PromptType[]);
+    await useSettingsStore.getState().savePromptTypes(types);
   }, []);
 
-  // Layout width change handlers (debounced save)
+  // Layout width change handlers (debounced save via store)
   const handleHistoryWidthChange = useCallback((newWidth: number) => {
-    setHistoryPanelWidth(newWidth);
-    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
-    layoutTimerRef.current = setTimeout(() => {
-      window.capty.saveLayout({ historyPanelWidth: newWidth });
-    }, 500);
+    useSettingsStore
+      .getState()
+      .saveLayoutWidths(
+        newWidth,
+        useSettingsStore.getState().summaryPanelWidth,
+      );
   }, []);
 
   const handleSummaryWidthChange = useCallback((newWidth: number) => {
-    setSummaryPanelWidth(newWidth);
-    if (layoutTimerRef.current) clearTimeout(layoutTimerRef.current);
-    layoutTimerRef.current = setTimeout(() => {
-      window.capty.saveLayout({ summaryPanelWidth: newWidth });
-    }, 500);
+    useSettingsStore
+      .getState()
+      .saveLayoutWidths(
+        useSettingsStore.getState().historyPanelWidth,
+        newWidth,
+      );
   }, []);
 
   // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0
@@ -2015,21 +1888,19 @@ function App(): React.JSX.Element {
 
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
-        setZoomFactor((prev) => {
-          const next = Math.min(3.0, Math.round((prev + 0.1) * 10) / 10);
-          window.capty.setZoomFactor(next);
-          return next;
-        });
+        const prev = useSettingsStore.getState().zoomFactor;
+        const next = Math.min(3.0, Math.round((prev + 0.1) * 10) / 10);
+        useSettingsStore.getState().setZoomFactor(next);
+        window.capty.setZoomFactor(next);
       } else if (e.key === "-") {
         e.preventDefault();
-        setZoomFactor((prev) => {
-          const next = Math.max(0.5, Math.round((prev - 0.1) * 10) / 10);
-          window.capty.setZoomFactor(next);
-          return next;
-        });
+        const prev = useSettingsStore.getState().zoomFactor;
+        const next = Math.max(0.5, Math.round((prev - 0.1) * 10) / 10);
+        useSettingsStore.getState().setZoomFactor(next);
+        window.capty.setZoomFactor(next);
       } else if (e.key === "0") {
         e.preventDefault();
-        setZoomFactor(1.0);
+        useSettingsStore.getState().setZoomFactor(1.0);
         window.capty.setZoomFactor(1.0);
       }
     };
@@ -2107,6 +1978,7 @@ function App(): React.JSX.Element {
 
   // Validate model selections when providers change
   useEffect(() => {
+    type ModelSelection = { providerId: string; model: string } | null;
     const validateSelection = (
       sel: ModelSelection,
       setSel: (s: ModelSelection) => void,
@@ -2130,9 +2002,10 @@ function App(): React.JSX.Element {
         }
       }
     };
-    validateSelection(selectedSummaryModel, setSelectedSummaryModel);
-    validateSelection(selectedTranslateModel, setSelectedTranslateModel);
-    validateSelection(selectedRapidModel, setSelectedRapidModel);
+    const s = useSettingsStore.getState();
+    validateSelection(selectedSummaryModel, s.setSelectedSummaryModel);
+    validateSelection(selectedTranslateModel, s.setSelectedTranslateModel);
+    validateSelection(selectedRapidModel, s.setSelectedRapidModel);
   }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for LLM streaming chunks (routed per-tab by promptType)

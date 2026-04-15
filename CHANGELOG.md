@@ -6,6 +6,7 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- Refactor: wire settingsStore into App.tsx, replace ~14 useState + ~20 useCallback with store reads/actions
 - Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles + localStorage mock)
 - Refactor: add appStore unit tests (6 tests)
 - Refactor: extract settings state into `settingsStore` (14 fields, 23 tests)
