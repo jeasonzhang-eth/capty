@@ -5,8 +5,8 @@ import { TranscriptArea } from "./components/TranscriptArea";
 import { RecordingControls } from "./components/RecordingControls";
 import { PlaybackBar } from "./components/PlaybackBar";
 import { SetupWizard } from "./components/SetupWizard";
-import { SettingsModal, LlmProvider, TabId } from "./components/SettingsModal";
-import { SummaryPanel, Summary, PromptType } from "./components/SummaryPanel";
+import { SettingsModal, TabId } from "./components/SettingsModal";
+import { SummaryPanel, Summary } from "./components/SummaryPanel";
 import { useAppStore } from "./stores/appStore";
 import { useAudioCapture } from "./hooks/useAudioCapture";
 import { useVAD } from "./hooks/useVAD";
@@ -18,9 +18,8 @@ import { useAudioDownloads } from "./hooks/useAudioDownloads";
 import { useSettings } from "./hooks/useSettings";
 import { useModelDownloads } from "./hooks/useModelDownloads";
 import { useTtsSettings } from "./hooks/useTtsSettings";
-
-const DEFAULT_RAPID_RENAME_PROMPT =
-  "Based on the following meeting transcript, generate a concise and descriptive Chinese title (max 10 words). Return ONLY the title text, no quotes, no timestamp, no extra text.";
+import { useSummary } from "./hooks/useSummary";
+import type { ModelSelection } from "./hooks/useSummary";
 
 const DEFAULT_TRANSLATE_PROMPT =
   "You are a professional translator. Translate the following text to {{target_language}}. Rules:\n1. Translate ONLY the text content, preserving the exact number of lines\n2. Each line in the output corresponds to the same line in the input\n3. Do NOT add, remove, or merge lines\n4. Do NOT add any explanations, notes, or extra text\n5. Maintain the original tone and meaning\n\n{{text}}";
@@ -204,19 +203,44 @@ function App(): React.JSX.Element {
   // Wire up refreshTtsModels for useModelDownloads resume handler
   refreshTtsModelsRef.current = ttsSettingsHook.refreshTtsModels;
 
-  // LLM provider state
-  const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
-  // Provider + model pair per feature
-  type ModelSelection = { providerId: string; model: string } | null;
-  const [selectedSummaryModel, setSelectedSummaryModel] =
-    useState<ModelSelection>(null);
+  const summaryHook = useSummary({
+    store: {
+      currentSessionId: store.currentSessionId,
+      sessions: store.sessions,
+      loadSessions: store.loadSessions,
+      setAsrProviders: store.setAsrProviders,
+      setSelectedAsrProviderId: store.setSelectedAsrProviderId,
+      setSidecarReady: store.setSidecarReady,
+    },
+  });
+  const {
+    llmProviders,
+    selectedSummaryModel,
+    selectedRapidModel,
+    rapidRenamePrompt,
+    aiRenamingSessionId,
+    summaries,
+    generatingTabs,
+    streamingContentMap,
+    generateError,
+    promptTypes,
+    activePromptType,
+    setSummaries,
+    setGenerateError,
+    handleSaveLlmProviders,
+    handleSaveAsrSettings,
+    handleChangeSummaryModel,
+    handleChangeRapidModel,
+    handleChangeRapidRenamePrompt,
+    handleSummarize,
+    handleChangePromptType,
+    handleSavePromptTypes,
+    handleAiRename,
+  } = summaryHook;
+
+  // Translation state (will move to useTranslation in a future step)
   const [selectedTranslateModel, setSelectedTranslateModel] =
     useState<ModelSelection>(null);
-  const [selectedRapidModel, setSelectedRapidModel] =
-    useState<ModelSelection>(null);
-  const [rapidRenamePrompt, setRapidRenamePrompt] = useState(
-    DEFAULT_RAPID_RENAME_PROMPT,
-  );
   const [translatePrompt, setTranslatePrompt] = useState(
     DEFAULT_TRANSLATE_PROMPT,
   );
@@ -246,28 +270,6 @@ function App(): React.JSX.Element {
       localStorage.removeItem("capty:activeTranslationLang");
     }
   }, []);
-
-  const [aiRenamingSessionId, setAiRenamingSessionId] = useState<number | null>(
-    null,
-  );
-
-  // Summary state (per-session × per-tab generation support).
-  // Keys are `${sessionId}:${promptType}` so multiple sessions can generate
-  // simultaneously without leaking into each other.
-  const [summaries, setSummaries] = useState<Summary[]>([]);
-  const [generatingTabs, setGeneratingTabs] = useState<Set<string>>(new Set());
-  const generatingTabsRef = useRef(generatingTabs);
-  generatingTabsRef.current = generatingTabs;
-  const [streamingContentMap, setStreamingContentMap] = useState<
-    Record<string, string>
-  >({});
-  const [generateError, setGenerateError] = useState<string | null>(null);
-
-  // Prompt type state
-  const [promptTypes, setPromptTypes] = useState<PromptType[]>([]);
-  const [activePromptType, setActivePromptType] = useState("summarize");
-  const activePromptTypeRef = useRef(activePromptType);
-  activePromptTypeRef.current = activePromptType;
 
   // Session categories state
   const [sessionCategories, setSessionCategories] = useState<SessionCategory[]>(
@@ -301,44 +303,20 @@ function App(): React.JSX.Element {
         // Restore settings (layout, zoom, hfMirror, configDir)
         await settings.initFromConfig(config);
 
-        // Restore LLM providers
-        const savedProviders = config.llmProviders as LlmProvider[] | undefined;
-        if (savedProviders?.length) {
-          setLlmProviders(savedProviders);
-        }
-        // Restore model selections (new format)
-        if (config.selectedSummaryModel) {
-          setSelectedSummaryModel(
-            config.selectedSummaryModel as ModelSelection,
-          );
-        }
+        // Restore LLM providers, summary/rapid model selections, prompt types
+        await summaryHook.initFromConfig(config);
+
+        // Restore translate model + prompt (will move to useTranslation)
         if (config.selectedTranslateModel) {
           setSelectedTranslateModel(
             config.selectedTranslateModel as ModelSelection,
           );
-        }
-        if (config.selectedRapidModel) {
-          setSelectedRapidModel(config.selectedRapidModel as ModelSelection);
-        }
-        const savedRenamePrompt = config.rapidRenamePrompt as
-          | string
-          | undefined;
-        if (savedRenamePrompt) {
-          setRapidRenamePrompt(savedRenamePrompt);
         }
         const savedTranslatePrompt = config.translatePrompt as
           | string
           | undefined;
         if (savedTranslatePrompt) {
           setTranslatePrompt(savedTranslatePrompt);
-        }
-
-        // Load prompt types
-        try {
-          const types = await window.capty.listPromptTypes();
-          setPromptTypes(types as PromptType[]);
-        } catch {
-          // Prompt types not available
         }
 
         // Load session categories
@@ -873,54 +851,6 @@ function App(): React.JSX.Element {
     await handleSelectSession(result.sessionId);
   }, [store, regeneratingSessionId, handleSelectSession]);
 
-  const handleSaveAsrSettings = useCallback(
-    async (settings: {
-      asrProviders: import("./stores/appStore").AsrProviderState[];
-      selectedAsrProviderId: string | null;
-    }) => {
-      store.setAsrProviders(settings.asrProviders);
-      store.setSelectedAsrProviderId(settings.selectedAsrProviderId);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        asrProviders: settings.asrProviders,
-        selectedAsrProviderId: settings.selectedAsrProviderId,
-      });
-      // Always re-check sidecar health (sidecar is independent of provider list)
-      try {
-        const health = await window.capty.checkSidecarHealth();
-        store.setSidecarReady(health.online);
-      } catch {
-        store.setSidecarReady(false);
-      }
-    },
-    [store],
-  );
-
-  const handleChangeSummaryModel = useCallback(
-    async (selection: { providerId: string; model: string }) => {
-      setSelectedSummaryModel(selection);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedSummaryModel: selection,
-      });
-    },
-    [],
-  );
-
-  const handleChangeRapidModel = useCallback(
-    async (selection: { providerId: string; model: string }) => {
-      setSelectedRapidModel(selection);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        selectedRapidModel: selection,
-      });
-    },
-    [],
-  );
-
   const handleChangeTranslateModel = useCallback(
     async (selection: { providerId: string; model: string }) => {
       setSelectedTranslateModel(selection);
@@ -932,15 +862,6 @@ function App(): React.JSX.Element {
     },
     [],
   );
-
-  const handleChangeRapidRenamePrompt = useCallback(async (prompt: string) => {
-    setRapidRenamePrompt(prompt);
-    const config = await window.capty.getConfig();
-    await window.capty.setConfig({
-      ...config,
-      rapidRenamePrompt: prompt,
-    });
-  }, []);
 
   const handleChangeTranslatePrompt = useCallback(async (prompt: string) => {
     setTranslatePrompt(prompt);
@@ -1080,201 +1001,33 @@ function App(): React.JSX.Element {
     [],
   );
 
-  const handleAiRename = useCallback(
-    async (sessionId: number) => {
-      if (aiRenamingSessionId) return;
-      const sel = selectedRapidModel;
-      const provider = sel
-        ? llmProviders.find((p) => p.id === sel.providerId)
-        : llmProviders.find((p) => (p.models?.length ?? 0) > 0);
-      if (!provider) {
-        console.warn("AI rename: no LLM provider configured");
-        return;
-      }
-      const modelToUse = sel?.model || provider.models[0] || provider.model;
-      setAiRenamingSessionId(sessionId);
-      try {
-        const rawTitle = await window.capty.generateTitle(
-          sessionId,
-          provider.id,
-          modelToUse,
-          rapidRenamePrompt,
-        );
-        if (rawTitle) {
-          const sess = store.sessions.find(
-            (s: { id: number }) => s.id === sessionId,
-          );
-          let finalTitle = rawTitle;
-          if (sess?.started_at) {
-            const d = new Date(sess.started_at);
-            const pad = (n: number): string => String(n).padStart(2, "0");
-            const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-            finalTitle = `${ts}：${rawTitle}`;
-          }
-          await window.capty.renameSession(sessionId, finalTitle);
-          await store.loadSessions();
-        }
-      } catch (err) {
-        console.error("AI rename failed:", err);
-      } finally {
-        setAiRenamingSessionId(null);
-      }
-    },
-    [
-      selectedRapidModel,
-      llmProviders,
-      rapidRenamePrompt,
-      aiRenamingSessionId,
-      store,
-    ],
-  );
-
-  const handleSaveLlmProviders = useCallback(
-    async (providers: LlmProvider[]) => {
-      setLlmProviders(providers);
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({
-        ...config,
-        llmProviders: providers,
-      });
-    },
-    [],
-  );
-
-  const handleSummarize = useCallback(
-    async (providerId: string, model: string, promptType: string) => {
-      const originSessionId = store.currentSessionId;
-      if (!originSessionId) return;
-      const key = `${originSessionId}:${promptType}`;
-      if (generatingTabsRef.current.has(key)) return;
-      setStreamingContentMap((prev) => ({ ...prev, [key]: "" }));
-      setGeneratingTabs((prev) => new Set(prev).add(key));
-      setGenerateError(null);
-      try {
-        await window.capty.summarize(
-          originSessionId,
-          providerId,
-          model,
-          promptType,
-        );
-        // Clear streaming content for this session:tab
-        setStreamingContentMap((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        // Reload summaries if still viewing the origin session
-        const currentId = useAppStore.getState().currentSessionId;
-        if (currentId === originSessionId) {
-          const currentTab = activePromptTypeRef.current;
-          const freshSummaries = await window.capty.listSummaries(
-            originSessionId,
-            currentTab,
-          );
-          setSummaries(freshSummaries as Summary[]);
-        }
-        // Remember last used model selection (always, regardless of session switch)
-        setSelectedSummaryModel({ providerId, model });
-        const config = await window.capty.getConfig();
-        await window.capty.setConfig({
-          ...config,
-          selectedSummaryModel: { providerId, model },
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to generate";
-        console.error("Summarize error:", err);
-        if (useAppStore.getState().currentSessionId === originSessionId) {
-          setGenerateError(msg);
-        }
-      } finally {
-        setGeneratingTabs((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-        setStreamingContentMap((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-      }
-    },
-    [store.currentSessionId],
-  );
-
-  const handleChangePromptType = useCallback(
-    async (promptType: string) => {
-      setActivePromptType(promptType);
-      setGenerateError(null);
-      // Reload summaries for new prompt type
-      if (store.currentSessionId) {
-        try {
-          const sessionSummaries = await window.capty.listSummaries(
-            store.currentSessionId,
-            promptType,
-          );
-          setSummaries(sessionSummaries as Summary[]);
-        } catch {
-          setSummaries([]);
-        }
-      }
-    },
-    [store.currentSessionId],
-  );
-
-  const handleSavePromptTypes = useCallback(async (types: PromptType[]) => {
-    await window.capty.savePromptTypes(types);
-    // Reload effective prompt types from backend
-    const effective = await window.capty.listPromptTypes();
-    setPromptTypes(effective as PromptType[]);
-  }, []);
-
-  // Validate model selections when providers change
+  // Validate translate model selection when providers change
+  // (summary + rapid validation is inside useSummary)
   useEffect(() => {
-    const validateSelection = (
-      sel: ModelSelection,
-      setSel: (s: ModelSelection) => void,
-    ): void => {
-      if (!sel) return;
-      const provider = llmProviders.find((p) => p.id === sel.providerId);
-      if (!provider) {
-        setSel(null);
-        return;
-      }
-      const models = provider.models?.length
-        ? provider.models
-        : provider.model
-          ? [provider.model]
-          : [];
-      if (!models.includes(sel.model)) {
-        if (models.length > 0) {
-          setSel({ providerId: provider.id, model: models[0] });
-        } else {
-          setSel(null);
-        }
-      }
-    };
-    validateSelection(selectedSummaryModel, setSelectedSummaryModel);
-    validateSelection(selectedTranslateModel, setSelectedTranslateModel);
-    validateSelection(selectedRapidModel, setSelectedRapidModel);
-  }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Listen for LLM streaming chunks. Each chunk is keyed by (sessionId, promptType)
-  // so background generation for a different session accumulates into its own
-  // buffer without affecting what the user currently sees.
-  useEffect(() => {
-    const unsub = window.capty.onSummaryChunk(
-      ({ content, done, promptType, sessionId }) => {
-        if (done) return;
-        const key = `${sessionId}:${promptType}`;
-        setStreamingContentMap((prev) => ({
-          ...prev,
-          [key]: (prev[key] || "") + content,
-        }));
-      },
+    if (!selectedTranslateModel) return;
+    const provider = llmProviders.find(
+      (p) => p.id === selectedTranslateModel.providerId,
     );
-    return unsub;
-  }, []);
+    if (!provider) {
+      setSelectedTranslateModel(null);
+      return;
+    }
+    const models = provider.models?.length
+      ? provider.models
+      : provider.model
+        ? [provider.model]
+        : [];
+    if (!models.includes(selectedTranslateModel.model)) {
+      if (models.length > 0) {
+        setSelectedTranslateModel({
+          providerId: provider.id,
+          model: models[0],
+        });
+      } else {
+        setSelectedTranslateModel(null);
+      }
+    }
+  }, [llmProviders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // No streaming partial text with HTTP-based transcription
 
