@@ -4,6 +4,11 @@ All notable changes to Capty are documented in this file.
 
 ## 2026-04-15
 
+### Added
+
+- Add component contract tests for HistoryPanel, SummaryPanel, SettingsModal (28 tests) — verifies components mount without crashing when reading from Zustand stores with both empty and seeded state
+- Configure vitest `environmentMatchGlobs` so component tests run under happy-dom while existing store/main tests stay in Node
+
 ### Fixed
 
 - Fix HistoryPanel runtime crash: component destructured 28 props but only 11 were passed after store refactor, causing `sessions.filter()` TypeError on undefined. Now reads sessions/width/categories/downloadBadge from stores and defines handlers (rename/edit/reorder/category CRUD) internally.
@@ -15,7 +20,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: SettingsModal reads from stores directly, ~50 props eliminated (3 remaining: initialTab, onTabChange, onClose)
 - Refactor: wire ttsStore, summaryStore, translationStore, downloadStore into App.tsx
 - Refactor: wire settingsStore into App.tsx, replace ~14 useState + ~20 useCallback with store reads/actions
-- Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles + localStorage mock)
+- Refactor: add renderer store test infrastructure (window.capty mock + vitest setupFiles + localStorage mock); setup.ts now preserves happy-dom window instead of overwriting it
 - Refactor: add appStore unit tests (6 tests)
 - Refactor: extract settings state into `settingsStore` (14 fields, 23 tests)
 - Refactor: extract TTS state into `ttsStore` (6 fields, 15 tests)

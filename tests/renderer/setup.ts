@@ -117,22 +117,33 @@ for (const m of methods) {
   }
 }
 
-(globalThis as any).window = { capty };
+// When running under a DOM environment (happy-dom / jsdom), window already
+// exists with document, etc.  We must NOT overwrite it — only attach `capty`.
+// For pure-Node store tests, window is undefined, so we create a minimal stub.
+if (typeof globalThis.window === "undefined") {
+  (globalThis as any).window = { capty };
+} else {
+  (globalThis as any).window.capty = capty;
+}
 
-// Minimal localStorage mock for Node test environment
-const localStorageStore: Record<string, string> = {};
-const localStorageMock = {
-  getItem: (key: string) => localStorageStore[key] ?? null,
-  setItem: (key: string, value: string) => {
-    localStorageStore[key] = value;
-  },
-  removeItem: (key: string) => {
-    delete localStorageStore[key];
-  },
-  clear: () => {
-    for (const key of Object.keys(localStorageStore)) {
+// Minimal localStorage mock for Node test environment.
+// DOM environments (happy-dom) already provide localStorage, so only
+// install the mock when it is missing.
+if (typeof globalThis.localStorage === "undefined") {
+  const localStorageStore: Record<string, string> = {};
+  const localStorageMock = {
+    getItem: (key: string) => localStorageStore[key] ?? null,
+    setItem: (key: string, value: string) => {
+      localStorageStore[key] = value;
+    },
+    removeItem: (key: string) => {
       delete localStorageStore[key];
-    }
-  },
-};
-(globalThis as any).localStorage = localStorageMock;
+    },
+    clear: () => {
+      for (const key of Object.keys(localStorageStore)) {
+        delete localStorageStore[key];
+      }
+    },
+  };
+  (globalThis as any).localStorage = localStorageMock;
+}
