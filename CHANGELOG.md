@@ -8,6 +8,8 @@ All notable changes to Capty are documented in this file.
 
 - Add component contract tests for HistoryPanel, SummaryPanel, SettingsModal (28 tests) — verifies components mount without crashing when reading from Zustand stores with both empty and seeded state
 - Configure vitest `environmentMatchGlobs` so component tests run under happy-dom while existing store/main tests stay in Node
+- Add store integration tests (27 tests) — cross-store data flow: config loading chain, session+settings interaction, download badge, summary/translation flows, multi-store reset isolation
+- Add E2E smoke tests (8 tests) — session management, settings persistence/tab navigation, console error detection on startup
 
 ### Fixed
 
