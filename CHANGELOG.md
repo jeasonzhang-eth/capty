@@ -12,6 +12,7 @@ All notable changes to Capty are documented in this file.
 - Refactor: extract `useTtsSettings` hook — moves TTS provider/model/voice state, 7 handlers, 2 effects + initTts into `src/renderer/hooks/useTtsSettings.ts` (~373 lines). App.tsx: 1940 → 1599 lines. Part 4/7.
 - Refactor: extract `useSummary` hook — moves LLM providers, summary generation/streaming state, prompt types, AI rename, 9 handlers, 2 effects + initFromConfig into `src/renderer/hooks/useSummary.ts` (~383 lines). App.tsx: 1599 → 1352 lines. Part 5/7.
 - Refactor: extract `useTranslation` hook — moves translation state, 5 handlers, model validation effect + initFromConfig into `src/renderer/hooks/useTranslation.ts` (~299 lines). App.tsx: 1352 → 1151 lines (-201). Part 6/7.
+- Refactor: extract `useSessionManagement` hook — moves recording flow, session CRUD, category management, regeneration, 18 handlers + initFromConfig into `src/renderer/hooks/useSessionManagement.ts` (~740 lines). Init effect slimmed from 271 to 15 lines. App.tsx: 1151 → 608 lines (-543). Part 7/7 — **refactoring complete**. Total: 2564 → 608 lines (-76%).
 
 ## 2026-04-15
 
