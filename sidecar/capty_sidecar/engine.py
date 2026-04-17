@@ -14,10 +14,18 @@ import wave
 from pathlib import Path
 from typing import Optional
 
-import mlx.core as mx
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _clear_mlx_cache() -> None:
+    """Best-effort MLX cache clear without importing MLX at module import time."""
+    try:
+        import mlx.core as mx
+    except Exception:
+        return
+    mx.clear_cache()
 
 # ---------------------------------------------------------------------------
 # Audio constants
@@ -190,7 +198,7 @@ class BaseEngine:
         """Unload model and free memory. MUST run on MLX thread."""
         self._model = None
         self._model_id = None
-        mx.clear_cache()
+        _clear_mlx_cache()
         gc.collect()
         logger.info("%s engine unloaded", self.engine_type.upper())
 

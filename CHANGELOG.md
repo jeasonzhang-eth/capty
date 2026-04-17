@@ -12,6 +12,10 @@ All notable changes to Capty are documented in this file.
 - Add path-containment guard to `app:change-data-dir` and `app:init-data-dir`: reject non-absolute paths and anything outside `os.homedir()`. Prevents renderer-driven arbitrary directory writes (e.g. `/`, `/etc/capty`).
 - Sidecar `_validate_file_path`: switch `startswith()` prefix check to `Path.relative_to()`. The prior string-prefix check was bypassable via sibling directories sharing a common prefix (e.g. `/data/...` vs `/data-evil/outside.wav`). Covered by `tests/test_server.py::test_decode_audio_rejects_sibling_prefix_path`.
 
+### Changed
+
+- Sidecar: move `import mlx.core` out of module scope into lazy helpers (`_clear_mlx_cache`, `_get_mlx_core`, `_ensure_mlx_initialized`). Keeps import-time side-effects off CI / non-Apple environments; MLX cache limit still applied on first real use.
+
 ## 2026-04-16
 
 ### Changed
