@@ -43,14 +43,15 @@ Premature for current task count (3-4). Reconsider when scope grows.
 
 **Files changed:**
 
-- `sidecar/pyproject.toml` — add:
+- `sidecar/pyproject.toml` — extend the existing dev extra:
   ```toml
-  [dependency-groups]
-  dev = ["pyinstaller>=6.0"]
+  [project.optional-dependencies]
+  dev = ["pytest", "pytest-asyncio", "httpx", "pyinstaller>=6.0"]
   ```
+  (We use `[project.optional-dependencies]` rather than PEP 735 `[dependency-groups]` to minimize churn — the existing dev extra already holds test deps and `uv` resolves both forms.)
 - `sidecar/build.sh` — replace venv activation + ad-hoc pip install with:
   ```bash
-  uv sync --group dev
+  uv sync --extra dev
   uv run pyinstaller capty-sidecar.spec --clean --noconfirm
   ```
 - `.gitignore` — verify `sidecar/.venv/` and `sidecar/dist/` are ignored.
