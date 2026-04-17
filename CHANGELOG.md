@@ -23,6 +23,10 @@ All notable changes to Capty are documented in this file.
 - Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
 - Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
 
+### Fixed
+
+- Audio import (`audio:import-file`): session row was being created BEFORE the WAV conversion ran, leaving an empty/incomplete session in the DB if ffmpeg failed. Now creates the session only after conversion succeeds; if any step after session creation fails, the partial session is deleted. Paired with new test coverage in `tests/main/handlers/audio-handlers.test.ts`.
+
 ## 2026-04-16
 
 ### Changed

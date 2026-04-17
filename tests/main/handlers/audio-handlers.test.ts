@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import path from "path";
 import os from "os";
 import fs from "fs";
+import { EventEmitter } from "events";
 
 // Collect registered IPC handlers for testing
 const handlers = new Map<string, (...args: any[]) => any>();
+const { mockSpawn } = vi.hoisted(() => ({ mockSpawn: vi.fn() }));
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -21,9 +23,13 @@ vi.mock("electron", () => ({
   },
 }));
 
+vi.mock("../../../src/main/shared/spawn", () => ({
+  spawn: mockSpawn,
+}));
+
 // Must import after mocks
 import { register } from "../../../src/main/handlers/audio-handlers";
-import { ipcMain } from "electron";
+import { dialog, ipcMain } from "electron";
 import { createDatabase } from "../../../src/main/database";
 
 const ALL_CHANNELS = [
@@ -183,6 +189,47 @@ describe("audio-handlers", () => {
       expect(() => writeHandler({} as any, pcm)).not.toThrow();
 
       closeHandler({} as any);
+    });
+  });
+
+  describe("audio:import", () => {
+    it("rolls back the session when ffmpeg conversion fails", async () => {
+      handlers.clear();
+      register({
+        db,
+        configDir,
+        getMainWindow: () => ({ webContents: {} } as any),
+      });
+
+      const sourcePath = path.join(tmpDir, "broken.mp3");
+      fs.writeFileSync(sourcePath, Buffer.from("broken-audio"));
+
+      vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+        canceled: false,
+        filePaths: [sourcePath],
+      } as any);
+
+      mockSpawn.mockImplementationOnce(() => {
+        const child = new EventEmitter() as any;
+        queueMicrotask(() => child.emit("close", 1));
+        return child;
+      });
+
+      const handler = handlers.get("audio:import")!;
+      await expect(handler({} as any)).rejects.toThrow(
+        "ffmpeg exited with code 1",
+      );
+
+      const row = db
+        .prepare("SELECT COUNT(*) AS count FROM sessions")
+        .get() as { count: number };
+      expect(row.count).toBe(0);
+
+      const audioRoot = path.join(tmpDir, "data", "audio");
+      const audioEntries = fs.existsSync(audioRoot)
+        ? fs.readdirSync(audioRoot)
+        : [];
+      expect(audioEntries).toHaveLength(0);
     });
   });
 });
