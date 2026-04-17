@@ -50,7 +50,8 @@ export function useAudioDownloads({
           "ok" in result &&
           !result.ok
         ) {
-          throw new Error(result.error ?? "Download failed");
+          const failure = result as { ok: false; error?: string };
+          throw new Error(failure.error ?? "Download failed");
         }
         const list = await window.capty.getAudioDownloads();
         setAudioDownloads(list);
@@ -135,7 +136,7 @@ export function useAudioDownloads({
         const idx = prev.findIndex((d) => d.id === event.id);
         if (idx === -1) {
           // New download — reload full list
-          window.capty.getAudioDownloads().then((list) => {
+          window.capty.getAudioDownloads().then((list: DownloadItem[]) => {
             setAudioDownloads(list);
             setDownloadBadge(computeDownloadBadge(list));
           });
@@ -169,7 +170,7 @@ export function useAudioDownloads({
   // Load download list on mount + crash recovery
   useEffect(() => {
     if (needsSetup !== false) return; // DB not ready during setup wizard
-    window.capty.getAudioDownloads().then((list) => {
+    window.capty.getAudioDownloads().then((list: DownloadItem[]) => {
       setAudioDownloads(list);
       setDownloadBadge(computeDownloadBadge(list));
       const hasInterrupted = list.some((d) =>
@@ -183,7 +184,7 @@ export function useAudioDownloads({
   useEffect(() => {
     const cleanup = window.capty.onAudioDownloadRetryTrigger(({ url }) => {
       window.capty.downloadAudio(url).then(() => {
-        window.capty.getAudioDownloads().then((list) => {
+        window.capty.getAudioDownloads().then((list: DownloadItem[]) => {
           setAudioDownloads(list);
           setDownloadBadge(computeDownloadBadge(list));
         });

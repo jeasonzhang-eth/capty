@@ -151,6 +151,7 @@ function TranslateMenu({
         onMouseLeave={() => setShowLangSub(false)}
       >
         <button
+          data-testid="transcript-target-language"
           style={itemStyle}
           onMouseEnter={handleItemHover}
           onMouseLeave={(e) => {
@@ -382,6 +383,7 @@ function TranslateMenu({
       {/* 2. Translate / Re-translate / Stop */}
       {isTranslating ? (
         <button
+          data-testid="transcript-translate-action"
           onClick={() => {
             onStopTranslation?.();
           }}
@@ -403,6 +405,7 @@ function TranslateMenu({
         </button>
       ) : (
         <button
+          data-testid="transcript-translate-action"
           onClick={() => {
             onTranslate();
             onClose();
@@ -426,6 +429,7 @@ function TranslateMenu({
             }}
           />
           <button
+            data-testid="transcript-toggle-translation"
             onClick={() => {
               onToggleShow();
               onClose();
@@ -923,6 +927,7 @@ export function TranscriptArea({
                   />
                 )}
                 <button
+                  data-testid="transcript-translate-trigger"
                   onClick={() => setShowTranslateMenu((prev) => !prev)}
                   style={{
                     backgroundColor: "transparent",

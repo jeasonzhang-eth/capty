@@ -100,6 +100,13 @@ interface UseSessionManagementParams {
 
 const SAMPLE_RATE = 16000;
 
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  return view.buffer.slice(
+    view.byteOffset,
+    view.byteOffset + view.byteLength,
+  ) as ArrayBuffer;
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────
 
 export function useSessionManagement(params: UseSessionManagementParams) {
@@ -324,7 +331,7 @@ export function useSessionManagement(params: UseSessionManagementParams) {
       p.current.summary.setGenerateError(null);
       const segments = await window.capty.listSegments(sessionId);
       p.current.store.setSegments(
-        segments.map((s) => ({
+        segments.map((s: { id: number; start_time: number; end_time: number; text: string }) => ({
           id: s.id,
           start_time: s.start_time,
           end_time: s.end_time,
@@ -587,10 +594,7 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
           try {
             const result = await window.capty.asrTranscribe(
-              seg.data.buffer.slice(
-                seg.data.byteOffset,
-                seg.data.byteOffset + seg.data.byteLength,
-              ),
+              toArrayBuffer(seg.data),
               provider,
             );
 

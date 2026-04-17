@@ -42,6 +42,9 @@ function App(): React.JSX.Element {
     DEFAULT_HF_URL,
     historyPanelWidth,
     summaryPanelWidth,
+    isChangingDataDir,
+    dataDirChangeMessage,
+    dataDirChangeMessageKind,
     handleStartSidecar,
     handleStopSidecar,
     handleDeviceChange,
@@ -194,7 +197,6 @@ function App(): React.JSX.Element {
     translations,
     activeTranslationLang,
     setTranslations,
-    setActiveTranslationLang,
     handleTranslate,
     handleStopTranslation,
     handleLoadTranslations,
@@ -282,7 +284,7 @@ function App(): React.JSX.Element {
         console.error("Init error:", err);
       }
     };
-    init();
+    void init();
   }, [needsSetup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // No streaming partial text with HTTP-based transcription
@@ -564,6 +566,9 @@ function App(): React.JSX.Element {
           ttsDownloadingModelId={ttsDownloadingModelId}
           ttsDownloadProgress={ttsDownloadProgress}
           ttsDownloadError={ttsDownloadError}
+          isChangingDataDir={isChangingDataDir}
+          dataDirChangeMessage={dataDirChangeMessage}
+          dataDirChangeMessageKind={dataDirChangeMessageKind}
           onSaveTtsSettings={handleSaveTtsSettings}
           onSelectTtsModel={handleSelectTtsModel}
           onDownloadTtsModel={handleDownloadTtsModel}

@@ -1437,10 +1437,7 @@ function SummaryCard({
         return;
       }
 
-      const bytes =
-        buffer instanceof ArrayBuffer
-          ? new Uint8Array(buffer)
-          : new Uint8Array(buffer as unknown as ArrayBufferLike);
+      const bytes = new Uint8Array(buffer);
 
       if (!globalAudioCtx) {
         globalAudioCtx = new AudioContext();

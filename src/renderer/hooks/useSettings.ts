@@ -37,6 +37,13 @@ export function useSettings({ store, audioCapture }: UseSettingsParams) {
     DEFAULT_SUMMARY_WIDTH,
   );
   const [zoomFactor, setZoomFactor] = useState(1.0);
+  const [isChangingDataDir, setIsChangingDataDir] = useState(false);
+  const [dataDirChangeMessage, setDataDirChangeMessage] = useState<
+    string | null
+  >(null);
+  const [dataDirChangeMessageKind, setDataDirChangeMessageKind] = useState<
+    "success" | "error" | null
+  >(null);
   const layoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep store ref fresh for effects
@@ -94,9 +101,29 @@ export function useSettings({ store, audioCapture }: UseSettingsParams) {
   const handleChangeDataDir = useCallback(async () => {
     const dir = await window.capty.selectDirectory();
     if (dir) {
-      const config = await window.capty.getConfig();
-      await window.capty.setConfig({ ...config, dataDir: dir });
-      storeRef.current.setDataDir(dir);
+      setDataDirChangeMessage(null);
+      setDataDirChangeMessageKind(null);
+      setIsChangingDataDir(true);
+      try {
+        const result = await window.capty.changeDataDir(dir);
+        storeRef.current.setDataDir(dir);
+        setDataDirChangeMessage(
+          result.migrated
+            ? "Data copied to the new directory. The previous directory was left unchanged."
+            : "Data directory updated.",
+        );
+        setDataDirChangeMessageKind("success");
+      } catch (err) {
+        console.error("Failed to change data directory:", err);
+        setDataDirChangeMessage(
+          err instanceof Error
+            ? err.message
+            : "Failed to change data directory.",
+        );
+        setDataDirChangeMessageKind("error");
+      } finally {
+        setIsChangingDataDir(false);
+      }
     }
   }, []);
 
@@ -284,6 +311,9 @@ export function useSettings({ store, audioCapture }: UseSettingsParams) {
     historyPanelWidth,
     summaryPanelWidth,
     zoomFactor,
+    isChangingDataDir,
+    dataDirChangeMessage,
+    dataDirChangeMessageKind,
     handleStartSidecar,
     handleStopSidecar,
     handleDeviceChange,

@@ -958,6 +958,7 @@ export function HistoryPanel({
               <span>{formatDuration(session.duration_seconds)}</span>
               {session.status === "completed" && (
                 <button
+                  data-testid={`session-play-toggle-${session.id}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (playingSessionId === session.id) {
@@ -1118,6 +1119,7 @@ export function HistoryPanel({
         }}
       >
         <button
+          data-testid="history-upload-audio"
           onClick={onUploadAudio}
           style={{
             width: "100%",
@@ -1175,6 +1177,7 @@ export function HistoryPanel({
         }}
       >
         <button
+          data-testid="history-download-audio"
           onClick={onDownloadAudio}
           style={{
             width: "100%",

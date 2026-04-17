@@ -16,6 +16,13 @@ interface AsrProvider {
   readonly model: string;
 }
 
+function toArrayBuffer(view: Int16Array): ArrayBuffer {
+  return view.buffer.slice(
+    view.byteOffset,
+    view.byteOffset + view.byteLength,
+  ) as ArrayBuffer;
+}
+
 /**
  * Unified HTTP-based transcription hook.
  *
@@ -83,7 +90,7 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
 
     // Fire-and-forget HTTP POST via IPC
     window.capty
-      .asrTranscribe(merged.buffer as ArrayBuffer, {
+      .asrTranscribe(toArrayBuffer(merged), {
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey,
         model: provider.model,
@@ -138,7 +145,7 @@ export function useTranscription(callbacks: TranscriptionCallbacks = {}) {
       const capturedEnd = endTime;
 
       return window.capty
-        .asrTranscribe(merged.buffer as ArrayBuffer, {
+        .asrTranscribe(toArrayBuffer(merged), {
           baseUrl: provider.baseUrl,
           apiKey: provider.apiKey,
           model: provider.model,

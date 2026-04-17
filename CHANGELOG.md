@@ -27,6 +27,16 @@ All notable changes to Capty are documented in this file.
 
 - Audio import (`audio:import-file`): session row was being created BEFORE the WAV conversion ran, leaving an empty/incomplete session in the DB if ffmpeg failed. Now creates the session only after conversion succeeds; if any step after session creation fails, the partial session is deleted. Paired with new test coverage in `tests/main/handlers/audio-handlers.test.ts`.
 
+### Added
+
+- Settings → Data directory: async change flow with in-progress spinner and explicit success / error message. Now uses the dedicated `app:change-data-dir` IPC (which validates the path and migrates contents) instead of writing `config.dataDir` directly. Error from the main process is surfaced verbatim to the user.
+- `ModelCard` now receives its `category` so the Settings model market can render the correct per-category badge.
+
+### Changed
+
+- `useTranscription`: slice the merged `Int16Array` with `view.buffer.slice(byteOffset, byteOffset + byteLength)` before handing it to the ASR IPC. Guards against `SharedArrayBuffer` backing and avoids sending the full allocation when the view is a subrange.
+- Various component prop threading so `App.tsx` can expose data-dir change UX state to `SettingsModal`.
+
 ### Test
 
 - Expand unit coverage: `database.test.ts` +8 tests (reorder, translations, summaries, delete, migration, download CRUD); `sidecar-handlers.test.ts` +1 test (port change reflected on subsequent calls); new `tests/preload/index.test.ts` covering the preload IPC bridge surface.
