@@ -10,6 +10,10 @@ export interface MockLlmServerOptions {
   readonly words?: string[];
   /** Delay in ms between each chunk. Default: 200. */
   readonly chunkDelayMs?: number;
+  /** Content to return for non-streaming chat completions. */
+  readonly nonStreamingContent?: string;
+  /** Delay in ms before returning non-streaming chat completions. */
+  readonly nonStreamingDelayMs?: number;
 }
 
 const DEFAULT_WORDS = ["The", "quick", "brown", "fox", "jumps"];
@@ -18,22 +22,46 @@ export class MockLlmServer {
   private server: http.Server | null = null;
   private readonly words: string[];
   private readonly chunkDelayMs: number;
+  private readonly nonStreamingContent: string;
+  private readonly nonStreamingDelayMs: number;
 
   constructor(opts: MockLlmServerOptions = {}) {
     this.words = opts.words ?? DEFAULT_WORDS;
     this.chunkDelayMs = opts.chunkDelayMs ?? 200;
+    this.nonStreamingContent = opts.nonStreamingContent ?? "Translated text";
+    this.nonStreamingDelayMs = opts.nonStreamingDelayMs ?? 0;
   }
 
   /** Start the server on a random port. Returns the port number. */
   async start(): Promise<number> {
     return new Promise((resolve) => {
-      this.server = http.createServer((req, res) => {
-        if (req.method === "POST" && req.url?.includes("/chat/completions")) {
-          this.handleStream(res);
-        } else {
+      this.server = http.createServer(async (req, res) => {
+        if (!(req.method === "POST" && req.url?.includes("/chat/completions"))) {
           res.writeHead(404);
           res.end();
+          return;
         }
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+
+        let body: { stream?: boolean } = {};
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as {
+            stream?: boolean;
+          };
+        } catch {
+          body = {};
+        }
+
+        if (body.stream === false) {
+          this.handleNonStreaming(res);
+          return;
+        }
+
+        this.handleStream(res);
       });
 
       this.server.listen(0, "127.0.0.1", () => {
@@ -79,5 +107,33 @@ export class MockLlmServer {
     };
 
     send();
+  }
+
+  private handleNonStreaming(res: http.ServerResponse): void {
+    const respond = () => {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+      });
+      res.end(
+        JSON.stringify({
+          id: "mock-response",
+          object: "chat.completion",
+          model: "mock-model",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: this.nonStreamingContent },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
+    };
+
+    if (this.nonStreamingDelayMs > 0) {
+      setTimeout(respond, this.nonStreamingDelayMs);
+    } else {
+      respond();
+    }
   }
 }

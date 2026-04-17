@@ -41,6 +41,7 @@ import {
   register,
   killSidecar,
 } from "../../../src/main/handlers/sidecar-handlers";
+import { readConfig } from "../../../src/main/config";
 
 const mockDeps = {
   db: {} as any,
@@ -100,6 +101,22 @@ describe("sidecar-handlers", () => {
       const handler = handlers.get("sidecar:get-url")!;
       const result = handler();
       expect(result).toBe("http://localhost:8765");
+    });
+
+    it("reflects config port changes across calls", () => {
+      vi.mocked(readConfig)
+        .mockReturnValueOnce({
+          dataDir: "/tmp/test-data",
+          sidecar: { port: 8765 },
+        } as any)
+        .mockReturnValueOnce({
+          dataDir: "/tmp/test-data",
+          sidecar: { port: 9999 },
+        } as any);
+
+      const handler = handlers.get("sidecar:get-url")!;
+      expect(handler()).toBe("http://localhost:8765");
+      expect(handler()).toBe("http://localhost:9999");
     });
   });
 

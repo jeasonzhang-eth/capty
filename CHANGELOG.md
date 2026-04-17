@@ -27,6 +27,12 @@ All notable changes to Capty are documented in this file.
 
 - Audio import (`audio:import-file`): session row was being created BEFORE the WAV conversion ran, leaving an empty/incomplete session in the DB if ffmpeg failed. Now creates the session only after conversion succeeds; if any step after session creation fails, the partial session is deleted. Paired with new test coverage in `tests/main/handlers/audio-handlers.test.ts`.
 
+### Test
+
+- Expand unit coverage: `database.test.ts` +8 tests (reorder, translations, summaries, delete, migration, download CRUD); `sidecar-handlers.test.ts` +1 test (port change reflected on subsequent calls); new `tests/preload/index.test.ts` covering the preload IPC bridge surface.
+- Add 7 E2E smoke specs under `tests/e2e/smoke/`: download-manager-dialog, download-manager-flow, history-session-management, playback-settings-behavior, settings-persistence, setup-persistence, summary-transcript-behavior. Extend `mock-llm-server.ts` to stream richer SSE shapes needed by these specs.
+- New sidecar test `sidecar/tests/test_model_registry.py`. Add top-level `pyproject.toml` so `pytest` can run from repo root.
+
 ## 2026-04-16
 
 ### Changed
