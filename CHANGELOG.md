@@ -18,6 +18,11 @@ All notable changes to Capty are documented in this file.
 - Renderer: centralize `window.capty` typing in `src/renderer/global.d.ts` by inferring from `typeof api` in `preload/index.ts`. Drops the 160-line hand-written interface that lived inline at the top of `useSession.ts`, eliminating drift between preload and renderer.
 - Store (`appStore.ts`): accept `readonly` array inputs for setters and defensively copy with spread before storing. Prevents callers from retaining aliases to mutable internal state.
 
+### Added
+
+- Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
+- Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
+
 ## 2026-04-16
 
 ### Changed
