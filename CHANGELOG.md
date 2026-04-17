@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## [0.2.0] - 2026-04-18
 
+### Docs
+
+- Add design doc and brainstorming transcript for sidecar packaging refactor (uv-based build + notarization scaffold) under `docs/superpowers/specs/`.
+
 ### Security
 
 - Restore `BLOCKED_KEYS` in `config:set` IPC after the 04-16 hooks refactor silently dropped them. Re-blocks `dataDir`, `hfMirrorUrl`, `sidecar`, `modelRegistryUrl` from renderer-initiated writes (would have enabled SSRF via `hfMirrorUrl` and arbitrary directory writes via `dataDir`).
