@@ -87,7 +87,9 @@ def _validate_file_path(file_path: str, data_dir: str) -> Path:
     """Validate that file_path is under the allowed data_dir."""
     resolved = Path(file_path).resolve()
     allowed = Path(data_dir).resolve()
-    if not str(resolved).startswith(str(allowed)):
+    try:
+        resolved.relative_to(allowed)
+    except ValueError:
         raise HTTPException(
             status_code=403,
             detail="Access denied: path outside allowed directory",

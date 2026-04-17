@@ -10,6 +10,7 @@ All notable changes to Capty are documented in this file.
 - Add dedicated `config:set-hf-mirror` IPC taking a boolean toggle, so the renderer cannot inject arbitrary URLs into `hfMirrorUrl` (prevents SSRF in model-download `fetch()` calls).
 - Replace `execSync` with `execFileSync` in `findSidecarPidsOnPort` and validate `port` is an integer in `[1, 65535]`. Prevents shell injection via a malicious `config.sidecar.port` string.
 - Add path-containment guard to `app:change-data-dir` and `app:init-data-dir`: reject non-absolute paths and anything outside `os.homedir()`. Prevents renderer-driven arbitrary directory writes (e.g. `/`, `/etc/capty`).
+- Sidecar `_validate_file_path`: switch `startswith()` prefix check to `Path.relative_to()`. The prior string-prefix check was bypassable via sibling directories sharing a common prefix (e.g. `/data/...` vs `/data-evil/outside.wav`). Covered by `tests/test_server.py::test_decode_audio_rejects_sibling_prefix_path`.
 
 ## 2026-04-16
 
