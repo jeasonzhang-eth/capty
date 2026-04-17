@@ -99,10 +99,7 @@ describe("config-handlers", () => {
       expect((config as any).__testKey).toBe("hello");
     });
 
-    it("blocks security-sensitive keys (dataDir, hfMirrorUrl, sidecar, modelRegistryUrl)", () => {
-      // These keys have dedicated IPCs with validation. Letting config:set
-      // write them would enable SSRF (hfMirrorUrl), arbitrary directory
-      // writes (dataDir), and shell injection via sidecar.port.
+    it("hard-blocks dataDir and modelRegistryUrl", () => {
       const configDir = fs.mkdtempSync(
         path.join(os.tmpdir(), "capty-config-handlers-"),
       );
@@ -113,20 +110,83 @@ describe("config-handlers", () => {
 
       setHandler({} as any, {
         dataDir: "/tmp/capty-data",
-        hfMirrorUrl: "https://hf-mirror.com",
-        sidecar: { port: "8765; evil" },
         modelRegistryUrl: "https://attacker.example/registry.json",
-        // A non-blocked key should still pass through.
         zoomFactor: 1.25,
       });
       const config = getHandler({} as any);
 
       expect((config as any).dataDir).toBeFalsy();
-      expect((config as any).hfMirrorUrl).toBeFalsy();
-      // sidecar keeps its default (not overwritten with the malicious port).
-      expect((config as any).sidecar?.port).not.toBe("8765; evil");
       expect((config as any).modelRegistryUrl).toBeFalsy();
       expect((config as any).zoomFactor).toBe(1.25);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it("sanitizes hfMirrorUrl — allows https, rejects javascript: / file: / http:", () => {
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      // Valid https URL persists.
+      setHandler({} as any, { hfMirrorUrl: "https://hf-mirror.com/custom" });
+      expect((getHandler({} as any) as any).hfMirrorUrl).toBe(
+        "https://hf-mirror.com/custom",
+      );
+
+      // null (disabling the mirror) persists.
+      setHandler({} as any, { hfMirrorUrl: null });
+      expect((getHandler({} as any) as any).hfMirrorUrl).toBeNull();
+
+      // Malicious schemes are dropped (previous value stays).
+      setHandler({} as any, { hfMirrorUrl: "https://good.example" });
+      for (const bad of [
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "http://plain-http.example",
+        "not a url",
+        123,
+        { evil: true },
+      ]) {
+        setHandler({} as any, { hfMirrorUrl: bad });
+        expect((getHandler({} as any) as any).hfMirrorUrl).toBe(
+          "https://good.example",
+        );
+      }
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it("sanitizes sidecar — keeps autoStart/port, strips malicious fields", () => {
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      // Valid shape persists.
+      setHandler({} as any, { sidecar: { autoStart: false, port: 9999 } });
+      expect((getHandler({} as any) as any).sidecar).toEqual({
+        autoStart: false,
+        port: 9999,
+      });
+
+      // Malicious port string is dropped; autoStart is preserved.
+      setHandler({} as any, {
+        sidecar: { autoStart: true, port: "8765; rm -rf" },
+      });
+      const after = (getHandler({} as any) as any).sidecar;
+      expect(after.autoStart).toBe(true);
+      expect(after.port).toBeUndefined();
+
+      // Out-of-range port is dropped.
+      setHandler({} as any, { sidecar: { port: 99999 } });
+      expect((getHandler({} as any) as any).sidecar.port).toBeUndefined();
 
       fs.rmSync(configDir, { recursive: true, force: true });
     });

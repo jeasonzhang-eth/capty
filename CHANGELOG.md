@@ -44,6 +44,11 @@ All notable changes to Capty are documented in this file.
 - New sidecar test `sidecar/tests/test_model_registry.py`. Add top-level `pyproject.toml` so `pytest` can run from repo root.
 - `database.test.ts` `migrateUtcToLocal` assertion: make TZ-aware. In UTC the local-time path equals the original path, so no filesystem rename is recorded — CI (runs in UTC) used to fail on the stale expectation of a single-entry rename array.
 
+### Security
+
+- `config:set`: replace blanket BLOCKED_KEYS for `hfMirrorUrl` / `sidecar` with per-value sanitizers. `hfMirrorUrl` must parse as an `https:` URL (blocks `javascript:`, `file:`, `http:`, data:, etc.); `sidecar` is shape-checked to `{autoStart?: boolean, port?: int[1,65535]}` and unknown sub-fields are dropped. `dataDir` and `modelRegistryUrl` stay hard-blocked since they have dedicated IPCs / no legitimate writer.
+- `app:change-data-dir` / `app:init-data-dir`: replace home-directory containment with a system-directory blacklist (`/etc`, `/usr`, `/bin`, `/sbin`, `/boot`, `/dev`, `/proc`, `/sys`, `/root`, `/System`, `/Library`, and `/`). The home-only check rejected legitimate paths like `/tmp/*` on Linux and `/Volumes/*` on macOS.
+
 ## 2026-04-16
 
 ### Changed

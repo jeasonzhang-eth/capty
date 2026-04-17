@@ -5,8 +5,7 @@ import {
   shell,
   systemPreferences,
 } from "electron";
-import { join, isAbsolute, resolve as pathResolve, relative } from "path";
-import os from "os";
+import { join, isAbsolute, resolve as pathResolve } from "path";
 import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
@@ -17,6 +16,43 @@ import {
   killSidecar,
 } from "./ipc-handlers";
 import { repairWavHeaders } from "./audio-files";
+
+// System directories that must never become the Capty data dir. A plain
+// absolute-path check is not enough — `/etc/capty` looks absolute — and a
+// strict "inside home" check is too tight (tmp dirs on Linux live under
+// `/tmp`, which is outside the user's home). Instead, reject a concrete
+// list of OS / package manager / boot paths.
+const FORBIDDEN_ROOTS = [
+  "/etc",
+  "/usr",
+  "/bin",
+  "/sbin",
+  "/boot",
+  "/dev",
+  "/proc",
+  "/sys",
+  "/root",
+  "/System",
+  "/Library",
+];
+
+function assertSafeDataDir(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("Data directory cannot be empty");
+  }
+  const resolved = pathResolve(trimmed);
+  if (!isAbsolute(resolved)) {
+    throw new Error("Data directory must be an absolute path");
+  }
+  if (
+    resolved === "/" ||
+    FORBIDDEN_ROOTS.some((r) => resolved === r || resolved.startsWith(r + "/"))
+  ) {
+    throw new Error("Data directory cannot be a system directory");
+  }
+  return resolved;
+}
 import Database from "better-sqlite3";
 
 let mainWindow: BrowserWindow | null = null;
@@ -197,18 +233,7 @@ app.whenReady().then(() => {
   // 5. Called by SetupWizard after saving dataDir to config.
   //    Initializes DB in-process without relaunch.
   ipcMain.handle("app:init-data-dir", (_event, newDataDir: string) => {
-    const trimmed = newDataDir.trim();
-    if (!trimmed) {
-      throw new Error("Data directory cannot be empty");
-    }
-    const resolved = pathResolve(trimmed);
-    if (!isAbsolute(resolved)) {
-      throw new Error("Data directory must be an absolute path");
-    }
-    const rel = relative(os.homedir(), resolved);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error("Data directory must be inside the user home directory");
-    }
+    const resolved = assertSafeDataDir(newDataDir);
     const current = readConfig(configDir);
     if (current.dataDir !== resolved) {
       writeConfig(configDir, { ...current, dataDir: resolved });
@@ -218,22 +243,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("app:change-data-dir", (_event, newDataDir: string) => {
-    const trimmed = newDataDir.trim();
-    if (!trimmed) {
-      throw new Error("Data directory cannot be empty");
-    }
-    // Containment: reject non-absolute paths and anything outside the user's
-    // home directory. Prevents renderer-driven arbitrary filesystem writes
-    // (e.g. "/", "/etc/capty", "../../..").
-    const resolved = pathResolve(trimmed);
-    if (!isAbsolute(resolved)) {
-      throw new Error("Data directory must be an absolute path");
-    }
-    const home = os.homedir();
-    const rel = relative(home, resolved);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error("Data directory must be inside the user home directory");
-    }
+    const resolved = assertSafeDataDir(newDataDir);
 
     const current = readConfig(configDir);
     const previousDataDir = current.dataDir;

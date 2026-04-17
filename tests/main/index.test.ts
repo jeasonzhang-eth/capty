@@ -202,7 +202,7 @@ describe("main/index", () => {
     expect(handler).toBeDefined();
     expect(setup.mocks.createDatabaseMock).not.toHaveBeenCalled();
 
-    const dataDir = path.join(os.homedir(), ".capty-test-data");
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "capty-init-"));
     handler!({} as any, dataDir);
 
     expect(setup.getConfigState().dataDir).toBe(dataDir);
@@ -213,34 +213,40 @@ describe("main/index", () => {
 
     handler!({} as any, dataDir);
     expect(setup.mocks.createDatabaseMock).toHaveBeenCalledTimes(1);
+
+    fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  it("app:init-data-dir rejects paths outside the home directory", async () => {
+  it("app:init-data-dir rejects system directories", async () => {
     const setup = await setupMainIndex();
     const handler = setup.handlers.get("app:init-data-dir");
-    expect(() => handler!({} as any, "/tmp/escape")).toThrow(/home directory/);
-    expect(() => handler!({} as any, "/etc/capty")).toThrow(/home directory/);
+    expect(() => handler!({} as any, "/")).toThrow(/system directory/);
+    expect(() => handler!({} as any, "/etc/capty")).toThrow(/system directory/);
+    expect(() => handler!({} as any, "/usr/local/evil")).toThrow(
+      /system directory/,
+    );
     expect(() => handler!({} as any, "")).toThrow(/empty/);
   });
 
-  it("app:change-data-dir rejects paths outside the home directory", async () => {
+  it("app:change-data-dir rejects system directories", async () => {
+    const existingDir = fs.mkdtempSync(path.join(os.tmpdir(), "capty-ex-"));
     const setup = await setupMainIndex({
-      config: { dataDir: path.join(os.homedir(), ".capty-existing") },
+      config: { dataDir: existingDir },
       createDatabaseResults: [{ close: vi.fn() }],
     });
     const handler = setup.handlers.get("app:change-data-dir");
-    expect(() => handler!({} as any, "/")).toThrow(/home directory/);
-    expect(() => handler!({} as any, "/etc/capty")).toThrow(/home directory/);
+    expect(() => handler!({} as any, "/")).toThrow(/system directory/);
+    expect(() => handler!({} as any, "/etc/capty")).toThrow(/system directory/);
     expect(() => handler!({} as any, "")).toThrow(/empty/);
+    fs.rmSync(existingDir, { recursive: true, force: true });
   });
 
   it("app:change-data-dir rolls back config and restores db when re-init fails", async () => {
-    // Path guard requires dirs inside os.homedir() — os.tmpdir() isn't on mac.
     const oldDataDir = fs.mkdtempSync(
-      path.join(os.homedir(), ".capty-main-index-old-data-"),
+      path.join(os.tmpdir(), "capty-main-index-old-data-"),
     );
     const newDataDir = fs.mkdtempSync(
-      path.join(os.homedir(), ".capty-main-index-new-data-"),
+      path.join(os.tmpdir(), "capty-main-index-new-data-"),
     );
     fs.rmSync(newDataDir, { recursive: true, force: true });
     fs.writeFileSync(path.join(oldDataDir, "marker.txt"), "keep-me");
@@ -289,7 +295,7 @@ describe("main/index", () => {
   });
 
   it("app:change-data-dir returns no-op when target matches current dir", async () => {
-    const currentDir = path.join(os.homedir(), ".capty-current-data-dir");
+    const currentDir = path.join(os.tmpdir(), "capty-current-data-dir");
     const setup = await setupMainIndex({
       config: { dataDir: currentDir },
       createDatabaseResults: [{ close: vi.fn() }],
