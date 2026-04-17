@@ -42,6 +42,7 @@ All notable changes to Capty are documented in this file.
 - Expand unit coverage: `database.test.ts` +8 tests (reorder, translations, summaries, delete, migration, download CRUD); `sidecar-handlers.test.ts` +1 test (port change reflected on subsequent calls); new `tests/preload/index.test.ts` covering the preload IPC bridge surface.
 - Add 7 E2E smoke specs under `tests/e2e/smoke/`: download-manager-dialog, download-manager-flow, history-session-management, playback-settings-behavior, settings-persistence, setup-persistence, summary-transcript-behavior. Extend `mock-llm-server.ts` to stream richer SSE shapes needed by these specs.
 - New sidecar test `sidecar/tests/test_model_registry.py`. Add top-level `pyproject.toml` so `pytest` can run from repo root.
+- `database.test.ts` `migrateUtcToLocal` assertion: make TZ-aware. In UTC the local-time path equals the original path, so no filesystem rename is recorded — CI (runs in UTC) used to fail on the stale expectation of a single-entry rename array.
 
 ## 2026-04-16
 
