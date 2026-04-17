@@ -15,6 +15,7 @@ All notable changes to Capty are documented in this file.
 ### Changed
 
 - Sidecar: move `import mlx.core` out of module scope into lazy helpers (`_clear_mlx_cache`, `_get_mlx_core`, `_ensure_mlx_initialized`). Keeps import-time side-effects off CI / non-Apple environments; MLX cache limit still applied on first real use.
+- Renderer: centralize `window.capty` typing in `src/renderer/global.d.ts` by inferring from `typeof api` in `preload/index.ts`. Drops the 160-line hand-written interface that lived inline at the top of `useSession.ts`, eliminating drift between preload and renderer.
 
 ## 2026-04-16
 

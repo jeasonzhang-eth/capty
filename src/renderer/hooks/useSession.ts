@@ -1,170 +1,5 @@
 import { useState, useCallback, useRef } from "react";
 
-declare global {
-  interface Window {
-    capty: {
-      createSession: (modelName: string) => Promise<number>;
-      listSessions: () => Promise<unknown[]>;
-      getSession: (id: number) => Promise<unknown>;
-      updateSession: (
-        id: number,
-        fields: Record<string, unknown>,
-      ) => Promise<void>;
-      deleteSession: (id: number) => Promise<void>;
-      addSegment: (opts: Record<string, unknown>) => Promise<number>;
-      listSegments: (sessionId: number) => Promise<
-        {
-          id: number;
-          session_id: number;
-          start_time: number;
-          end_time: number;
-          text: string;
-        }[]
-      >;
-      saveSegmentAudio: (
-        sessionDir: string,
-        segmentIndex: number,
-        pcmData: ArrayBuffer,
-      ) => Promise<void>;
-      saveFullAudio: (
-        sessionDir: string,
-        pcmData: ArrayBuffer,
-        fileName?: string,
-      ) => Promise<void>;
-      openAudioStream: (sessionDir: string, fileName: string) => Promise<void>;
-      appendAudioStream: (pcmData: ArrayBuffer) => Promise<void>;
-      closeAudioStream: () => Promise<void>;
-      exportTxt: (
-        sessionId: number,
-        opts: Record<string, unknown>,
-      ) => Promise<string>;
-      exportSrt: (sessionId: number) => Promise<string>;
-      exportMarkdown: (sessionId: number) => Promise<string>;
-      downloadModel: (repo: string, destDir: string) => Promise<void>;
-      onDownloadProgress: (
-        callback: (progress: {
-          downloaded: number;
-          total: number;
-          percent: number;
-        }) => void,
-      ) => () => void;
-      getConfig: () => Promise<Record<string, unknown>>;
-      setConfig: (config: Record<string, unknown>) => Promise<void>;
-      getSidecarUrl: () => Promise<string>;
-      checkSidecarHealth: () => Promise<{
-        online: boolean;
-        [key: string]: unknown;
-      }>;
-      asrTranscribe: (
-        pcmData: ArrayBuffer,
-        provider: { baseUrl: string; apiKey: string; model: string },
-      ) => Promise<{ text: string }>;
-      asrTest: (provider: {
-        baseUrl: string;
-        apiKey: string;
-        model: string;
-      }) => Promise<{ success: boolean }>;
-      asrFetchModels: (provider: {
-        baseUrl: string;
-        apiKey: string;
-      }) => Promise<Array<{ id: string; name: string }>>;
-      listModels: () => Promise<unknown[]>;
-      searchModels: (query: string) => Promise<unknown[]>;
-      deleteModel: (modelId: string) => Promise<void>;
-      saveModelMeta: (
-        modelId: string,
-        meta: Record<string, unknown>,
-      ) => Promise<void>;
-      deleteSegments: (sessionId: number) => Promise<void>;
-      setZoomFactor: (factor: number) => Promise<void>;
-      getZoomFactor: () => Promise<number>;
-      saveLayout: (opts: {
-        historyPanelWidth?: number;
-        summaryPanelWidth?: number;
-      }) => Promise<void>;
-      readAudioFile: (sessionId: number) => Promise<ArrayBuffer | null>;
-      getAudioDir: (sessionId: number) => Promise<string | null>;
-      getDataDir: () => Promise<string | null>;
-      getConfigDir: () => Promise<string>;
-      selectDirectory: () => Promise<string | null>;
-      openConfigDir: () => Promise<void>;
-      openAudioFolder: (sessionId: number) => Promise<void>;
-      importAudio: () => Promise<{
-        sessionId: number;
-        timestamp: string;
-        audioPath: string;
-      } | null>;
-      transcribeFile: (
-        filePath: string,
-        provider: { baseUrl: string; apiKey: string; model: string },
-      ) => Promise<{ text: string }>;
-      checkDependencies: () => Promise<
-        Array<{ name: string; installed: boolean; version: string | null }>
-      >;
-      saveFile: (
-        defaultName: string,
-        content: string,
-      ) => Promise<string | null>;
-      testLlmProvider: (provider: {
-        baseUrl: string;
-        apiKey: string;
-        model: string;
-      }) => Promise<{ success: boolean; model: string }>;
-      summarize: (
-        sessionId: number,
-        providerId: string,
-        promptType: string,
-      ) => Promise<{
-        id: number;
-        session_id: number;
-        content: string;
-        model_name: string;
-        provider_id: string;
-        prompt_type: string;
-        created_at: string;
-      }>;
-      onSummaryChunk: (
-        callback: (data: {
-          content: string;
-          done: boolean;
-          promptType: string;
-        }) => void,
-      ) => () => void;
-      listSummaries: (
-        sessionId: number,
-        promptType?: string,
-      ) => Promise<
-        {
-          id: number;
-          session_id: number;
-          content: string;
-          model_name: string;
-          provider_id: string;
-          prompt_type: string;
-          created_at: string;
-        }[]
-      >;
-      deleteSummary: (summaryId: number) => Promise<void>;
-      listPromptTypes: () => Promise<
-        {
-          id: string;
-          label: string;
-          systemPrompt: string;
-          isBuiltin: boolean;
-        }[]
-      >;
-      savePromptTypes: (
-        types: {
-          id: string;
-          label: string;
-          systemPrompt: string;
-          isBuiltin: boolean;
-        }[],
-      ) => Promise<void>;
-    };
-  }
-}
-
 interface SessionState {
   readonly isRecording: boolean;
   readonly currentSessionId: number | null;
@@ -173,6 +8,15 @@ interface SessionState {
 
 /** How often to flush buffered audio to disk (ms). */
 const FLUSH_INTERVAL_MS = 2000;
+
+function toArrayBuffer(
+  view: Int16Array | Uint8Array,
+): ArrayBuffer {
+  return view.buffer.slice(
+    view.byteOffset,
+    view.byteOffset + view.byteLength,
+  ) as ArrayBuffer;
+}
 
 export function useSession() {
   const [state, setState] = useState<SessionState>({
@@ -202,7 +46,7 @@ export function useSession() {
       offset += buf.length;
     }
 
-    return window.capty.appendAudioStream(merged.buffer as ArrayBuffer);
+    return window.capty.appendAudioStream(toArrayBuffer(merged));
   }, []);
 
   const startSession = useCallback(
@@ -265,7 +109,7 @@ export function useSession() {
       await window.capty.saveSegmentAudio(
         sessionDirRef.current,
         segmentIndex,
-        pcmData.buffer as ArrayBuffer,
+        toArrayBuffer(pcmData),
       );
 
       setState((prev) => ({ ...prev, segmentCount: prev.segmentCount + 1 }));
