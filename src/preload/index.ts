@@ -46,6 +46,8 @@ const api = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   setConfig: (config: Record<string, unknown>) =>
     ipcRenderer.invoke("config:set", config),
+  setHfMirror: (enabled: boolean) =>
+    ipcRenderer.invoke("config:set-hf-mirror", enabled),
 
   // Sidecar
   getSidecarUrl: () => ipcRenderer.invoke("sidecar:get-url"),
@@ -105,6 +107,11 @@ const api = {
 
   // App
   getDataDir: () => ipcRenderer.invoke("app:get-data-dir"),
+  changeDataDir: (dataDir: string) =>
+    ipcRenderer.invoke("app:change-data-dir", dataDir) as Promise<{
+      changed: boolean;
+      migrated: boolean;
+    }>,
   getDefaultDataDir: () =>
     ipcRenderer.invoke("config:get-default-data-dir") as Promise<string>,
   initDataDir: (dataDir: string) =>
@@ -414,6 +421,7 @@ const api = {
       content: string;
       done: boolean;
       promptType: string;
+      sessionId: number;
     }) => void,
   ) => {
     const handler = (_event: any, data: any) => callback(data);
@@ -520,7 +528,6 @@ if (process.contextIsolated) {
     console.error("Failed to expose capty API:", error);
   }
 } else {
-  // @ts-expect-error fallback for non-isolated context
   window.capty = api;
 }
 

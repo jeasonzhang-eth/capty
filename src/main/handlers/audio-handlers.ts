@@ -262,29 +262,47 @@ export function register(deps: IpcDeps): void {
       suffix++;
     }
 
-    // 5. Create session with deduplicated path
-    const sessionId = createSession(db, {
-      modelName: "imported",
-      category: "download",
-    });
-    updateSession(db, sessionId, {
-      audioPath: finalTimestamp,
-      title: readableTimestamp,
-      startedAt: readableTimestamp,
-    });
-    fs.mkdirSync(sessionDir, { recursive: true });
-    const destPath = join(sessionDir, `${finalTimestamp}.wav`);
-    await convertToWav(filePath, destPath);
+    let sessionId: number | null = null;
+    try {
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const destPath = join(sessionDir, `${finalTimestamp}.wav`);
+      await convertToWav(filePath, destPath);
 
-    // 6. Calculate duration from WAV and update session
-    const wavStat = fs.statSync(destPath);
-    const pcmBytes = wavStat.size - 44; // 44-byte WAV header
-    const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
-    updateSession(db, sessionId, {
-      status: "completed",
-      durationSeconds,
-    });
+      // 5. Create session only after conversion succeeds.
+      sessionId = createSession(db, {
+        modelName: "imported",
+        category: "download",
+      });
+      updateSession(db, sessionId, {
+        audioPath: finalTimestamp,
+        title: readableTimestamp,
+        startedAt: readableTimestamp,
+      });
 
-    return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
+      // 6. Calculate duration from WAV and update session
+      const wavStat = fs.statSync(destPath);
+      const pcmBytes = wavStat.size - 44; // 44-byte WAV header
+      const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
+      updateSession(db, sessionId, {
+        status: "completed",
+        durationSeconds,
+      });
+
+      return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
+    } catch (err) {
+      if (sessionId !== null) {
+        try {
+          db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      try {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+      throw err;
+    }
   });
 }

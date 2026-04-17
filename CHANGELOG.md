@@ -2,6 +2,65 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-18
+
+### Security
+
+- Restore `BLOCKED_KEYS` in `config:set` IPC after the 04-16 hooks refactor silently dropped them. Re-blocks `dataDir`, `hfMirrorUrl`, `sidecar`, `modelRegistryUrl` from renderer-initiated writes (would have enabled SSRF via `hfMirrorUrl` and arbitrary directory writes via `dataDir`).
+- Add dedicated `config:set-hf-mirror` IPC taking a boolean toggle, so the renderer cannot inject arbitrary URLs into `hfMirrorUrl` (prevents SSRF in model-download `fetch()` calls).
+- Replace `execSync` with `execFileSync` in `findSidecarPidsOnPort` and validate `port` is an integer in `[1, 65535]`. Prevents shell injection via a malicious `config.sidecar.port` string.
+- Add path-containment guard to `app:change-data-dir` and `app:init-data-dir`: reject non-absolute paths and anything outside `os.homedir()`. Prevents renderer-driven arbitrary directory writes (e.g. `/`, `/etc/capty`).
+- Sidecar `_validate_file_path`: switch `startswith()` prefix check to `Path.relative_to()`. The prior string-prefix check was bypassable via sibling directories sharing a common prefix (e.g. `/data/...` vs `/data-evil/outside.wav`). Covered by `tests/test_server.py::test_decode_audio_rejects_sibling_prefix_path`.
+
+### Changed
+
+- Sidecar: move `import mlx.core` out of module scope into lazy helpers (`_clear_mlx_cache`, `_get_mlx_core`, `_ensure_mlx_initialized`). Keeps import-time side-effects off CI / non-Apple environments; MLX cache limit still applied on first real use.
+- Renderer: centralize `window.capty` typing in `src/renderer/global.d.ts` by inferring from `typeof api` in `preload/index.ts`. Drops the 160-line hand-written interface that lived inline at the top of `useSession.ts`, eliminating drift between preload and renderer.
+- Store (`appStore.ts`): accept `readonly` array inputs for setters and defensively copy with spread before storing. Prevents callers from retaining aliases to mutable internal state.
+
+### Added
+
+- Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
+- Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
+
+### Fixed
+
+- Audio import (`audio:import-file`): session row was being created BEFORE the WAV conversion ran, leaving an empty/incomplete session in the DB if ffmpeg failed. Now creates the session only after conversion succeeds; if any step after session creation fails, the partial session is deleted. Paired with new test coverage in `tests/main/handlers/audio-handlers.test.ts`.
+
+### Added
+
+- Settings → Data directory: async change flow with in-progress spinner and explicit success / error message. Now uses the dedicated `app:change-data-dir` IPC (which validates the path and migrates contents) instead of writing `config.dataDir` directly. Error from the main process is surfaced verbatim to the user.
+- `ModelCard` now receives its `category` so the Settings model market can render the correct per-category badge.
+
+### Changed
+
+- `useTranscription`: slice the merged `Int16Array` with `view.buffer.slice(byteOffset, byteOffset + byteLength)` before handing it to the ASR IPC. Guards against `SharedArrayBuffer` backing and avoids sending the full allocation when the view is a subrange.
+- Various component prop threading so `App.tsx` can expose data-dir change UX state to `SettingsModal`.
+
+### Test
+
+- Expand unit coverage: `database.test.ts` +8 tests (reorder, translations, summaries, delete, migration, download CRUD); `sidecar-handlers.test.ts` +1 test (port change reflected on subsequent calls); new `tests/preload/index.test.ts` covering the preload IPC bridge surface.
+- Add 7 E2E smoke specs under `tests/e2e/smoke/`: download-manager-dialog, download-manager-flow, history-session-management, playback-settings-behavior, settings-persistence, setup-persistence, summary-transcript-behavior. Extend `mock-llm-server.ts` to stream richer SSE shapes needed by these specs.
+- New sidecar test `sidecar/tests/test_model_registry.py`. Add top-level `pyproject.toml` so `pytest` can run from repo root.
+- `database.test.ts` `migrateUtcToLocal` assertion: make TZ-aware. In UTC the local-time path equals the original path, so no filesystem rename is recorded — CI (runs in UTC) used to fail on the stale expectation of a single-entry rename array.
+
+### Security
+
+- `config:set`: replace blanket BLOCKED_KEYS for `hfMirrorUrl` / `sidecar` with per-value sanitizers. `hfMirrorUrl` must parse as an `https:` URL (blocks `javascript:`, `file:`, `http:`, data:, etc.); `sidecar` is shape-checked to `{autoStart?: boolean, port?: int[1,65535]}` and unknown sub-fields are dropped. `dataDir` and `modelRegistryUrl` stay hard-blocked since they have dedicated IPCs / no legitimate writer.
+- `app:change-data-dir` / `app:init-data-dir`: replace home-directory containment with a system-directory blacklist (`/etc`, `/usr`, `/bin`, `/sbin`, `/boot`, `/dev`, `/proc`, `/sys`, `/root`, `/System`, `/Library`, and `/`). The home-only check rejected legitimate paths like `/tmp/*` on Linux and `/Volumes/*` on macOS.
+
+## 2026-04-16
+
+### Changed
+
+- Refactor: extract `useAudioDownloads` hook — moves audio download state, handlers, and 3 effect listeners from App.tsx into `src/renderer/hooks/useAudioDownloads.ts` (~180 lines). App.tsx reduced from 2564 → 2413 lines. Part 1 of 7 in the App.tsx hook-extraction refactor.
+- Refactor: extract `useSettings` hook — moves needsSetup, sidecar start/stop, device change, layout/zoom/hfMirror state + handlers + 3 effects + init into `src/renderer/hooks/useSettings.ts` (~217 lines). App.tsx: 2413 → 2196 lines. Part 2/7.
+- Refactor: extract `useModelDownloads` hook — moves downloads state, ASR derived values, 8 model download handlers, 2 effect listeners + initModels into `src/renderer/hooks/useModelDownloads.ts` (~256 lines). App.tsx: 2196 → 1940 lines. Part 3/7.
+- Refactor: extract `useTtsSettings` hook — moves TTS provider/model/voice state, 7 handlers, 2 effects + initTts into `src/renderer/hooks/useTtsSettings.ts` (~373 lines). App.tsx: 1940 → 1599 lines. Part 4/7.
+- Refactor: extract `useSummary` hook — moves LLM providers, summary generation/streaming state, prompt types, AI rename, 9 handlers, 2 effects + initFromConfig into `src/renderer/hooks/useSummary.ts` (~383 lines). App.tsx: 1599 → 1352 lines. Part 5/7.
+- Refactor: extract `useTranslation` hook — moves translation state, 5 handlers, model validation effect + initFromConfig into `src/renderer/hooks/useTranslation.ts` (~299 lines). App.tsx: 1352 → 1151 lines (-201). Part 6/7.
+- Refactor: extract `useSessionManagement` hook — moves recording flow, session CRUD, category management, regeneration, 18 handlers + initFromConfig into `src/renderer/hooks/useSessionManagement.ts` (~740 lines). Init effect slimmed from 271 to 15 lines. App.tsx: 1151 → 608 lines (-543). Part 7/7 — **refactoring complete**. Total: 2564 → 608 lines (-76%).
+
 ## 2026-04-15
 
 ### Security
@@ -12,6 +71,8 @@ All notable changes to Capty are documented in this file.
 - S4: block `dataDir`, `hfMirrorUrl`, `modelRegistryUrl` from being set via `config:set` IPC
 
 ### Fixed
+
+- Fix summary streaming leaking across sessions: switching session during LLM generation no longer shows the old session's streaming content in the new session's SummaryPanel. Covered by E2E test `tests/e2e/smoke/summary-session-switch.spec.ts` which uses a local mock SSE server to exercise the full flow
 
 - B1: fix stop-recording segment loss — use ref-captured sessionId so late ASR callbacks save to the correct session
 - B2: `gracefulDisconnect` now drains ALL in-flight transcription requests before resolving (not just its own)

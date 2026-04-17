@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 // Collect registered IPC handlers for testing
 const handlers = new Map<string, (...args: any[]) => any>();
@@ -95,6 +98,98 @@ describe("config-handlers", () => {
       const config = getHandler({} as any);
       expect((config as any).__testKey).toBe("hello");
     });
+
+    it("hard-blocks dataDir and modelRegistryUrl", () => {
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      setHandler({} as any, {
+        dataDir: "/tmp/capty-data",
+        modelRegistryUrl: "https://attacker.example/registry.json",
+        zoomFactor: 1.25,
+      });
+      const config = getHandler({} as any);
+
+      expect((config as any).dataDir).toBeFalsy();
+      expect((config as any).modelRegistryUrl).toBeFalsy();
+      expect((config as any).zoomFactor).toBe(1.25);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it("sanitizes hfMirrorUrl — allows https, rejects javascript: / file: / http:", () => {
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      // Valid https URL persists.
+      setHandler({} as any, { hfMirrorUrl: "https://hf-mirror.com/custom" });
+      expect((getHandler({} as any) as any).hfMirrorUrl).toBe(
+        "https://hf-mirror.com/custom",
+      );
+
+      // null (disabling the mirror) persists.
+      setHandler({} as any, { hfMirrorUrl: null });
+      expect((getHandler({} as any) as any).hfMirrorUrl).toBeNull();
+
+      // Malicious schemes are dropped (previous value stays).
+      setHandler({} as any, { hfMirrorUrl: "https://good.example" });
+      for (const bad of [
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "http://plain-http.example",
+        "not a url",
+        123,
+        { evil: true },
+      ]) {
+        setHandler({} as any, { hfMirrorUrl: bad });
+        expect((getHandler({} as any) as any).hfMirrorUrl).toBe(
+          "https://good.example",
+        );
+      }
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it("sanitizes sidecar — keeps autoStart/port, strips malicious fields", () => {
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      // Valid shape persists.
+      setHandler({} as any, { sidecar: { autoStart: false, port: 9999 } });
+      expect((getHandler({} as any) as any).sidecar).toEqual({
+        autoStart: false,
+        port: 9999,
+      });
+
+      // Malicious port string is dropped; autoStart is preserved.
+      setHandler({} as any, {
+        sidecar: { autoStart: true, port: "8765; rm -rf" },
+      });
+      const after = (getHandler({} as any) as any).sidecar;
+      expect(after.autoStart).toBe(true);
+      expect(after.port).toBeUndefined();
+
+      // Out-of-range port is dropped.
+      setHandler({} as any, { sidecar: { port: 99999 } });
+      expect((getHandler({} as any) as any).sidecar.port).toBeUndefined();
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
   });
 
   describe("config:get-default-data-dir", () => {
@@ -104,6 +199,22 @@ describe("config-handlers", () => {
       const result = handler({} as any);
       expect(typeof result).toBe("string");
       expect(result).toContain("Capty");
+    });
+
+    it("uses documents override when provided", () => {
+      const original = process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE;
+      process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE = "/tmp/e2e-documents";
+      try {
+        register(makeDeps());
+        const handler = handlers.get("config:get-default-data-dir")!;
+        expect(handler({} as any)).toBe("/tmp/e2e-documents/Capty");
+      } finally {
+        if (original === undefined) {
+          delete process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE;
+        } else {
+          process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE = original;
+        }
+      }
     });
   });
 

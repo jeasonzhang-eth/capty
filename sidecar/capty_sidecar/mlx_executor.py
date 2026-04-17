@@ -13,8 +13,6 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, TypeVar
 
-import mlx.core as mx
-
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -24,11 +22,27 @@ _mlx_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
 
 # Limit the MLX metal buffer cache to 2 GB.
 _MLX_CACHE_LIMIT_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
-mx.set_cache_limit(_MLX_CACHE_LIMIT_BYTES)
+_mlx_initialized = False
+
+
+def _get_mlx_core():
+    import mlx.core as mx
+
+    return mx
+
+
+def _ensure_mlx_initialized() -> None:
+    global _mlx_initialized
+    if _mlx_initialized:
+        return
+    mx = _get_mlx_core()
+    mx.set_cache_limit(_MLX_CACHE_LIMIT_BYTES)
+    _mlx_initialized = True
 
 
 def mlx_cleanup() -> None:
     """Release MLX cache and collect garbage.  Call from the MLX thread."""
+    mx = _get_mlx_core()
     mx.clear_cache()
     gc.collect()
 
@@ -42,6 +56,7 @@ async def run_on_mlx(fn: Callable[[], T]) -> T:
 
     def _wrapped() -> T:
         try:
+            _ensure_mlx_initialized()
             return fn()
         finally:
             mlx_cleanup()

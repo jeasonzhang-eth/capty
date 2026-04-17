@@ -202,6 +202,7 @@ export function PlaybackBar({
       >
         {/* Current time */}
         <span
+          data-testid="playback-current-time"
           style={{
             flexShrink: 0,
             color: "var(--text-muted)",
@@ -240,6 +241,7 @@ export function PlaybackBar({
 
         {/* Playback rate */}
         <button
+          data-testid="playback-rate-toggle"
           onClick={handleCycleRate}
           style={{
             ...topBtnStyle,
@@ -264,6 +266,7 @@ export function PlaybackBar({
 
         {/* Close */}
         <button
+          data-testid="playback-stop"
           onClick={onStop}
           style={topBtnStyle}
           title="Stop"
@@ -289,6 +292,7 @@ export function PlaybackBar({
       >
         {/* Skip backward 15s */}
         <button
+          data-testid="playback-skip-backward"
           onClick={onSkipBackward}
           style={skipBtnStyle}
           title="Backward 15s (←)"
@@ -320,6 +324,7 @@ export function PlaybackBar({
 
         {/* Play / Pause */}
         <button
+          data-testid="playback-play-pause"
           onClick={isPlaying ? onPause : onResume}
           style={{
             background: "none",
@@ -353,6 +358,7 @@ export function PlaybackBar({
 
         {/* Skip forward 15s */}
         <button
+          data-testid="playback-skip-forward"
           onClick={onSkipForward}
           style={skipBtnStyle}
           title="Forward 15s (→)"

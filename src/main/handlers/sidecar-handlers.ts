@@ -2,7 +2,7 @@ import { ipcMain, app } from "electron";
 import type { IpcDeps } from "./types";
 import { spawn } from "../shared/spawn";
 import { readConfig } from "../config";
-import { execSync, type ChildProcess } from "child_process";
+import { execFileSync, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "node:path";
 import { join } from "path";
@@ -32,26 +32,16 @@ function findSidecarBin(): string {
   return "capty-sidecar";
 }
 
-/** Parse port from sidecar base URL, default 8765. */
-function parseSidecarPort(baseUrl: string): number {
-  try {
-    const port = new URL(baseUrl).port;
-    return port ? Number(port) : 8765;
-  } catch {
-    return 8765;
-  }
-}
-
-/** Cached sidecar port from config (invalidated on config:set). */
-let _cachedSidecarPort: number | null = null;
-
-/** Read sidecar port from config (cached). */
+/** Read sidecar port from config, validated to a safe integer range. */
 function getSidecarPort(cfgDir: string): number {
-  if (_cachedSidecarPort !== null) return _cachedSidecarPort;
   const config = readConfig(cfgDir);
-  _cachedSidecarPort = config.sidecar?.port ?? 8765;
-  _lastSidecarPort = _cachedSidecarPort;
-  return _cachedSidecarPort;
+  const raw = config.sidecar?.port;
+  const port =
+    typeof raw === "number" && Number.isInteger(raw) && raw > 0 && raw < 65536
+      ? raw
+      : 8765;
+  _lastSidecarPort = port;
+  return port;
 }
 
 /** Build sidecar base URL from config port. */
@@ -94,10 +84,11 @@ let _sidecarStarting: Promise<{ ok: boolean; error?: string }> | null = null;
  * Returns the PID(s) on the port if it IS sidecar, empty array otherwise.
  */
 function findSidecarPidsOnPort(port: number): number[] {
+  if (!Number.isInteger(port) || port <= 0 || port >= 65536) return [];
   // 1. Verify identity via /health (synchronous HTTP is not available,
   //    so we do a quick lsof + process-name check instead)
   try {
-    const out = execSync(`lsof -ti tcp:${port}`, {
+    const out = execFileSync("lsof", ["-ti", `tcp:${port}`], {
       encoding: "utf-8",
       timeout: 3000,
     }).trim();
@@ -105,11 +96,11 @@ function findSidecarPidsOnPort(port: number): number[] {
     const pids = out
       .split("\n")
       .map((s) => Number(s))
-      .filter((n) => n > 0);
+      .filter((n) => Number.isInteger(n) && n > 0);
     // Verify each PID is actually a capty-sidecar (check process command)
     return pids.filter((pid) => {
       try {
-        const cmd = execSync(`ps -o command= -p ${pid}`, {
+        const cmd = execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
           encoding: "utf-8",
           timeout: 2000,
         }).trim();

@@ -58,6 +58,11 @@ interface BaseEditForm {
   model: string;
 }
 
+interface ModelOption {
+  readonly id: string;
+  readonly name: string;
+}
+
 interface TtsEditForm extends BaseEditForm {
   voice: string;
 }
@@ -117,6 +122,9 @@ interface SettingsModalProps {
   readonly ttsDownloadingModelId: string | null;
   readonly ttsDownloadProgress: number;
   readonly ttsDownloadError: string | null;
+  readonly isChangingDataDir: boolean;
+  readonly dataDirChangeMessage: string | null;
+  readonly dataDirChangeMessageKind: "success" | "error" | null;
   readonly onChangeDataDir: () => void;
   readonly onSelectModel: (modelId: string) => void;
   readonly onDownloadModel: (model: ModelInfo) => void;
@@ -991,6 +999,7 @@ function InlineModelMarket({
               <ModelCard
                 key={model.id}
                 model={model}
+                category={category}
                 isSelected={model.id === selectedModelId}
                 isThisDownloading={
                   isDownloading && downloadingModelId === model.id
@@ -1029,6 +1038,7 @@ function InlineModelMarket({
               <ModelCard
                 key={model.id}
                 model={model}
+                category={category}
                 isSelected={model.id === selectedModelId}
                 isThisDownloading={
                   isDownloading && downloadingModelId === model.id
@@ -1159,6 +1169,9 @@ function GeneralTab({
   autoStartSidecar,
   hfMirrorUrl,
   defaultHfUrl,
+  isChangingDataDir,
+  dataDirChangeMessage,
+  dataDirChangeMessageKind,
   onChangeDataDir,
   onChangeAutoStartSidecar,
   onChangeHfMirrorUrl,
@@ -1169,6 +1182,9 @@ function GeneralTab({
   readonly autoStartSidecar: boolean;
   readonly hfMirrorUrl: string;
   readonly defaultHfUrl: string;
+  readonly isChangingDataDir: boolean;
+  readonly dataDirChangeMessage: string | null;
+  readonly dataDirChangeMessageKind: "success" | "error" | null;
   readonly onChangeDataDir: () => void;
   readonly onChangeAutoStartSidecar: (value: boolean) => void;
   readonly onChangeHfMirrorUrl: (url: string) => void;
@@ -1192,7 +1208,9 @@ function GeneralTab({
       {/* Data Directory */}
       <div style={sectionTitleStyle}>Data Directory</div>
       <div style={sectionDescStyle}>
-        Recordings, transcripts, and models are stored here.
+        Recordings, transcripts, and models are stored here. Changing the data
+        directory copies existing data into an empty destination folder and
+        leaves the previous directory untouched.
       </div>
       <div style={cardStyle}>
         <div
@@ -1223,16 +1241,40 @@ function GeneralTab({
           </div>
           <button
             onClick={onChangeDataDir}
-            disabled={isRecording}
+            disabled={isRecording || isChangingDataDir}
             style={{
               ...secondaryBtnStyle,
-              cursor: isRecording ? "not-allowed" : "pointer",
-              opacity: isRecording ? 0.5 : 1,
+              cursor:
+                isRecording || isChangingDataDir ? "not-allowed" : "pointer",
+              opacity: isRecording || isChangingDataDir ? 0.5 : 1,
             }}
           >
-            Change
+            {isChangingDataDir ? "Migrating..." : "Change"}
           </button>
         </div>
+        {dataDirChangeMessage && (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "10px 12px",
+              borderRadius: "8px",
+              fontSize: "12px",
+              lineHeight: 1.5,
+              backgroundColor:
+                dataDirChangeMessageKind === "error"
+                  ? "rgba(239, 68, 68, 0.12)"
+                  : "rgba(74, 222, 128, 0.12)",
+              border:
+                dataDirChangeMessageKind === "error"
+                  ? "1px solid rgba(239, 68, 68, 0.35)"
+                  : "1px solid rgba(74, 222, 128, 0.35)",
+              color:
+                dataDirChangeMessageKind === "error" ? "#FCA5A5" : "#86EFAC",
+            }}
+          >
+            {dataDirChangeMessage}
+          </div>
+        )}
       </div>
 
       {/* Config Directory */}
@@ -1310,6 +1352,7 @@ function GeneralTab({
             </div>
           </div>
           <button
+            data-testid="settings-auto-start-toggle"
             onClick={() => onChangeAutoStartSidecar(!autoStartSidecar)}
             style={{
               position: "relative",
@@ -2575,9 +2618,9 @@ function FetchModelsDialog({
   // Grouping logic
   const shouldGroup = filtered.length > 20;
 
-  const groups: { name: string; models: typeof filtered }[] = [];
+  const groups: { name: string; models: readonly ModelOption[] }[] = [];
   if (shouldGroup) {
-    const groupMap = new Map<string, typeof filtered>();
+    const groupMap = new Map<string, ModelOption[]>();
     for (const m of filtered) {
       const slashIdx = m.id.indexOf("/");
       const groupName =
@@ -2928,7 +2971,7 @@ function LanguageModelsTab({
   });
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [fetchedModels, setFetchedModels] = useState<
-    { id: string; name: string }[]
+    ModelOption[]
   >([]);
   const [isFetching, setIsFetching] = useState(false);
   const [manualModelInput, setManualModelInput] = useState("");
@@ -3085,7 +3128,7 @@ function LanguageModelsTab({
         baseUrl: editForm.baseUrl,
         apiKey: editForm.apiKey,
       });
-      setFetchedModels(models);
+      setFetchedModels([...models]);
       setShowFetchDialog(true);
     } catch (err) {
       console.warn("Failed to fetch models:", err);
@@ -3670,7 +3713,7 @@ function UnifiedModelSelector({
     : allModels;
 
   // Group by provider
-  const groups = new Map<string, typeof filtered>();
+  const groups = new Map<string, Array<(typeof filtered)[number]>>();
   for (const m of filtered) {
     if (!groups.has(m.providerName)) groups.set(m.providerName, []);
     groups.get(m.providerName)!.push(m);
@@ -4300,6 +4343,9 @@ export function SettingsModal({
   ttsDownloadingModelId,
   ttsDownloadProgress,
   ttsDownloadError,
+  isChangingDataDir,
+  dataDirChangeMessage,
+  dataDirChangeMessageKind,
   onChangeDataDir,
   onSelectModel,
   onDownloadModel,
@@ -4513,6 +4559,9 @@ export function SettingsModal({
                 autoStartSidecar={autoStartSidecar}
                 hfMirrorUrl={hfMirrorUrl}
                 defaultHfUrl={defaultHfUrl}
+                isChangingDataDir={isChangingDataDir}
+                dataDirChangeMessage={dataDirChangeMessage}
+                dataDirChangeMessageKind={dataDirChangeMessageKind}
                 onChangeDataDir={onChangeDataDir}
                 onChangeAutoStartSidecar={onChangeAutoStartSidecar}
                 onChangeHfMirrorUrl={onChangeHfMirrorUrl}

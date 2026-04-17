@@ -16,6 +16,7 @@ import { readConfig } from "../config";
 
 /** Track active yt-dlp child processes by download ID for cancel support. */
 const activeDownloads = new Map<number, ChildProcess>();
+const activeHttpDownloads = new Map<number, AbortController>();
 
 /** Extract domain from URL for display. */
 export function extractSource(url: string): string {
@@ -89,9 +90,12 @@ async function fetchXiaoyuzhouEpisode(
 async function httpDownload(
   audioUrl: string,
   destPath: string,
-  onProgress?: (percent: number) => void,
+  opts: {
+    onProgress?: (percent: number) => void;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<void> {
-  const resp = await net.fetch(audioUrl);
+  const resp = await net.fetch(audioUrl, { signal: opts.signal });
   if (!resp.ok) {
     throw new Error(`HTTP download failed (${resp.status})`);
   }
@@ -103,18 +107,26 @@ async function httpDownload(
   const reader = resp.body?.getReader();
   if (!reader) throw new Error("No response body");
 
-  const chunks: Buffer[] = [];
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(Buffer.from(value));
-    downloaded += value.byteLength;
-    if (total > 0 && onProgress) {
-      onProgress(Math.min(99.9, (downloaded / total) * 100));
+  const fd = fs.openSync(destPath, "w");
+  try {
+    for (;;) {
+      if (opts.signal?.aborted) {
+        const error = new Error("The operation was aborted");
+        error.name = "AbortError";
+        throw error;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      fs.writeSync(fd, chunk);
+      downloaded += value.byteLength;
+      if (total > 0 && opts.onProgress) {
+        opts.onProgress(Math.min(99.9, (downloaded / total) * 100));
+      }
     }
+  } finally {
+    fs.closeSync(fd);
   }
-
-  fs.writeFileSync(destPath, Buffer.concat(chunks));
 }
 
 /** Convert any audio file to 16kHz mono 16-bit WAV via ffmpeg. */
@@ -174,6 +186,11 @@ export function register(deps: IpcDeps): void {
     if (proc) {
       proc.kill("SIGTERM");
       activeDownloads.delete(downloadId);
+    }
+    const controller = activeHttpDownloads.get(downloadId);
+    if (controller) {
+      controller.abort();
+      activeHttpDownloads.delete(downloadId);
     }
     const dl = getDownload(db, downloadId);
     if (dl?.temp_dir) {
@@ -280,20 +297,25 @@ export function register(deps: IpcDeps): void {
             episode.audioUrl.match(/\.(m4a|mp3|ogg|opus|wav)/i)?.[1] || "m4a";
           downloadedFilePath = join(tempDir, `${dirTimestamp}.${audioExt}`);
 
-          await httpDownload(
-            episode.audioUrl,
-            downloadedFilePath,
-            (percent) => {
-              updateDownload(db, downloadId, { progress: percent });
-              if (win) {
-                win.webContents.send("audio:download-progress", {
-                  id: downloadId,
-                  stage: "downloading",
-                  percent,
-                });
-              }
-            },
-          );
+          const controller = new AbortController();
+          activeHttpDownloads.set(downloadId, controller);
+          try {
+            await httpDownload(episode.audioUrl, downloadedFilePath, {
+              signal: controller.signal,
+              onProgress: (percent) => {
+                updateDownload(db, downloadId, { progress: percent });
+                if (win) {
+                  win.webContents.send("audio:download-progress", {
+                    id: downloadId,
+                    stage: "downloading",
+                    percent,
+                  });
+                }
+              },
+            });
+          } finally {
+            activeHttpDownloads.delete(downloadId);
+          }
 
           // Check if cancelled during download
           const currentDl = getDownload(db, downloadId);
@@ -501,6 +523,13 @@ export function register(deps: IpcDeps): void {
           });
         }
       } catch (err: unknown) {
+        const currentDl = getDownload(db, downloadId);
+        if (
+          currentDl?.status === "cancelled" ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         const message = err instanceof Error ? err.message : String(err);
         updateDownload(db, downloadId, { status: "failed", error: message });
         if (win) {

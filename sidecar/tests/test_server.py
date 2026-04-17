@@ -119,3 +119,27 @@ async def test_decode_audio_path_outside_data_dir(tmp_path):
         )
         assert resp.status_code == 403
         assert "outside allowed directory" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_decode_audio_rejects_sibling_prefix_path(tmp_path):
+    """Sibling paths like data-evil must not bypass the allowlist check."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    models_dir = data_dir / "models" / "asr"
+    models_dir.mkdir(parents=True)
+
+    sibling_dir = tmp_path / "data-evil"
+    sibling_dir.mkdir()
+    sibling_file = sibling_dir / "outside.wav"
+    sibling_file.write_bytes(b"RIFF" + b"\x00" * 40)
+
+    app = create_app(models_dir=str(models_dir), data_dir=str(data_dir))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/v1/audio/decode",
+            json={"file_path": str(sibling_file)},
+        )
+        assert resp.status_code == 403
+        assert "outside allowed directory" in resp.json()["detail"]

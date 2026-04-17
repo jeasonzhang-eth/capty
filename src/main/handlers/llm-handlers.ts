@@ -133,6 +133,7 @@ export function register(deps: IpcDeps): void {
                   content: delta,
                   done: false,
                   promptType,
+                  sessionId,
                 });
               }
             } catch {
@@ -146,6 +147,7 @@ export function register(deps: IpcDeps): void {
           content: "",
           done: true,
           promptType,
+          sessionId,
         });
 
         if (!fullContent) {
@@ -177,6 +179,7 @@ export function register(deps: IpcDeps): void {
           content: "",
           done: true,
           promptType,
+          sessionId,
         });
         throw err;
       }

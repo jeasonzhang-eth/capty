@@ -193,6 +193,7 @@ export function DownloadManagerDialog({
 
   return createPortal(
     <div
+      data-testid="download-manager-overlay"
       style={{
         position: "fixed",
         top: 0,
@@ -208,6 +209,7 @@ export function DownloadManagerDialog({
       onClick={onClose}
     >
       <div
+        data-testid="download-manager-dialog"
         style={{
           width: "520px",
           maxHeight: "70vh",
@@ -244,6 +246,7 @@ export function DownloadManagerDialog({
             Download Audio
           </span>
           <button
+            data-testid="download-manager-close"
             onClick={onClose}
             style={{
               background: "none",
@@ -269,6 +272,7 @@ export function DownloadManagerDialog({
           }}
         >
           <input
+            data-testid="download-manager-url-input"
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -286,6 +290,7 @@ export function DownloadManagerDialog({
             }}
           />
           <button
+            data-testid="download-manager-submit"
             onClick={handleSubmit}
             disabled={!url.trim()}
             style={{
@@ -373,6 +378,7 @@ function DownloadItemRow({
 
   return (
     <div
+      data-testid={`download-item-${item.id}`}
       style={{
         padding: "12px",
         backgroundColor: "var(--bg-secondary, #1c1c1f)",
@@ -504,6 +510,7 @@ function DownloadItemRow({
         )}
         {isActive && (
           <button
+            data-testid={`download-item-cancel-${item.id}`}
             onClick={(e) => {
               e.stopPropagation();
               onCancel();
@@ -631,6 +638,7 @@ function DownloadItemRow({
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
+              data-testid={`download-item-retry-${item.id}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onRetry();
@@ -647,6 +655,7 @@ function DownloadItemRow({
               ↻ Retry
             </button>
             <button
+              data-testid={`download-item-remove-${item.id}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
@@ -680,6 +689,7 @@ function DownloadItemRow({
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
+              data-testid={`download-item-retry-${item.id}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onRetry();
@@ -696,6 +706,7 @@ function DownloadItemRow({
               ↻ Retry
             </button>
             <button
+              data-testid={`download-item-remove-${item.id}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
