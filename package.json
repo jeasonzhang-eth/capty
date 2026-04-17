@@ -1,6 +1,6 @@
 {
   "name": "capty",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Real-time speech-to-text desktop app",
   "main": "./out/main/index.js",
   "scripts": {

@@ -2,7 +2,7 @@
 
 All notable changes to Capty are documented in this file.
 
-## 2026-04-18
+## [0.2.0] - 2026-04-18
 
 ### Security
 
