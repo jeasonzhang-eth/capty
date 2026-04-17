@@ -74,18 +74,20 @@ interface AppState {
   readonly setSidecarStarting: (v: boolean) => void;
   readonly setTtsProviderReady: (v: boolean) => void;
   readonly setDataDir: (dir: string | null) => void;
-  readonly setAsrProviders: (providers: AsrProviderState[]) => void;
+  readonly setAsrProviders: (
+    providers: readonly AsrProviderState[],
+  ) => void;
   readonly setSelectedAsrProviderId: (id: string | null) => void;
   readonly setCurrentSessionId: (id: number | null) => void;
   readonly addSegment: (seg: Segment) => void;
-  readonly setSegments: (segs: Segment[]) => void;
+  readonly setSegments: (segs: readonly Segment[]) => void;
   readonly clearSegments: () => void;
   readonly setPartialText: (text: string) => void;
   readonly setElapsedSeconds: (s: number) => void;
-  readonly setSessions: (sessions: SessionSummary[]) => void;
-  readonly setAudioDevices: (devices: MediaDeviceInfo[]) => void;
+  readonly setSessions: (sessions: readonly SessionSummary[]) => void;
+  readonly setAudioDevices: (devices: readonly MediaDeviceInfo[]) => void;
   readonly setSelectedDeviceId: (id: string | null) => void;
-  readonly setModels: (models: ModelInfo[]) => void;
+  readonly setModels: (models: readonly ModelInfo[]) => void;
   readonly setSelectedModelId: (id: string) => void;
   readonly loadSessions: () => Promise<void>;
   readonly reset: () => void;
@@ -120,18 +122,18 @@ export const useAppStore = create<AppState>((set) => ({
   setSidecarStarting: (v) => set({ sidecarStarting: v }),
   setTtsProviderReady: (v) => set({ ttsProviderReady: v }),
   setDataDir: (dir) => set({ dataDir: dir }),
-  setAsrProviders: (providers) => set({ asrProviders: providers }),
+  setAsrProviders: (providers) => set({ asrProviders: [...providers] }),
   setSelectedAsrProviderId: (id) => set({ selectedAsrProviderId: id }),
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   addSegment: (seg) => set((state) => ({ segments: [...state.segments, seg] })),
-  setSegments: (segs) => set({ segments: segs, partialText: "" }),
+  setSegments: (segs) => set({ segments: [...segs], partialText: "" }),
   clearSegments: () => set({ segments: [], partialText: "" }),
   setPartialText: (text) => set({ partialText: text }),
   setElapsedSeconds: (s) => set({ elapsedSeconds: s }),
-  setSessions: (sessions) => set({ sessions }),
-  setAudioDevices: (devices) => set({ audioDevices: devices }),
+  setSessions: (sessions) => set({ sessions: [...sessions] }),
+  setAudioDevices: (devices) => set({ audioDevices: [...devices] }),
   setSelectedDeviceId: (id) => set({ selectedDeviceId: id }),
-  setModels: (models) => set({ models }),
+  setModels: (models) => set({ models: [...models] }),
   setSelectedModelId: (id) => set({ selectedModelId: id }),
 
   loadSessions: async () => {
