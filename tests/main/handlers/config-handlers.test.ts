@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 // Collect registered IPC handlers for testing
 const handlers = new Map<string, (...args: any[]) => any>();
@@ -95,6 +98,38 @@ describe("config-handlers", () => {
       const config = getHandler({} as any);
       expect((config as any).__testKey).toBe("hello");
     });
+
+    it("blocks security-sensitive keys (dataDir, hfMirrorUrl, sidecar, modelRegistryUrl)", () => {
+      // These keys have dedicated IPCs with validation. Letting config:set
+      // write them would enable SSRF (hfMirrorUrl), arbitrary directory
+      // writes (dataDir), and shell injection via sidecar.port.
+      const configDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "capty-config-handlers-"),
+      );
+      register(makeDeps({ configDir }));
+
+      const getHandler = handlers.get("config:get")!;
+      const setHandler = handlers.get("config:set")!;
+
+      setHandler({} as any, {
+        dataDir: "/tmp/capty-data",
+        hfMirrorUrl: "https://hf-mirror.com",
+        sidecar: { port: "8765; evil" },
+        modelRegistryUrl: "https://attacker.example/registry.json",
+        // A non-blocked key should still pass through.
+        zoomFactor: 1.25,
+      });
+      const config = getHandler({} as any);
+
+      expect((config as any).dataDir).toBeFalsy();
+      expect((config as any).hfMirrorUrl).toBeFalsy();
+      // sidecar keeps its default (not overwritten with the malicious port).
+      expect((config as any).sidecar?.port).not.toBe("8765; evil");
+      expect((config as any).modelRegistryUrl).toBeFalsy();
+      expect((config as any).zoomFactor).toBe(1.25);
+
+      fs.rmSync(configDir, { recursive: true, force: true });
+    });
   });
 
   describe("config:get-default-data-dir", () => {
@@ -104,6 +139,22 @@ describe("config-handlers", () => {
       const result = handler({} as any);
       expect(typeof result).toBe("string");
       expect(result).toContain("Capty");
+    });
+
+    it("uses documents override when provided", () => {
+      const original = process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE;
+      process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE = "/tmp/e2e-documents";
+      try {
+        register(makeDeps());
+        const handler = handlers.get("config:get-default-data-dir")!;
+        expect(handler({} as any)).toBe("/tmp/e2e-documents/Capty");
+      } finally {
+        if (original === undefined) {
+          delete process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE;
+        } else {
+          process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE = original;
+        }
+      }
     });
   });
 

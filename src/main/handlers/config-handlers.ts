@@ -4,8 +4,11 @@ import { spawn } from "../shared/spawn";
 import { readConfig, writeConfig, getDataDir } from "../config";
 import type { IpcDeps } from "./types";
 
-/** Cached sidecar port from config (invalidated on config:set). */
-let _cachedSidecarPort: number | null = null;
+function getDefaultDataDir(): string {
+  const documentsDir =
+    process.env.ELECTRON_DOCUMENTS_DIR_OVERRIDE || app.getPath("documents");
+  return path.join(documentsDir, "Capty");
+}
 
 export function register(deps: IpcDeps): void {
   const { configDir, getMainWindow } = deps;
@@ -16,10 +19,15 @@ export function register(deps: IpcDeps): void {
   });
 
   ipcMain.handle("config:set", (_event, partial: Record<string, unknown>) => {
+    // Keys that must not be writable via generic config:set — each has a
+    // dedicated IPC with validation (app:change-data-dir, etc.). Letting the
+    // renderer write these here would enable SSRF (hfMirrorUrl), arbitrary
+    // directory write (dataDir), and shell injection via sidecar.port.
     const BLOCKED_KEYS = new Set([
       "dataDir",
       "hfMirrorUrl",
       "modelRegistryUrl",
+      "sidecar",
     ]);
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(partial)) {
@@ -29,7 +37,14 @@ export function register(deps: IpcDeps): void {
     }
     const current = readConfig(configDir);
     writeConfig(configDir, { ...current, ...sanitized });
-    _cachedSidecarPort = null; // invalidate on any config change
+  });
+
+  // Dedicated handler for the HF mirror toggle. Takes a boolean so the
+  // renderer cannot inject an arbitrary URL into fetch() calls (SSRF).
+  ipcMain.handle("config:set-hf-mirror", (_event, enabled: unknown) => {
+    const current = readConfig(configDir);
+    const hfMirrorUrl = enabled === true ? "https://hf-mirror.com" : null;
+    writeConfig(configDir, { ...current, hfMirrorUrl });
   });
 
   // Layout persistence
@@ -58,7 +73,7 @@ export function register(deps: IpcDeps): void {
   });
 
   ipcMain.handle("config:get-default-data-dir", () => {
-    return path.join(app.getPath("documents"), "Capty");
+    return getDefaultDataDir();
   });
 
   ipcMain.handle("app:get-config-dir", () => {

@@ -5,7 +5,8 @@ import {
   shell,
   systemPreferences,
 } from "electron";
-import { join } from "path";
+import { join, isAbsolute, resolve as pathResolve, relative } from "path";
+import os from "os";
 import fs from "fs";
 import { is } from "@electron-toolkit/utils";
 import { readConfig, writeConfig, type WindowBounds } from "./config";
@@ -145,6 +146,24 @@ function initDataDir(dataDir: string, configDir: string): Database.Database {
   return database;
 }
 
+function copyDataDirContents(sourceDir: string, targetDir: string): void {
+  fs.mkdirSync(targetDir, { recursive: true });
+  const targetEntries = fs.readdirSync(targetDir);
+  if (targetEntries.length > 0) {
+    throw new Error("Target data directory must be empty");
+  }
+
+  if (!fs.existsSync(sourceDir)) return;
+
+  for (const entry of fs.readdirSync(sourceDir)) {
+    fs.cpSync(join(sourceDir, entry), join(targetDir, entry), {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+  }
+}
+
 // Honor ELECTRON_USER_DATA_DIR_OVERRIDE before app is ready — used by E2E tests.
 // In production this env var is never set.
 const userDataOverride = process.env.ELECTRON_USER_DATA_DIR_OVERRIDE;
@@ -178,8 +197,73 @@ app.whenReady().then(() => {
   // 5. Called by SetupWizard after saving dataDir to config.
   //    Initializes DB in-process without relaunch.
   ipcMain.handle("app:init-data-dir", (_event, newDataDir: string) => {
+    const trimmed = newDataDir.trim();
+    if (!trimmed) {
+      throw new Error("Data directory cannot be empty");
+    }
+    const resolved = pathResolve(trimmed);
+    if (!isAbsolute(resolved)) {
+      throw new Error("Data directory must be an absolute path");
+    }
+    const rel = relative(os.homedir(), resolved);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      throw new Error("Data directory must be inside the user home directory");
+    }
+    const current = readConfig(configDir);
+    if (current.dataDir !== resolved) {
+      writeConfig(configDir, { ...current, dataDir: resolved });
+    }
     if (db) return; // already initialized
-    db = initDataDir(newDataDir, configDir);
+    db = initDataDir(resolved, configDir);
+  });
+
+  ipcMain.handle("app:change-data-dir", (_event, newDataDir: string) => {
+    const trimmed = newDataDir.trim();
+    if (!trimmed) {
+      throw new Error("Data directory cannot be empty");
+    }
+    // Containment: reject non-absolute paths and anything outside the user's
+    // home directory. Prevents renderer-driven arbitrary filesystem writes
+    // (e.g. "/", "/etc/capty", "../../..").
+    const resolved = pathResolve(trimmed);
+    if (!isAbsolute(resolved)) {
+      throw new Error("Data directory must be an absolute path");
+    }
+    const home = os.homedir();
+    const rel = relative(home, resolved);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      throw new Error("Data directory must be inside the user home directory");
+    }
+
+    const current = readConfig(configDir);
+    const previousDataDir = current.dataDir;
+    if (previousDataDir === resolved) {
+      return { changed: false, migrated: false };
+    }
+
+    if (previousDataDir) {
+      copyDataDirContents(previousDataDir, resolved);
+    } else {
+      fs.mkdirSync(resolved, { recursive: true });
+    }
+
+    const previousDb = db;
+    try {
+      if (previousDb) {
+        previousDb.close();
+      }
+      db = null;
+
+      writeConfig(configDir, { ...current, dataDir: resolved });
+      db = initDataDir(resolved, configDir);
+      return { changed: true, migrated: Boolean(previousDataDir) };
+    } catch (err) {
+      writeConfig(configDir, current);
+      if (previousDb && previousDataDir) {
+        db = initDataDir(previousDataDir, configDir);
+      }
+      throw err;
+    }
   });
 
   // 6. Zoom IPC handlers

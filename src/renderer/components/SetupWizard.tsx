@@ -139,8 +139,7 @@ export function SetupWizard({
   }, []);
 
   const handleGetStarted = useCallback(async () => {
-    const hfMirrorUrl = useHfMirror ? "https://hf-mirror.com" : null;
-    await window.capty.setConfig({ dataDir, hfMirrorUrl });
+    await window.capty.setHfMirror(useHfMirror);
     setStep(1);
     // Auto-run dependency check when entering Step 1
     setDepChecking(true);
@@ -158,7 +157,7 @@ export function SetupWizard({
     } finally {
       setDepChecking(false);
     }
-  }, [dataDir, useHfMirror]);
+  }, [useHfMirror]);
 
   const handleFinish = useCallback(
     async (skipKeys: boolean) => {

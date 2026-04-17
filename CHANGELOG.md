@@ -2,6 +2,15 @@
 
 All notable changes to Capty are documented in this file.
 
+## 2026-04-18
+
+### Security
+
+- Restore `BLOCKED_KEYS` in `config:set` IPC after the 04-16 hooks refactor silently dropped them. Re-blocks `dataDir`, `hfMirrorUrl`, `sidecar`, `modelRegistryUrl` from renderer-initiated writes (would have enabled SSRF via `hfMirrorUrl` and arbitrary directory writes via `dataDir`).
+- Add dedicated `config:set-hf-mirror` IPC taking a boolean toggle, so the renderer cannot inject arbitrary URLs into `hfMirrorUrl` (prevents SSRF in model-download `fetch()` calls).
+- Replace `execSync` with `execFileSync` in `findSidecarPidsOnPort` and validate `port` is an integer in `[1, 65535]`. Prevents shell injection via a malicious `config.sidecar.port` string.
+- Add path-containment guard to `app:change-data-dir` and `app:init-data-dir`: reject non-absolute paths and anything outside `os.homedir()`. Prevents renderer-driven arbitrary directory writes (e.g. `/`, `/etc/capty`).
+
 ## 2026-04-16
 
 ### Changed
