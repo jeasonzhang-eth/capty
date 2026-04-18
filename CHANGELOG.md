@@ -4,6 +4,12 @@ All notable changes to Capty are documented in this file.
 
 ## [0.2.0] - 2026-04-18
 
+### Docs
+
+- Add design doc and brainstorming transcript for sidecar packaging refactor (uv-based build + notarization scaffold) under `docs/superpowers/specs/`.
+- `.gitignore`: ignore `sidecar/build/` — PyInstaller's intermediate `build/` directory produced alongside `dist/` during `npm run build:sidecar`.
+- Add `docs/notarization-setup.md` — activation guide for the dormant macOS notarization hook.
+
 ### Security
 
 - Restore `BLOCKED_KEYS` in `config:set` IPC after the 04-16 hooks refactor silently dropped them. Re-blocks `dataDir`, `hfMirrorUrl`, `sidecar`, `modelRegistryUrl` from renderer-initiated writes (would have enabled SSRF via `hfMirrorUrl` and arbitrary directory writes via `dataDir`).
@@ -14,14 +20,19 @@ All notable changes to Capty are documented in this file.
 
 ### Changed
 
+- `electron-builder.yml`: register `build/notarize.js` as `afterSign` hook; set `hardenedRuntime: true`, `gatekeeperAssess: false`, and `notarize: false` on the `mac` target. Behavior is unchanged today (hook is a no-op without Apple credentials); ready for notarization the day those env vars are set.
+- Sidecar: declare `pyinstaller>=6.0` in `sidecar/pyproject.toml` dev extra so `uv sync --extra dev` installs it reproducibly (previously installed ad-hoc via `pip install pyinstaller` on every build).
+- Sidecar: rewrite `sidecar/build.sh` to use `uv sync --extra dev` + `uv run pyinstaller`. Removes manual `source .venv/bin/activate` and per-build `pip install pyinstaller`; builds are now reproducible from `uv.lock`.
 - Sidecar: move `import mlx.core` out of module scope into lazy helpers (`_clear_mlx_cache`, `_get_mlx_core`, `_ensure_mlx_initialized`). Keeps import-time side-effects off CI / non-Apple environments; MLX cache limit still applied on first real use.
 - Renderer: centralize `window.capty` typing in `src/renderer/global.d.ts` by inferring from `typeof api` in `preload/index.ts`. Drops the 160-line hand-written interface that lived inline at the top of `useSession.ts`, eliminating drift between preload and renderer.
 - Store (`appStore.ts`): accept `readonly` array inputs for setters and defensively copy with spread before storing. Prevents callers from retaining aliases to mutable internal state.
 
 ### Added
 
+- Add `build/notarize.js` afterSign hook. Inert today (no-op unless `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` env vars are set); activates automatically once an Apple Developer account is provisioned.
 - Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
 - Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
+- Add `@electron/notarize` dev dependency as the engine for a future macOS notarization workflow (currently inert — see `docs/notarization-setup.md`).
 
 ### Fixed
 

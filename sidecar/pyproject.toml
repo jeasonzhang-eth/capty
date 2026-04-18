@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "httpx"]
+dev = ["pytest", "pytest-asyncio", "httpx", "pyinstaller>=6.0"]
 
 [project.scripts]
 capty-sidecar = "capty_sidecar.main:main"
