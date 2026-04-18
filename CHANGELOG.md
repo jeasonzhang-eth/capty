@@ -28,6 +28,7 @@ All notable changes to Capty are documented in this file.
 
 - Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
 - Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
+- Add `@electron/notarize` dev dependency as the engine for a future macOS notarization workflow (currently inert — see `docs/notarization-setup.md`).
 
 ### Fixed
 
