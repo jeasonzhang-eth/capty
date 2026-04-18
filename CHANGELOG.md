@@ -19,6 +19,7 @@ All notable changes to Capty are documented in this file.
 ### Changed
 
 - Sidecar: declare `pyinstaller>=6.0` in `sidecar/pyproject.toml` dev extra so `uv sync --extra dev` installs it reproducibly (previously installed ad-hoc via `pip install pyinstaller` on every build).
+- Sidecar: rewrite `sidecar/build.sh` to use `uv sync --extra dev` + `uv run pyinstaller`. Removes manual `source .venv/bin/activate` and per-build `pip install pyinstaller`; builds are now reproducible from `uv.lock`.
 - Sidecar: move `import mlx.core` out of module scope into lazy helpers (`_clear_mlx_cache`, `_get_mlx_core`, `_ensure_mlx_initialized`). Keeps import-time side-effects off CI / non-Apple environments; MLX cache limit still applied on first real use.
 - Renderer: centralize `window.capty` typing in `src/renderer/global.d.ts` by inferring from `typeof api` in `preload/index.ts`. Drops the 160-line hand-written interface that lived inline at the top of `useSession.ts`, eliminating drift between preload and renderer.
 - Store (`appStore.ts`): accept `readonly` array inputs for setters and defensively copy with spread before storing. Prevents callers from retaining aliases to mutable internal state.
