@@ -7,6 +7,7 @@ All notable changes to Capty are documented in this file.
 ### Docs
 
 - Add design doc and brainstorming transcript for sidecar packaging refactor (uv-based build + notarization scaffold) under `docs/superpowers/specs/`.
+- Add `docs/notarization-setup.md` — activation guide for the dormant macOS notarization hook.
 
 ### Security
 
