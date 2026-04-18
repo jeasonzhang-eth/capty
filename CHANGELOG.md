@@ -26,6 +26,7 @@ All notable changes to Capty are documented in this file.
 
 ### Added
 
+- Add `build/notarize.js` afterSign hook. Inert today (no-op unless `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` env vars are set); activates automatically once an Apple Developer account is provisioned.
 - Cancelable HTTP audio downloads: `httpDownload()` now accepts an `AbortSignal` and writes to disk via `fs.write` (streaming, no in-memory chunk buffer). Cancel path aborts the in-flight fetch instead of letting it run to completion.
 - Download state/task unit tests under `tests/main/download/`: `download-state.test.ts`, `model-download-task.test.ts`, `download-manager.test.ts` (11 new tests total).
 - Add `@electron/notarize` dev dependency as the engine for a future macOS notarization workflow (currently inert — see `docs/notarization-setup.md`).
