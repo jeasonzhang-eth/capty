@@ -1,5 +1,6 @@
 appId: com.capty.app
 productName: Capty
+afterSign: build/notarize.js
 directories:
   buildResources: build
   output: dist
@@ -16,6 +17,9 @@ extraResources:
       - "**/*"
 mac:
   category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
