@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Capty" width="600" />
+  <img src="assets/banner.png" alt="Capty" width="600" />
 </p>
 
 <h1 align="center">Capty</h1>
@@ -64,8 +64,54 @@ Export transcripts as TXT, SRT, or Markdown.
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
-> Screenshots coming soon. Download and try it now!
+### Real-time transcription with VAD
+<img src="assets/recording-with-vad.png" alt="Recording with VAD" width="800" />
+
+### Transcript content
+<img src="assets/content.png" alt="Transcript content" width="800" />
+
+### LLM summary
+<img src="assets/summary.png" alt="LLM summary" width="800" />
+
+### Follow-up questions
+<img src="assets/questions.png" alt="Follow-up questions" width="800" />
+
+### Translation
+<img src="assets/translation.png" alt="Translation" width="800" />
+
+### Audio playback with waveform
+<img src="assets/replay.png" alt="Replay with waveform" width="800" />
+
+### Audio import
+<p>
+  <img src="assets/upload/upload-1.png" width="49%" />
+  <img src="assets/upload/upload-2.png" width="49%" />
+</p>
+
+### Audio download
+<p>
+  <img src="assets/download/download.png" width="32%" />
+  <img src="assets/download/download-content-eng.png" width="32%" />
+  <img src="assets/download/download-content-cn.png" width="32%" />
+</p>
+
+### Session management
+<img src="assets/sessions/session-options.png" alt="Session options" width="800" />
+
+### Microphone detection
+<img src="assets/microphone-detect.png" alt="Microphone detection" width="800" />
+
+### Export
+<img src="assets/export.png" alt="Export" width="800" />
+
+### Settings
+<p>
+  <img src="assets/settings/setting-general.png" width="49%" />
+  <img src="assets/settings/asr-providers-1.png" width="49%" />
+  <img src="assets/settings/llm-providers-1.png" width="49%" />
+  <img src="assets/settings/tts-providers-1.png" width="49%" />
+  <img src="assets/settings/default-models-1.png" width="49%" />
+</p>
 
 ---
 
@@ -105,6 +151,15 @@ npm run dev
 ```bash
 npm run dist:all   # builds sidecar first, then packages DMG
 ```
+
+### Sidecar OpenAPI
+
+```bash
+cd sidecar
+.venv/bin/capty-sidecar --openapi-out openapi.json
+```
+
+Run the sidecar normally to browse the live schema at `http://127.0.0.1:8765/openapi.json` or `http://127.0.0.1:8765/docs`.
 
 ---
 

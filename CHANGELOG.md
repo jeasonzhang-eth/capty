@@ -2,6 +2,13 @@
 
 All notable changes to Capty are documented in this file.
 
+## [Unreleased] - 2026-05-07
+
+### Docs
+
+- README: embed product screenshots (recording, transcript, summary, questions, translation, replay, import, download, sessions, microphone, export, settings) under `assets/` for both English and Chinese READMEs.
+- README: fix broken banner reference (`docs/assets/banner.png` → `assets/banner.png`).
+
 ## [0.2.0] - 2026-04-18
 
 ### Docs

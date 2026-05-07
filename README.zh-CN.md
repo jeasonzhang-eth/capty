@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Capty" width="600" />
+  <img src="assets/banner.png" alt="Capty" width="600" />
 </p>
 
 <h1 align="center">Capty</h1>
@@ -64,8 +64,54 @@
 
 ## 截图
 
-<!-- TODO: 添加截图 -->
-> 截图即将上传，可先下载体验。
+### 实时录音转写（VAD）
+<img src="assets/recording-with-vad.png" alt="实时录音转写" width="800" />
+
+### 转写内容
+<img src="assets/content.png" alt="转写内容" width="800" />
+
+### LLM 智能摘要
+<img src="assets/summary.png" alt="智能摘要" width="800" />
+
+### 追问
+<img src="assets/questions.png" alt="追问" width="800" />
+
+### 字幕翻译
+<img src="assets/translation.png" alt="字幕翻译" width="800" />
+
+### 波形回放
+<img src="assets/replay.png" alt="波形回放" width="800" />
+
+### 音频导入
+<p>
+  <img src="assets/upload/upload-1.png" width="49%" />
+  <img src="assets/upload/upload-2.png" width="49%" />
+</p>
+
+### 音频下载
+<p>
+  <img src="assets/download/download.png" width="32%" />
+  <img src="assets/download/download-content-eng.png" width="32%" />
+  <img src="assets/download/download-content-cn.png" width="32%" />
+</p>
+
+### 会话管理
+<img src="assets/sessions/session-options.png" alt="会话操作" width="800" />
+
+### 麦克风检测
+<img src="assets/microphone-detect.png" alt="麦克风检测" width="800" />
+
+### 导出
+<img src="assets/export.png" alt="导出" width="800" />
+
+### 设置
+<p>
+  <img src="assets/settings/setting-general.png" width="49%" />
+  <img src="assets/settings/asr-providers-1.png" width="49%" />
+  <img src="assets/settings/llm-providers-1.png" width="49%" />
+  <img src="assets/settings/tts-providers-1.png" width="49%" />
+  <img src="assets/settings/default-models-1.png" width="49%" />
+</p>
 
 ---
 
@@ -105,6 +151,15 @@ npm run dev
 ```bash
 npm run dist:all   # 先构建 sidecar，再打包 DMG
 ```
+
+### 导出 Sidecar OpenAPI
+
+```bash
+cd sidecar
+.venv/bin/capty-sidecar --openapi-out openapi.json
+```
+
+正常启动 sidecar 后，也可以直接访问 `http://127.0.0.1:8765/openapi.json` 或 `http://127.0.0.1:8765/docs` 查看实时规范。
 
 ---
 
