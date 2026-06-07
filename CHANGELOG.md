@@ -13,6 +13,7 @@ All notable changes to Capty are documented in this file.
 
 ### Fixed
 
+- Imported audio sessions are now named after the source file instead of its creation time. Creation-time naming produced identical names when files shared a birthtime, and discarded the original, meaningful filenames. The session directory uses a sanitized form (illegal path characters replaced, `-N` suffix on collision), the session title keeps the original name (`(N)` suffix on collision), and the file birthtime is still recorded as the session start time.
 - Settings → Default Models: model dropdowns (Summary/Rapid/Translate) were occluded by the cards below them — `backdrop-filter` on each card creates a stacking context, so the menu's z-index could not escape and later sibling cards painted on top. The dropdown is now rendered through a portal to `document.body` with fixed positioning, flips upward when there is not enough space below, and closes on outer scroll/resize to stay anchored to its trigger.
 
 ### Changed

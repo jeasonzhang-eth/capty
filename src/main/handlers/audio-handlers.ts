@@ -218,45 +218,51 @@ export function register(deps: IpcDeps): void {
   async function importOneAudioFile(
     filePath: string,
   ): Promise<{ sessionId: number; timestamp: string; audioPath: string }> {
-    // 1. Get file birthtime for session name
+    // 1. Session title and directory name reuse the source file name.
+    //    (Creation-time naming collided when files shared a birthtime and
+    //    lost the original, meaningful names.)
+    const sourceName = path.basename(filePath, path.extname(filePath));
+    // Strip characters that are illegal/awkward in directory names
+    const safeName =
+      sourceName.replace(/[\\/:*?"<>|]/g, "_").trim() || "imported";
+
+    // File birthtime is still used as the session start time
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
-
-    // 2. Format timestamps
     const pad = (n: number): string => String(n).padStart(2, "0");
-    const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 3. Deduplicate audio directory name
+    // 2. Deduplicate audio directory name
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    let finalTimestamp = dirTimestamp;
-    let sessionDir = join(dataDir, "audio", finalTimestamp);
+    let dirName = safeName;
+    let sessionDir = join(dataDir, "audio", dirName);
     let suffix = 1;
     while (fs.existsSync(sessionDir)) {
-      finalTimestamp = `${dirTimestamp}-${suffix}`;
-      sessionDir = join(dataDir, "audio", finalTimestamp);
+      dirName = `${safeName}-${suffix}`;
+      sessionDir = join(dataDir, "audio", dirName);
       suffix++;
     }
 
     let sessionId: number | null = null;
     try {
       fs.mkdirSync(sessionDir, { recursive: true });
-      const destPath = join(sessionDir, `${finalTimestamp}.wav`);
+      const destPath = join(sessionDir, `${dirName}.wav`);
       await convertToWav(filePath, destPath);
 
-      // 4. Create session only after conversion succeeds.
+      // 3. Create session only after conversion succeeds.
       sessionId = createSession(db, {
         modelName: "imported",
         category: "recording",
       });
       updateSession(db, sessionId, {
-        audioPath: finalTimestamp,
-        title: readableTimestamp,
+        audioPath: dirName,
+        title:
+          dirName === safeName ? sourceName : `${sourceName} (${suffix - 1})`,
         startedAt: readableTimestamp,
       });
 
-      // 5. Calculate duration from WAV and update session
+      // 4. Calculate duration from WAV and update session
       const wavStat = fs.statSync(destPath);
       const pcmBytes = wavStat.size - 44; // 44-byte WAV header
       const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
@@ -265,7 +271,7 @@ export function register(deps: IpcDeps): void {
         durationSeconds,
       });
 
-      return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
+      return { sessionId, timestamp: dirName, audioPath: destPath };
     } catch (err) {
       if (sessionId !== null) {
         try {
