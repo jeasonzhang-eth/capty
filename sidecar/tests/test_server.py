@@ -36,6 +36,19 @@ async def test_list_models(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_list_models_openai_shape(tmp_path):
+    """GET /v1/models returns an OpenAI-compatible wrapper."""
+    app = create_app(models_dir=str(tmp_path))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/v1/models")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["object"] == "list"
+        assert isinstance(payload["data"], list)
+
+
+@pytest.mark.asyncio
 async def test_switch_model_not_downloaded(tmp_path):
     """POST /models/switch returns error when model is not available.
 
@@ -65,6 +78,23 @@ async def test_switch_model_unknown(tmp_path):
             json={"model": "nonexistent-model"},
         )
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tts_status_unloaded(tmp_path):
+    """GET /tts/status returns 200 with empty model when nothing is loaded.
+
+    Regression: model_id is None when unloaded, which must not fail the
+    TtsStatusResponse(model: str) validation (same class of bug as /health).
+    """
+    app = create_app(models_dir=str(tmp_path))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/tts/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["loaded"] is False
+        assert data["model"] == ""
 
 
 @pytest.mark.asyncio
@@ -143,3 +173,32 @@ async def test_decode_audio_rejects_sibling_prefix_path(tmp_path):
         )
         assert resp.status_code == 403
         assert "outside allowed directory" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_openapi_schema_documents_binary_and_streaming_endpoints(tmp_path):
+    """OpenAPI schema should expose binary and streaming response types."""
+    app = create_app(models_dir=str(tmp_path))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/openapi.json")
+        assert resp.status_code == 200
+        schema = resp.json()
+
+    assert schema["info"]["title"] == "Capty Sidecar API"
+    assert schema["info"]["version"] == "0.1.0"
+    assert "/v1/models" in schema["paths"]
+
+    speech_post = schema["paths"]["/v1/audio/speech"]["post"]
+    assert speech_post["responses"]["200"]["content"]["audio/wav"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }
+
+    stream_post = schema["paths"]["/v1/audio/speech/stream"]["post"]
+    assert "application/x-ndjson" in stream_post["responses"]["200"]["content"]
+
+    decode_post = schema["paths"]["/v1/audio/decode"]["post"]
+    assert decode_post["responses"]["403"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/ErrorResponse")

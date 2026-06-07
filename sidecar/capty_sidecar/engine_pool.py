@@ -69,7 +69,7 @@ class EnginePool:
         return {
             etype: {
                 "loaded": engine.is_loaded(),
-                "model": engine.model_id,
+                "model": engine.model_id or "",
             }
             for etype, engine in self._engines.items()
         }

@@ -18,9 +18,9 @@ def test_pool_status_empty():
     pool = EnginePool()
     status = pool.status()
     assert status["asr"]["loaded"] is False
-    assert status["asr"]["model"] is None
+    assert status["asr"]["model"] == ""
     assert status["tts"]["loaded"] is False
-    assert status["tts"]["model"] is None
+    assert status["tts"]["model"] == ""
 
 
 def test_get_engine_unknown_type():

@@ -2,6 +2,24 @@
 
 All notable changes to Capty are documented in this file.
 
+## [0.3.1] - 2026-06-07
+
+### Changed
+
+- Sidecar API: every endpoint now declares typed Pydantic response models (HealthResponse, TranscriptionResponse, VoiceListResponse, …) with OpenAPI metadata — tags, summaries, operation IDs, declared error responses, and documented binary/NDJSON payloads. New `--openapi-out <file|->` CLI flag dumps the OpenAPI 3.1 schema and exits.
+
+### Fixed
+
+- Sidecar `/health` and `/tts/status` returned 500 when no model was loaded: `model_id` is `None` while the new strict response models declare `model: str`. Both now coerce to the empty-string convention; covered by `test_health` and `test_tts_status_unloaded`.
+
+### Removed
+
+- Stale root `pyproject.toml` (empty placeholder from an earlier scaffold; the real one lives in `sidecar/pyproject.toml`).
+
+### Docs
+
+- Add speaker-diarization design + plan (`docs/superpowers/specs/2026-04-19-sidecar-speaker-diarization-design.md`, approved): ASR (Qwen/Whisper/Parakeet) + pyannote speaker turns + word-to-speaker reconciliation returning `segments[{start,end,speaker,text}]`. Not implemented yet.
+
 ## [0.3.0] - 2026-06-07
 
 ### Added
