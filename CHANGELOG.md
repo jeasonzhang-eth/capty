@@ -2,7 +2,24 @@
 
 All notable changes to Capty are documented in this file.
 
-## [Unreleased] - 2026-05-07
+## [0.3.0] - 2026-06-07
+
+### Added
+
+- Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
+- Keyboard shortcut: Cmd/Ctrl+, opens the Settings modal (standard macOS preferences shortcut).
+- Audio import now supports selecting multiple files at once. Files are imported sequentially (one ffmpeg conversion at a time), each into its own session; per-file failures are collected without aborting the rest, and the first imported session is selected afterwards.
+- Session context menu: new "Edit Created Time" item opening a single-field dialog to change a session's recorded-at time (keeps the title untouched; reuses the existing edit-session IPC which also shifts ended_at by the session duration).
+- Upload manager panel (mirrors the Download Audio dialog): clicking Upload Audio now opens a panel with a NotebookLM-style dashed drop zone on top and the upload history below. Audio files can be dragged into the zone (paths resolved via `webUtils.getPathForFile`, validated against audio extensions in the main process) or picked by clicking the zone. Each record shows per-file status (waiting/converting/imported/failed) with inline error messages; completed records are clickable to jump to their session. Records accumulate across batches within the app session. Driven by new `audio:import-progress` IPC events.
+
+### Fixed
+
+- Imported audio sessions are now named after the source file instead of its creation time. Creation-time naming produced identical names when files shared a birthtime, and discarded the original, meaningful filenames. The session directory uses a sanitized form (illegal path characters replaced, `-N` suffix on collision), the session title keeps the original name (`(N)` suffix on collision), and the file birthtime is still recorded as the session start time.
+- Settings → Default Models: model dropdowns (Summary/Rapid/Translate) were occluded by the cards below them — `backdrop-filter` on each card creates a stacking context, so the menu's z-index could not escape and later sibling cards painted on top. The dropdown is now rendered through a portal to `document.body` with fixed positioning, flips upward when there is not enough space below, and closes on outer scroll/resize to stay anchored to its trigger.
+
+### Changed
+
+- Imported local audio files now default to the "个人录音" (recording) category instead of "下载内容" (download). The startup migration that re-categorizes download sessions no longer matches `model_name = 'imported'` — it previously ran on every launch and would have flipped imported sessions back to download.
 
 ### Docs
 

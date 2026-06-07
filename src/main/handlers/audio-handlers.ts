@@ -213,73 +213,56 @@ export function register(deps: IpcDeps): void {
     return arrayBuf;
   });
 
-  // Audio import (upload existing audio file — no ffmpeg needed)
-  ipcMain.handle("audio:import", async () => {
-    const win = getMainWindow();
-    if (!win) return null;
+  // Import a single audio file into a new session. Throws on failure
+  // (session/dir are cleaned up before rethrowing).
+  async function importOneAudioFile(
+    filePath: string,
+  ): Promise<{ sessionId: number; timestamp: string; audioPath: string }> {
+    // 1. Session title and directory name reuse the source file name.
+    //    (Creation-time naming collided when files shared a birthtime and
+    //    lost the original, meaningful names.)
+    const sourceName = path.basename(filePath, path.extname(filePath));
+    // Strip characters that are illegal/awkward in directory names
+    const safeName =
+      sourceName.replace(/[\\/:*?"<>|]/g, "_").trim() || "imported";
 
-    // 1. Open file dialog
-    const result = await dialog.showOpenDialog(win, {
-      properties: ["openFile"],
-      filters: [
-        {
-          name: "Audio Files",
-          extensions: [
-            "wav",
-            "mp3",
-            "m4a",
-            "flac",
-            "ogg",
-            "aac",
-            "wma",
-            "opus",
-          ],
-        },
-      ],
-    });
-    if (result.canceled || !result.filePaths.length) return null;
-
-    const filePath = result.filePaths[0];
-
-    // 2. Get file birthtime for session name
+    // File birthtime is still used as the session start time
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
-
-    // 3. Format timestamps
     const pad = (n: number): string => String(n).padStart(2, "0");
-    const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 4. Deduplicate audio directory name
+    // 2. Deduplicate audio directory name
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    let finalTimestamp = dirTimestamp;
-    let sessionDir = join(dataDir, "audio", finalTimestamp);
+    let dirName = safeName;
+    let sessionDir = join(dataDir, "audio", dirName);
     let suffix = 1;
     while (fs.existsSync(sessionDir)) {
-      finalTimestamp = `${dirTimestamp}-${suffix}`;
-      sessionDir = join(dataDir, "audio", finalTimestamp);
+      dirName = `${safeName}-${suffix}`;
+      sessionDir = join(dataDir, "audio", dirName);
       suffix++;
     }
 
     let sessionId: number | null = null;
     try {
       fs.mkdirSync(sessionDir, { recursive: true });
-      const destPath = join(sessionDir, `${finalTimestamp}.wav`);
+      const destPath = join(sessionDir, `${dirName}.wav`);
       await convertToWav(filePath, destPath);
 
-      // 5. Create session only after conversion succeeds.
+      // 3. Create session only after conversion succeeds.
       sessionId = createSession(db, {
         modelName: "imported",
-        category: "download",
+        category: "recording",
       });
       updateSession(db, sessionId, {
-        audioPath: finalTimestamp,
-        title: readableTimestamp,
+        audioPath: dirName,
+        title:
+          dirName === safeName ? sourceName : `${sourceName} (${suffix - 1})`,
         startedAt: readableTimestamp,
       });
 
-      // 6. Calculate duration from WAV and update session
+      // 4. Calculate duration from WAV and update session
       const wavStat = fs.statSync(destPath);
       const pcmBytes = wavStat.size - 44; // 44-byte WAV header
       const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
@@ -288,7 +271,7 @@ export function register(deps: IpcDeps): void {
         durationSeconds,
       });
 
-      return { sessionId, timestamp: dirTimestamp, audioPath: destPath };
+      return { sessionId, timestamp: dirName, audioPath: destPath };
     } catch (err) {
       if (sessionId !== null) {
         try {
@@ -304,5 +287,108 @@ export function register(deps: IpcDeps): void {
       }
       throw err;
     }
+  }
+
+  // Audio import (upload one or more existing audio files)
+  const AUDIO_EXTENSIONS = [
+    "wav",
+    "mp3",
+    "m4a",
+    "flac",
+    "ogg",
+    "aac",
+    "wma",
+    "opus",
+  ];
+
+  // Import a batch of files sequentially, streaming audio:import-progress
+  // events. Serial imports keep ffmpeg usage bounded and the directory-name
+  // deduplication race-free.
+  async function importAudioBatch(
+    win: Electron.BrowserWindow,
+    filePaths: readonly string[],
+  ): Promise<{
+    imported: { sessionId: number; timestamp: string; audioPath: string }[];
+    errors: { file: string; message: string }[];
+  }> {
+    const sendProgress = (data: Record<string, unknown>): void => {
+      win.webContents.send("audio:import-progress", data);
+    };
+
+    sendProgress({
+      type: "start",
+      files: filePaths.map((f) => path.basename(f)),
+    });
+
+    const imported: {
+      sessionId: number;
+      timestamp: string;
+      audioPath: string;
+    }[] = [];
+    const errors: { file: string; message: string }[] = [];
+    for (let i = 0; i < filePaths.length; i++) {
+      const filePath = filePaths[i];
+      const file = path.basename(filePath);
+      sendProgress({ type: "file", index: i, file, status: "converting" });
+      try {
+        const one = await importOneAudioFile(filePath);
+        imported.push(one);
+        sendProgress({
+          type: "file",
+          index: i,
+          file,
+          status: "done",
+          sessionId: one.sessionId,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push({ file: filePath, message });
+        sendProgress({
+          type: "file",
+          index: i,
+          file,
+          status: "failed",
+          error: message,
+        });
+      }
+    }
+
+    sendProgress({ type: "finished" });
+    return { imported, errors };
+  }
+
+  ipcMain.handle("audio:import", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audio Files", extensions: AUDIO_EXTENSIONS }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+
+    return importAudioBatch(win, result.filePaths);
+  });
+
+  // Import explicit file paths (drag-and-drop from the renderer)
+  ipcMain.handle("audio:import-paths", async (_event, paths: string[]) => {
+    const win = getMainWindow();
+    if (!win) return null;
+    if (!Array.isArray(paths) || paths.length === 0) return null;
+
+    // Only accept absolute paths to existing files with audio extensions
+    const valid = paths.filter((f) => {
+      if (typeof f !== "string" || !path.isAbsolute(f)) return false;
+      const ext = path.extname(f).slice(1).toLowerCase();
+      if (!AUDIO_EXTENSIONS.includes(ext)) return false;
+      try {
+        return fs.statSync(f).isFile();
+      } catch {
+        return false;
+      }
+    });
+    if (valid.length === 0) return null;
+
+    return importAudioBatch(win, valid);
   });
 }

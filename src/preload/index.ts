@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const api = {
   // Sessions
@@ -197,13 +197,44 @@ const api = {
   openAudioFolder: (sessionId: number) =>
     ipcRenderer.invoke("audio:open-folder", sessionId),
 
-  // Audio import
+  // Audio import (supports selecting multiple files)
+  onAudioImportProgress: (
+    callback: (event: {
+      type: "start" | "file" | "finished";
+      files?: string[];
+      index?: number;
+      file?: string;
+      status?: "converting" | "done" | "failed";
+      sessionId?: number;
+      error?: string;
+    }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("audio:import-progress", handler);
+    return () => {
+      ipcRenderer.removeListener("audio:import-progress", handler);
+    };
+  },
   importAudio: () =>
     ipcRenderer.invoke("audio:import") as Promise<{
-      sessionId: number;
-      timestamp: string;
-      audioPath: string;
+      imported: {
+        sessionId: number;
+        timestamp: string;
+        audioPath: string;
+      }[];
+      errors: { file: string; message: string }[];
     } | null>,
+  importAudioPaths: (paths: string[]) =>
+    ipcRenderer.invoke("audio:import-paths", paths) as Promise<{
+      imported: {
+        sessionId: number;
+        timestamp: string;
+        audioPath: string;
+      }[];
+      errors: { file: string; message: string }[];
+    } | null>,
+  // Resolve the filesystem path of a dropped File (Electron 32+ removed File.path)
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getAudioDuration: (filePath: string) =>
     ipcRenderer.invoke("audio:get-duration", filePath) as Promise<number>,
   transcribeFile: (

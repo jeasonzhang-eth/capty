@@ -108,10 +108,13 @@ function initTables(db: Database.Database): void {
     // Column already exists — ignore
   }
 
-  // Migrate: auto-categorize existing download sessions
+  // Migrate: auto-categorize existing download sessions.
+  // Note: 'imported' is intentionally excluded — imported local audio
+  // defaults to 'recording' (and this UPDATE runs on every startup, so
+  // including it would keep flipping imported sessions back to 'download').
   db.exec(`
     UPDATE sessions SET category = 'download'
-    WHERE model_name IN ('yt-dlp', 'xiaoyuzhou', 'imported') AND category = 'recording'
+    WHERE model_name IN ('yt-dlp', 'xiaoyuzhou') AND category = 'recording'
   `);
 
   db.exec(`
