@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { SessionCategory } from "../components/HistoryPanel";
-import { ImportItem } from "../components/ImportProgressDialog";
+import { ImportRecord } from "../components/ImportManagerDialog";
 import { Summary } from "../components/SummaryPanel";
 import { useAppStore } from "../stores/appStore";
 
@@ -650,62 +650,85 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
   // ── Audio upload ─────────────────────────────────────────────────────
 
-  const [importItems, setImportItems] = useState<readonly ImportItem[]>([]);
-  const [importFinished, setImportFinished] = useState(false);
-  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importRecords, setImportRecords] = useState<readonly ImportRecord[]>(
+    [],
+  );
+  const [showImportManager, setShowImportManager] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importIdRef = useRef(0);
+  // Record ids of the in-flight batch, indexed by file position
+  const importBatchIdsRef = useRef<number[]>([]);
 
-  const handleCloseImportDialog = useCallback(() => {
-    setShowImportDialog(false);
-    setImportItems([]);
-    setImportFinished(false);
+  const handleOpenImportManager = useCallback(() => {
+    setShowImportManager(true);
+  }, []);
+
+  const handleCloseImportManager = useCallback(() => {
+    setShowImportManager(false);
   }, []);
 
   const handleUploadAudio = useCallback(async () => {
-    if (p.current.store.isRecording || regeneratingSessionId !== null) return;
+    if (
+      p.current.store.isRecording ||
+      regeneratingSessionId !== null ||
+      isImporting
+    ) {
+      return;
+    }
+    setIsImporting(true);
 
     // Subscribe to per-file progress for the duration of this batch
     const unsubscribe = window.capty.onAudioImportProgress((event) => {
       if (event.type === "start" && event.files) {
-        setImportItems(
-          event.files.map((file) => ({ file, status: "pending" as const })),
-        );
-        setImportFinished(false);
-        setShowImportDialog(true);
+        const ids = event.files.map(() => ++importIdRef.current);
+        importBatchIdsRef.current = ids;
+        const now = new Date().toISOString();
+        const batch: ImportRecord[] = event.files.map((file, i) => ({
+          id: ids[i],
+          file,
+          status: "pending",
+          createdAt: now,
+        }));
+        // Newest batch on top
+        setImportRecords((prev) => [...batch, ...prev]);
       } else if (event.type === "file" && event.index !== undefined) {
-        setImportItems((prev) =>
-          prev.map((item, idx) =>
-            idx === event.index
+        const id = importBatchIdsRef.current[event.index];
+        setImportRecords((prev) =>
+          prev.map((rec) =>
+            rec.id === id
               ? {
-                  ...item,
-                  status: event.status ?? item.status,
+                  ...rec,
+                  status: event.status ?? rec.status,
                   error: event.error,
+                  sessionId: event.sessionId ?? rec.sessionId,
+                  createdAt: new Date().toISOString(),
                 }
-              : item,
+              : rec,
           ),
         );
-      } else if (event.type === "finished") {
-        setImportFinished(true);
       }
     });
 
     try {
       const result = await window.capty.importAudio();
-      if (!result) return;
-
-      // Auto-close the dialog when every file imported cleanly; keep it
-      // open on failures so the user can read the error messages.
-      if (result.errors.length === 0) {
-        setTimeout(handleCloseImportDialog, 1200);
-      }
-      if (result.imported.length === 0) return;
+      if (!result || result.imported.length === 0) return;
 
       await p.current.store.loadSessions();
       // Select the first imported session (the order the user picked them in)
       await handleSelectSession(result.imported[0].sessionId);
     } finally {
       unsubscribe();
+      setIsImporting(false);
     }
-  }, [regeneratingSessionId, handleSelectSession, handleCloseImportDialog]);
+  }, [regeneratingSessionId, isImporting, handleSelectSession]);
+
+  const handleImportSelectSession = useCallback(
+    async (sessionId: number) => {
+      setShowImportManager(false);
+      await handleSelectSession(sessionId);
+    },
+    [handleSelectSession],
+  );
 
   // ── Init (called from App.tsx init effect) ───────────────────────────
 
@@ -791,10 +814,12 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
     // Upload
     handleUploadAudio,
-    importItems,
-    importFinished,
-    showImportDialog,
-    handleCloseImportDialog,
+    importRecords,
+    isImporting,
+    showImportManager,
+    handleOpenImportManager,
+    handleCloseImportManager,
+    handleImportSelectSession,
 
     // Init
     initFromConfig,

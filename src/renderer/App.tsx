@@ -14,7 +14,7 @@ import { useTranscription } from "./hooks/useTranscription";
 import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
-import { ImportProgressDialog } from "./components/ImportProgressDialog";
+import { ImportManagerDialog } from "./components/ImportManagerDialog";
 import { useAudioDownloads } from "./hooks/useAudioDownloads";
 import { useSettings } from "./hooks/useSettings";
 import { useModelDownloads } from "./hooks/useModelDownloads";
@@ -249,10 +249,12 @@ function App(): React.JSX.Element {
     handleRegenerateSubtitles,
     handleCancelRegeneration,
     handleUploadAudio,
-    importItems,
-    importFinished,
-    showImportDialog,
-    handleCloseImportDialog,
+    importRecords,
+    isImporting,
+    showImportManager,
+    handleOpenImportManager,
+    handleCloseImportManager,
+    handleImportSelectSession,
   } = sessionMgmt;
 
   // Populate ref bridges for transcription/VAD callbacks
@@ -362,7 +364,7 @@ function App(): React.JSX.Element {
           onRegenerateSubtitles={handleRegenerateSubtitles}
           onCancelRegeneration={handleCancelRegeneration}
           onOpenFolder={(id) => window.capty.openAudioFolder(id)}
-          onUploadAudio={handleUploadAudio}
+          onUploadAudio={handleOpenImportManager}
           onDownloadAudio={() => setShowDownloadManager(true)}
           downloadBadge={downloadBadge}
           onAiRename={
@@ -600,11 +602,13 @@ function App(): React.JSX.Element {
           onClose={() => setShowSettings(false)}
         />
       )}
-      {showImportDialog && (
-        <ImportProgressDialog
-          items={importItems}
-          finished={importFinished}
-          onClose={handleCloseImportDialog}
+      {showImportManager && (
+        <ImportManagerDialog
+          records={importRecords}
+          isImporting={isImporting}
+          onUpload={handleUploadAudio}
+          onSelectSession={handleImportSelectSession}
+          onClose={handleCloseImportManager}
         />
       )}
       {showDownloadManager && (
