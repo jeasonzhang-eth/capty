@@ -2,7 +2,7 @@
 
 All notable changes to Capty are documented in this file.
 
-## [Unreleased] - 2026-06-07
+## [0.3.0] - 2026-06-07
 
 ### Added
 
