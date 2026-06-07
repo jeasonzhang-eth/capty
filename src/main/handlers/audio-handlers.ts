@@ -284,49 +284,44 @@ export function register(deps: IpcDeps): void {
   }
 
   // Audio import (upload one or more existing audio files)
-  ipcMain.handle("audio:import", async () => {
-    const win = getMainWindow();
-    if (!win) return null;
+  const AUDIO_EXTENSIONS = [
+    "wav",
+    "mp3",
+    "m4a",
+    "flac",
+    "ogg",
+    "aac",
+    "wma",
+    "opus",
+  ];
 
-    const result = await dialog.showOpenDialog(win, {
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        {
-          name: "Audio Files",
-          extensions: [
-            "wav",
-            "mp3",
-            "m4a",
-            "flac",
-            "ogg",
-            "aac",
-            "wma",
-            "opus",
-          ],
-        },
-      ],
-    });
-    if (result.canceled || !result.filePaths.length) return null;
-
+  // Import a batch of files sequentially, streaming audio:import-progress
+  // events. Serial imports keep ffmpeg usage bounded and the directory-name
+  // deduplication race-free.
+  async function importAudioBatch(
+    win: Electron.BrowserWindow,
+    filePaths: readonly string[],
+  ): Promise<{
+    imported: { sessionId: number; timestamp: string; audioPath: string }[];
+    errors: { file: string; message: string }[];
+  }> {
     const sendProgress = (data: Record<string, unknown>): void => {
       win.webContents.send("audio:import-progress", data);
     };
 
     sendProgress({
       type: "start",
-      files: result.filePaths.map((f) => path.basename(f)),
+      files: filePaths.map((f) => path.basename(f)),
     });
 
-    // Import sequentially: each conversion runs ffmpeg, and serial imports
-    // keep the directory-name deduplication race-free.
     const imported: {
       sessionId: number;
       timestamp: string;
       audioPath: string;
     }[] = [];
     const errors: { file: string; message: string }[] = [];
-    for (let i = 0; i < result.filePaths.length; i++) {
-      const filePath = result.filePaths[i];
+    for (let i = 0; i < filePaths.length; i++) {
+      const filePath = filePaths[i];
       const file = path.basename(filePath);
       sendProgress({ type: "file", index: i, file, status: "converting" });
       try {
@@ -354,5 +349,40 @@ export function register(deps: IpcDeps): void {
 
     sendProgress({ type: "finished" });
     return { imported, errors };
+  }
+
+  ipcMain.handle("audio:import", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audio Files", extensions: AUDIO_EXTENSIONS }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+
+    return importAudioBatch(win, result.filePaths);
+  });
+
+  // Import explicit file paths (drag-and-drop from the renderer)
+  ipcMain.handle("audio:import-paths", async (_event, paths: string[]) => {
+    const win = getMainWindow();
+    if (!win) return null;
+    if (!Array.isArray(paths) || paths.length === 0) return null;
+
+    // Only accept absolute paths to existing files with audio extensions
+    const valid = paths.filter((f) => {
+      if (typeof f !== "string" || !path.isAbsolute(f)) return false;
+      const ext = path.extname(f).slice(1).toLowerCase();
+      if (!AUDIO_EXTENSIONS.includes(ext)) return false;
+      try {
+        return fs.statSync(f).isFile();
+      } catch {
+        return false;
+      }
+    });
+    if (valid.length === 0) return null;
+
+    return importAudioBatch(win, valid);
   });
 }

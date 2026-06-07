@@ -249,6 +249,7 @@ function App(): React.JSX.Element {
     handleRegenerateSubtitles,
     handleCancelRegeneration,
     handleUploadAudio,
+    handleDropAudioFiles,
     importRecords,
     isImporting,
     showImportManager,
@@ -607,6 +608,7 @@ function App(): React.JSX.Element {
           records={importRecords}
           isImporting={isImporting}
           onUpload={handleUploadAudio}
+          onDropFiles={handleDropAudioFiles}
           onSelectSession={handleImportSelectSession}
           onClose={handleCloseImportManager}
         />

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const api = {
   // Sessions
@@ -224,6 +224,17 @@ const api = {
       }[];
       errors: { file: string; message: string }[];
     } | null>,
+  importAudioPaths: (paths: string[]) =>
+    ipcRenderer.invoke("audio:import-paths", paths) as Promise<{
+      imported: {
+        sessionId: number;
+        timestamp: string;
+        audioPath: string;
+      }[];
+      errors: { file: string; message: string }[];
+    } | null>,
+  // Resolve the filesystem path of a dropped File (Electron 32+ removed File.path)
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getAudioDuration: (filePath: string) =>
     ipcRenderer.invoke("audio:get-duration", filePath) as Promise<number>,
   transcribeFile: (

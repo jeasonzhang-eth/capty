@@ -9,7 +9,7 @@ All notable changes to Capty are documented in this file.
 - Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
 - Keyboard shortcut: Cmd/Ctrl+, opens the Settings modal (standard macOS preferences shortcut).
 - Audio import now supports selecting multiple files at once. Files are imported sequentially (one ffmpeg conversion at a time), each into its own session; per-file failures are collected without aborting the rest, and the first imported session is selected afterwards.
-- Upload manager panel (mirrors the Download Audio dialog): clicking Upload Audio now opens a panel with an upload button on top and the upload history below. Each record shows per-file status (waiting/converting/imported/failed) with inline error messages; completed records are clickable to jump to their session. Records accumulate across batches within the app session. Driven by new `audio:import-progress` IPC events.
+- Upload manager panel (mirrors the Download Audio dialog): clicking Upload Audio now opens a panel with a NotebookLM-style dashed drop zone on top and the upload history below. Audio files can be dragged into the zone (paths resolved via `webUtils.getPathForFile`, validated against audio extensions in the main process) or picked by clicking the zone. Each record shows per-file status (waiting/converting/imported/failed) with inline error messages; completed records are clickable to jump to their session. Records accumulate across batches within the app session. Driven by new `audio:import-progress` IPC events.
 
 ### Fixed
 

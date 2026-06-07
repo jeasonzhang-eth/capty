@@ -667,60 +667,92 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     setShowImportManager(false);
   }, []);
 
-  const handleUploadAudio = useCallback(async () => {
-    if (
-      p.current.store.isRecording ||
-      regeneratingSessionId !== null ||
-      isImporting
-    ) {
-      return;
-    }
-    setIsImporting(true);
-
-    // Subscribe to per-file progress for the duration of this batch
-    const unsubscribe = window.capty.onAudioImportProgress((event) => {
-      if (event.type === "start" && event.files) {
-        const ids = event.files.map(() => ++importIdRef.current);
-        importBatchIdsRef.current = ids;
-        const now = new Date().toISOString();
-        const batch: ImportRecord[] = event.files.map((file, i) => ({
-          id: ids[i],
-          file,
-          status: "pending",
-          createdAt: now,
-        }));
-        // Newest batch on top
-        setImportRecords((prev) => [...batch, ...prev]);
-      } else if (event.type === "file" && event.index !== undefined) {
-        const id = importBatchIdsRef.current[event.index];
-        setImportRecords((prev) =>
-          prev.map((rec) =>
-            rec.id === id
-              ? {
-                  ...rec,
-                  status: event.status ?? rec.status,
-                  error: event.error,
-                  sessionId: event.sessionId ?? rec.sessionId,
-                  createdAt: new Date().toISOString(),
-                }
-              : rec,
-          ),
-        );
+  // Shared import flow: subscribe to progress events, run the given IPC
+  // invocation (file dialog or explicit paths), then refresh sessions.
+  const runImport = useCallback(
+    async (
+      invoke: () => Promise<{
+        imported: { sessionId: number }[];
+        errors: { file: string; message: string }[];
+      } | null>,
+    ) => {
+      if (
+        p.current.store.isRecording ||
+        regeneratingSessionId !== null ||
+        isImporting
+      ) {
+        return;
       }
-    });
+      setIsImporting(true);
 
-    try {
-      const result = await window.capty.importAudio();
-      if (!result || result.imported.length === 0) return;
+      // Subscribe to per-file progress for the duration of this batch
+      const unsubscribe = window.capty.onAudioImportProgress((event) => {
+        if (event.type === "start" && event.files) {
+          const ids = event.files.map(() => ++importIdRef.current);
+          importBatchIdsRef.current = ids;
+          const now = new Date().toISOString();
+          const batch: ImportRecord[] = event.files.map((file, i) => ({
+            id: ids[i],
+            file,
+            status: "pending",
+            createdAt: now,
+          }));
+          // Newest batch on top
+          setImportRecords((prev) => [...batch, ...prev]);
+        } else if (event.type === "file" && event.index !== undefined) {
+          const id = importBatchIdsRef.current[event.index];
+          setImportRecords((prev) =>
+            prev.map((rec) =>
+              rec.id === id
+                ? {
+                    ...rec,
+                    status: event.status ?? rec.status,
+                    error: event.error,
+                    sessionId: event.sessionId ?? rec.sessionId,
+                    createdAt: new Date().toISOString(),
+                  }
+                : rec,
+            ),
+          );
+        }
+      });
 
-      await p.current.store.loadSessions();
-      // Select the first imported session (the order the user picked them in)
-      await handleSelectSession(result.imported[0].sessionId);
-    } finally {
-      unsubscribe();
-      setIsImporting(false);
-    }
-  }, [regeneratingSessionId, isImporting, handleSelectSession]);
+      try {
+        const result = await invoke();
+        if (!result || result.imported.length === 0) return;
+
+        await p.current.store.loadSessions();
+        // Select the first imported session (the order the user picked them in)
+        await handleSelectSession(result.imported[0].sessionId);
+      } finally {
+        unsubscribe();
+        setIsImporting(false);
+      }
+    },
+    [regeneratingSessionId, isImporting, handleSelectSession],
+  );
+
+  const handleUploadAudio = useCallback(
+    () => runImport(() => window.capty.importAudio()),
+    [runImport],
+  );
+
+  const handleDropAudioFiles = useCallback(
+    (files: File[]) => {
+      const paths = files
+        .map((f) => {
+          try {
+            return window.capty.getPathForFile(f);
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean);
+      if (paths.length === 0) return Promise.resolve();
+      return runImport(() => window.capty.importAudioPaths(paths));
+    },
+    [runImport],
+  );
 
   const handleImportSelectSession = useCallback(
     async (sessionId: number) => {
@@ -814,6 +846,7 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
     // Upload
     handleUploadAudio,
+    handleDropAudioFiles,
     importRecords,
     isImporting,
     showImportManager,

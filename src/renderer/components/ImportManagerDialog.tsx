@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface ImportRecord {
@@ -14,6 +14,7 @@ interface ImportManagerDialogProps {
   readonly records: readonly ImportRecord[];
   readonly isImporting: boolean;
   readonly onUpload: () => void;
+  readonly onDropFiles: (files: File[]) => void;
   readonly onSelectSession: (sessionId: number) => void;
   readonly onClose: () => void;
 }
@@ -120,9 +121,43 @@ export function ImportManagerDialog({
   records,
   isImporting,
   onUpload,
+  onDropFiles,
   onSelectSession,
   onClose,
 }: ImportManagerDialogProps): React.ReactElement {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isImporting) setIsDragOver(true);
+    },
+    [isImporting],
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      if (isImporting) return;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) onDropFiles(files);
+    },
+    [isImporting, onDropFiles],
+  );
+
+  const dropBorder = isDragOver
+    ? "2px dashed var(--accent)"
+    : "2px dashed var(--border)";
+
   return createPortal(
     <div
       data-testid="import-manager-overlay"
@@ -143,8 +178,8 @@ export function ImportManagerDialog({
       <div
         data-testid="import-manager-dialog"
         style={{
-          width: "520px",
-          maxHeight: "70vh",
+          width: "560px",
+          maxHeight: "75vh",
           display: "flex",
           flexDirection: "column",
           backdropFilter: "blur(12px)",
@@ -164,7 +199,6 @@ export function ImportManagerDialog({
             justifyContent: "space-between",
             alignItems: "center",
             padding: "16px 20px",
-            borderBottom: "1px solid var(--border)",
             flexShrink: 0,
           }}
         >
@@ -193,64 +227,84 @@ export function ImportManagerDialog({
           </button>
         </div>
 
-        {/* Upload button */}
+        {/* Drop zone */}
         <div
+          data-testid="import-manager-dropzone"
+          onClick={isImporting ? undefined : onUpload}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           style={{
-            padding: "16px 20px",
-            borderBottom: "1px solid var(--border)",
+            margin: "0 20px 16px",
+            minHeight: records.length > 0 ? "140px" : "240px",
+            border: dropBorder,
+            borderRadius: "12px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "10px",
+            cursor: isImporting ? "default" : "pointer",
+            backgroundColor: isDragOver
+              ? "rgba(139,139,240,0.08)"
+              : "transparent",
+            transition: "background-color 0.15s, border-color 0.15s",
             flexShrink: 0,
           }}
         >
-          <button
-            data-testid="import-manager-upload"
-            onClick={onUpload}
-            disabled={isImporting}
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={isDragOver ? "var(--accent)" : "var(--text-muted)"}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <div
             style={{
-              width: "100%",
-              padding: "10px 0",
-              backgroundColor: isImporting
-                ? "var(--bg-secondary, #1c1c1f)"
-                : "var(--accent)",
-              border: "none",
-              borderRadius: "8px",
-              color: isImporting ? "var(--text-muted)" : "#fff",
               fontSize: "13px",
-              fontWeight: 600,
-              cursor: isImporting ? "default" : "pointer",
+              fontWeight: 500,
+              color: isDragOver ? "var(--accent)" : "var(--text-primary)",
             }}
           >
             {isImporting
               ? "Importing..."
-              : "⬆ Upload Audio Files (multi-select supported)"}
-          </button>
+              : isDragOver
+                ? "Release to import"
+                : "Drag audio files here"}
+          </div>
+          {!isImporting && !isDragOver && (
+            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              or click to browse (multi-select supported)
+            </div>
+          )}
         </div>
 
         {/* Records list */}
-        <div
-          data-testid="import-manager-list"
-          style={{ overflowY: "auto", padding: "16px 20px", flex: 1 }}
-        >
-          {records.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: "12px",
-                padding: "24px 0",
-              }}
-            >
-              No uploads yet. Click the button above to import audio files.
-            </div>
-          ) : (
-            records.map((record) => (
+        {records.length > 0 && (
+          <div
+            data-testid="import-manager-list"
+            style={{
+              overflowY: "auto",
+              padding: "0 20px 16px",
+              flex: 1,
+            }}
+          >
+            {records.map((record) => (
               <ImportRecordRow
                 key={record.id}
                 record={record}
                 onSelectSession={onSelectSession}
               />
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>,
     document.body,
