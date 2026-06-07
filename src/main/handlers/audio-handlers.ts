@@ -308,6 +308,15 @@ export function register(deps: IpcDeps): void {
     });
     if (result.canceled || !result.filePaths.length) return null;
 
+    const sendProgress = (data: Record<string, unknown>): void => {
+      win.webContents.send("audio:import-progress", data);
+    };
+
+    sendProgress({
+      type: "start",
+      files: result.filePaths.map((f) => path.basename(f)),
+    });
+
     // Import sequentially: each conversion runs ffmpeg, and serial imports
     // keep the directory-name deduplication race-free.
     const imported: {
@@ -316,17 +325,34 @@ export function register(deps: IpcDeps): void {
       audioPath: string;
     }[] = [];
     const errors: { file: string; message: string }[] = [];
-    for (const filePath of result.filePaths) {
+    for (let i = 0; i < result.filePaths.length; i++) {
+      const filePath = result.filePaths[i];
+      const file = path.basename(filePath);
+      sendProgress({ type: "file", index: i, file, status: "converting" });
       try {
-        imported.push(await importOneAudioFile(filePath));
+        const one = await importOneAudioFile(filePath);
+        imported.push(one);
+        sendProgress({
+          type: "file",
+          index: i,
+          file,
+          status: "done",
+          sessionId: one.sessionId,
+        });
       } catch (err) {
-        errors.push({
-          file: filePath,
-          message: err instanceof Error ? err.message : String(err),
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push({ file: filePath, message });
+        sendProgress({
+          type: "file",
+          index: i,
+          file,
+          status: "failed",
+          error: message,
         });
       }
     }
 
+    sendProgress({ type: "finished" });
     return { imported, errors };
   });
 }

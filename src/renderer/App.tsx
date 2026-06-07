@@ -14,6 +14,7 @@ import { useTranscription } from "./hooks/useTranscription";
 import { useSession } from "./hooks/useSession";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { DownloadManagerDialog } from "./components/DownloadManagerDialog";
+import { ImportProgressDialog } from "./components/ImportProgressDialog";
 import { useAudioDownloads } from "./hooks/useAudioDownloads";
 import { useSettings } from "./hooks/useSettings";
 import { useModelDownloads } from "./hooks/useModelDownloads";
@@ -248,6 +249,10 @@ function App(): React.JSX.Element {
     handleRegenerateSubtitles,
     handleCancelRegeneration,
     handleUploadAudio,
+    importItems,
+    importFinished,
+    showImportDialog,
+    handleCloseImportDialog,
   } = sessionMgmt;
 
   // Populate ref bridges for transcription/VAD callbacks
@@ -593,6 +598,13 @@ function App(): React.JSX.Element {
           initialTab={settingsInitialTab}
           onTabChange={setSettingsInitialTab}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+      {showImportDialog && (
+        <ImportProgressDialog
+          items={importItems}
+          finished={importFinished}
+          onClose={handleCloseImportDialog}
         />
       )}
       {showDownloadManager && (

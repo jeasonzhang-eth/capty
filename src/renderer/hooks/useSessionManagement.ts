@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { SessionCategory } from "../components/HistoryPanel";
+import { ImportItem } from "../components/ImportProgressDialog";
 import { Summary } from "../components/SummaryPanel";
 import { useAppStore } from "../stores/appStore";
 
@@ -649,21 +650,62 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
   // ── Audio upload ─────────────────────────────────────────────────────
 
+  const [importItems, setImportItems] = useState<readonly ImportItem[]>([]);
+  const [importFinished, setImportFinished] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const handleCloseImportDialog = useCallback(() => {
+    setShowImportDialog(false);
+    setImportItems([]);
+    setImportFinished(false);
+  }, []);
+
   const handleUploadAudio = useCallback(async () => {
     if (p.current.store.isRecording || regeneratingSessionId !== null) return;
 
-    const result = await window.capty.importAudio();
-    if (!result) return;
+    // Subscribe to per-file progress for the duration of this batch
+    const unsubscribe = window.capty.onAudioImportProgress((event) => {
+      if (event.type === "start" && event.files) {
+        setImportItems(
+          event.files.map((file) => ({ file, status: "pending" as const })),
+        );
+        setImportFinished(false);
+        setShowImportDialog(true);
+      } else if (event.type === "file" && event.index !== undefined) {
+        setImportItems((prev) =>
+          prev.map((item, idx) =>
+            idx === event.index
+              ? {
+                  ...item,
+                  status: event.status ?? item.status,
+                  error: event.error,
+                }
+              : item,
+          ),
+        );
+      } else if (event.type === "finished") {
+        setImportFinished(true);
+      }
+    });
 
-    for (const { file, message } of result.errors) {
-      console.error(`Failed to import ${file}: ${message}`);
+    try {
+      const result = await window.capty.importAudio();
+      if (!result) return;
+
+      // Auto-close the dialog when every file imported cleanly; keep it
+      // open on failures so the user can read the error messages.
+      if (result.errors.length === 0) {
+        setTimeout(handleCloseImportDialog, 1200);
+      }
+      if (result.imported.length === 0) return;
+
+      await p.current.store.loadSessions();
+      // Select the first imported session (the order the user picked them in)
+      await handleSelectSession(result.imported[0].sessionId);
+    } finally {
+      unsubscribe();
     }
-    if (result.imported.length === 0) return;
-
-    await p.current.store.loadSessions();
-    // Select the first imported session (the order the user picked them in)
-    await handleSelectSession(result.imported[0].sessionId);
-  }, [regeneratingSessionId, handleSelectSession]);
+  }, [regeneratingSessionId, handleSelectSession, handleCloseImportDialog]);
 
   // ── Init (called from App.tsx init effect) ───────────────────────────
 
@@ -749,6 +791,10 @@ export function useSessionManagement(params: UseSessionManagementParams) {
 
     // Upload
     handleUploadAudio,
+    importItems,
+    importFinished,
+    showImportDialog,
+    handleCloseImportDialog,
 
     // Init
     initFromConfig,

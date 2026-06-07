@@ -198,6 +198,23 @@ const api = {
     ipcRenderer.invoke("audio:open-folder", sessionId),
 
   // Audio import (supports selecting multiple files)
+  onAudioImportProgress: (
+    callback: (event: {
+      type: "start" | "file" | "finished";
+      files?: string[];
+      index?: number;
+      file?: string;
+      status?: "converting" | "done" | "failed";
+      sessionId?: number;
+      error?: string;
+    }) => void,
+  ) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on("audio:import-progress", handler);
+    return () => {
+      ipcRenderer.removeListener("audio:import-progress", handler);
+    };
+  },
   importAudio: () =>
     ipcRenderer.invoke("audio:import") as Promise<{
       imported: {
