@@ -74,6 +74,12 @@ def main() -> None:
         choices=["debug", "info", "warning", "error"],
         help="Logging level (default: info)",
     )
+    parser.add_argument(
+        "--openapi-out",
+        type=str,
+        default=None,
+        help="Write the OpenAPI schema to this file and exit. Use '-' for stdout.",
+    )
     args = parser.parse_args()
 
     _suppress_noisy_warnings()
@@ -100,6 +106,17 @@ def main() -> None:
     log.info("Using data directory: %s", data_dir)
 
     app = create_app(models_dir=models_dir, data_dir=data_dir)
+    if args.openapi_out:
+        openapi_json = json.dumps(app.openapi(), ensure_ascii=False, indent=2) + "\n"
+        if args.openapi_out == "-":
+            print(openapi_json, end="")
+        else:
+            out_path = Path(args.openapi_out).expanduser()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(openapi_json, encoding="utf-8")
+            log.info("OpenAPI schema written to %s", out_path)
+        return
+
     uvicorn.run(app, host="127.0.0.1", port=args.port)
 
 
