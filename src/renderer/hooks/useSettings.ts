@@ -189,61 +189,61 @@ export function useSettings({ store, audioCapture }: UseSettingsParams) {
   );
 
   // Init: sidecar config + health check + auto-start
-  const initSidecar = useCallback(
-    async (config: Record<string, unknown>) => {
-      const sidecarCfg = config.sidecar as
-        | { port: number; autoStart: boolean }
-        | undefined;
-      if (sidecarCfg) {
-        storeRef.current.setSidecarPort(sidecarCfg.port ?? 8765);
-        setAutoStartSidecar(sidecarCfg.autoStart !== false);
-      }
+  const initSidecar = useCallback(async (config: Record<string, unknown>) => {
+    const sidecarCfg = config.sidecar as
+      | { port: number; autoStart: boolean }
+      | undefined;
+    if (sidecarCfg) {
+      storeRef.current.setSidecarPort(sidecarCfg.port ?? 8765);
+      setAutoStartSidecar(sidecarCfg.autoStart !== false);
+    }
 
-      let sidecarOnline = false;
+    let sidecarOnline = false;
+    try {
+      const health = await window.capty.checkSidecarHealth();
+      sidecarOnline = health.online;
+      storeRef.current.setSidecarReady(health.online);
+    } catch {
+      storeRef.current.setSidecarReady(false);
+    }
+
+    if (sidecarCfg?.autoStart !== false && !sidecarOnline) {
+      storeRef.current.setSidecarStarting(true);
       try {
-        const health = await window.capty.checkSidecarHealth();
-        sidecarOnline = health.online;
-        storeRef.current.setSidecarReady(health.online);
-      } catch {
-        storeRef.current.setSidecarReady(false);
-      }
-
-      if (sidecarCfg?.autoStart !== false && !sidecarOnline) {
-        storeRef.current.setSidecarStarting(true);
-        try {
-          const result = (await window.capty.startSidecar()) as {
-            ok: boolean;
-            error?: string;
-          };
-          if (result.ok) {
-            const h = await window.capty.checkSidecarHealth();
-            storeRef.current.setSidecarReady(h.online);
-            try {
-              const tts = await window.capty.checkTtsProvider();
-              storeRef.current.setTtsProviderReady(tts.ready);
-            } catch {
-              /* best-effort */
-            }
-          } else {
-            console.warn("[sidecar] auto-start failed:", result.error);
+        const result = (await window.capty.startSidecar()) as {
+          ok: boolean;
+          error?: string;
+        };
+        if (result.ok) {
+          const h = await window.capty.checkSidecarHealth();
+          storeRef.current.setSidecarReady(h.online);
+          try {
+            const tts = await window.capty.checkTtsProvider();
+            storeRef.current.setTtsProviderReady(tts.ready);
+          } catch {
+            /* best-effort */
           }
-        } catch {
-          /* silent — IPC transport error */
-        } finally {
-          storeRef.current.setSidecarStarting(false);
+        } else {
+          console.warn("[sidecar] auto-start failed:", result.error);
         }
+      } catch {
+        /* silent — IPC transport error */
+      } finally {
+        storeRef.current.setSidecarStarting(false);
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
-  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0
+  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0; settings: Cmd/Ctrl + .
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      if (e.key === "=" || e.key === "+") {
+      if (e.key === ".") {
+        e.preventDefault();
+        setShowSettings(true);
+      } else if (e.key === "=" || e.key === "+") {
         e.preventDefault();
         setZoomFactor((prev) => {
           const next = Math.min(3.0, Math.round((prev + 0.1) * 10) / 10);
