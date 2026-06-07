@@ -8,6 +8,10 @@ All notable changes to Capty are documented in this file.
 
 - Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
 
+### Changed
+
+- Imported local audio files now default to the "个人录音" (recording) category instead of "下载内容" (download). The startup migration that re-categorizes download sessions no longer matches `model_name = 'imported'` — it previously ran on every launch and would have flipped imported sessions back to download.
+
 ### Docs
 
 - README: embed product screenshots (recording, transcript, summary, questions, translation, replay, import, download, sessions, microphone, export, settings) under `assets/` for both English and Chinese READMEs.

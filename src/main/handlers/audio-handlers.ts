@@ -271,7 +271,7 @@ export function register(deps: IpcDeps): void {
       // 5. Create session only after conversion succeeds.
       sessionId = createSession(db, {
         modelName: "imported",
-        category: "download",
+        category: "recording",
       });
       updateSession(db, sessionId, {
         audioPath: finalTimestamp,
