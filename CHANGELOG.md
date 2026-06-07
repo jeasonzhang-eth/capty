@@ -7,7 +7,7 @@ All notable changes to Capty are documented in this file.
 ### Added
 
 - Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
-- Keyboard shortcut: Cmd/Ctrl+. opens the Settings modal.
+- Keyboard shortcut: Cmd/Ctrl+, opens the Settings modal (standard macOS preferences shortcut).
 
 ### Fixed
 

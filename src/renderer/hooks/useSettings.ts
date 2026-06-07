@@ -234,13 +234,13 @@ export function useSettings({ store, audioCapture }: UseSettingsParams) {
     }
   }, []);
 
-  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0; settings: Cmd/Ctrl + .
+  // Zoom keyboard shortcuts: Cmd/Ctrl + =/- /0; settings: Cmd/Ctrl + ,
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      if (e.key === ".") {
+      if (e.key === ",") {
         e.preventDefault();
         setShowSettings(true);
       } else if (e.key === "=" || e.key === "+") {
