@@ -2,7 +2,11 @@
 
 All notable changes to Capty are documented in this file.
 
-## [Unreleased] - 2026-05-07
+## [Unreleased] - 2026-06-07
+
+### Added
+
+- Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
 
 ### Docs
 

@@ -511,6 +511,12 @@ function ExportMenu({
     onClose();
   }, [sessionId, onClose, getDefaultPath]);
 
+  const handleCopyMarkdown = useCallback(async () => {
+    const content = await window.capty.exportMarkdown(sessionId);
+    await navigator.clipboard.writeText(content as string);
+    onClose();
+  }, [sessionId, onClose]);
+
   const menuItemStyle: React.CSSProperties = {
     display: "block",
     width: "100%",
@@ -585,6 +591,20 @@ function ExportMenu({
         }}
       >
         Export as Markdown
+      </button>
+      <button
+        onClick={handleCopyMarkdown}
+        style={menuItemStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "var(--accent-glow)";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = "transparent";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }}
+      >
+        Copy Markdown to Clipboard
       </button>
     </div>
   );
