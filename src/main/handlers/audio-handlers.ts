@@ -213,44 +213,21 @@ export function register(deps: IpcDeps): void {
     return arrayBuf;
   });
 
-  // Audio import (upload existing audio file — no ffmpeg needed)
-  ipcMain.handle("audio:import", async () => {
-    const win = getMainWindow();
-    if (!win) return null;
-
-    // 1. Open file dialog
-    const result = await dialog.showOpenDialog(win, {
-      properties: ["openFile"],
-      filters: [
-        {
-          name: "Audio Files",
-          extensions: [
-            "wav",
-            "mp3",
-            "m4a",
-            "flac",
-            "ogg",
-            "aac",
-            "wma",
-            "opus",
-          ],
-        },
-      ],
-    });
-    if (result.canceled || !result.filePaths.length) return null;
-
-    const filePath = result.filePaths[0];
-
-    // 2. Get file birthtime for session name
+  // Import a single audio file into a new session. Throws on failure
+  // (session/dir are cleaned up before rethrowing).
+  async function importOneAudioFile(
+    filePath: string,
+  ): Promise<{ sessionId: number; timestamp: string; audioPath: string }> {
+    // 1. Get file birthtime for session name
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
 
-    // 3. Format timestamps
+    // 2. Format timestamps
     const pad = (n: number): string => String(n).padStart(2, "0");
     const dirTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())}T${pad(birthtime.getHours())}-${pad(birthtime.getMinutes())}-${pad(birthtime.getSeconds())}`;
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 4. Deduplicate audio directory name
+    // 3. Deduplicate audio directory name
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
     let finalTimestamp = dirTimestamp;
@@ -268,7 +245,7 @@ export function register(deps: IpcDeps): void {
       const destPath = join(sessionDir, `${finalTimestamp}.wav`);
       await convertToWav(filePath, destPath);
 
-      // 5. Create session only after conversion succeeds.
+      // 4. Create session only after conversion succeeds.
       sessionId = createSession(db, {
         modelName: "imported",
         category: "recording",
@@ -279,7 +256,7 @@ export function register(deps: IpcDeps): void {
         startedAt: readableTimestamp,
       });
 
-      // 6. Calculate duration from WAV and update session
+      // 5. Calculate duration from WAV and update session
       const wavStat = fs.statSync(destPath);
       const pcmBytes = wavStat.size - 44; // 44-byte WAV header
       const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
@@ -304,5 +281,52 @@ export function register(deps: IpcDeps): void {
       }
       throw err;
     }
+  }
+
+  // Audio import (upload one or more existing audio files)
+  ipcMain.handle("audio:import", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "Audio Files",
+          extensions: [
+            "wav",
+            "mp3",
+            "m4a",
+            "flac",
+            "ogg",
+            "aac",
+            "wma",
+            "opus",
+          ],
+        },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+
+    // Import sequentially: each conversion runs ffmpeg, and serial imports
+    // keep the directory-name deduplication race-free.
+    const imported: {
+      sessionId: number;
+      timestamp: string;
+      audioPath: string;
+    }[] = [];
+    const errors: { file: string; message: string }[] = [];
+    for (const filePath of result.filePaths) {
+      try {
+        imported.push(await importOneAudioFile(filePath));
+      } catch (err) {
+        errors.push({
+          file: filePath,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return { imported, errors };
   });
 }

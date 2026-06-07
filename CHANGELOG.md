@@ -8,6 +8,7 @@ All notable changes to Capty are documented in this file.
 
 - Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
 - Keyboard shortcut: Cmd/Ctrl+, opens the Settings modal (standard macOS preferences shortcut).
+- Audio import now supports selecting multiple files at once. Files are imported sequentially (one ffmpeg conversion at a time), each into its own session; per-file failures are collected without aborting the rest, and the first imported session is selected afterwards.
 
 ### Fixed
 

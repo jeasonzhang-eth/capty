@@ -197,12 +197,15 @@ const api = {
   openAudioFolder: (sessionId: number) =>
     ipcRenderer.invoke("audio:open-folder", sessionId),
 
-  // Audio import
+  // Audio import (supports selecting multiple files)
   importAudio: () =>
     ipcRenderer.invoke("audio:import") as Promise<{
-      sessionId: number;
-      timestamp: string;
-      audioPath: string;
+      imported: {
+        sessionId: number;
+        timestamp: string;
+        audioPath: string;
+      }[];
+      errors: { file: string; message: string }[];
     } | null>,
   getAudioDuration: (filePath: string) =>
     ipcRenderer.invoke("audio:get-duration", filePath) as Promise<number>,

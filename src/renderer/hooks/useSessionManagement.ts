@@ -331,12 +331,19 @@ export function useSessionManagement(params: UseSessionManagementParams) {
       p.current.summary.setGenerateError(null);
       const segments = await window.capty.listSegments(sessionId);
       p.current.store.setSegments(
-        segments.map((s: { id: number; start_time: number; end_time: number; text: string }) => ({
-          id: s.id,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          text: s.text,
-        })),
+        segments.map(
+          (s: {
+            id: number;
+            start_time: number;
+            end_time: number;
+            text: string;
+          }) => ({
+            id: s.id,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            text: s.text,
+          }),
+        ),
       );
       // Auto-load translations for the new session if a language was active
       if (p.current.translation.activeTranslationLang) {
@@ -648,8 +655,14 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     const result = await window.capty.importAudio();
     if (!result) return;
 
+    for (const { file, message } of result.errors) {
+      console.error(`Failed to import ${file}: ${message}`);
+    }
+    if (result.imported.length === 0) return;
+
     await p.current.store.loadSessions();
-    await handleSelectSession(result.sessionId);
+    // Select the first imported session (the order the user picked them in)
+    await handleSelectSession(result.imported[0].sessionId);
   }, [regeneratingSessionId, handleSelectSession]);
 
   // ── Init (called from App.tsx init effect) ───────────────────────────
