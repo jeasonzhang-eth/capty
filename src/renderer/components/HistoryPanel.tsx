@@ -512,6 +512,46 @@ export function HistoryPanel({
     return () => document.removeEventListener("keydown", h);
   }, [editingSessionId]);
 
+  // ── Edit Created Time modal state ──
+  const [editingTimeSessionId, setEditingTimeSessionId] = useState<
+    number | null
+  >(null);
+  const [editTimeTitle, setEditTimeTitle] = useState(""); // passed through unchanged
+  const [editTimeValue, setEditTimeValue] = useState(""); // datetime-local
+
+  const handleEditTimeClick = useCallback(() => {
+    if (contextMenu.sessionId !== null) {
+      const target = sessions.find((s) => s.id === contextMenu.sessionId);
+      if (target) {
+        setEditingTimeSessionId(target.id);
+        setEditTimeTitle(target.title);
+        setEditTimeValue(target.started_at.replace(" ", "T"));
+      }
+    }
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  }, [contextMenu.sessionId, sessions]);
+
+  const handleEditTimeSave = useCallback(() => {
+    if (editingTimeSessionId !== null && onEditSession && editTimeValue) {
+      onEditSession(editingTimeSessionId, editTimeTitle, editTimeValue);
+    }
+    setEditingTimeSessionId(null);
+  }, [editingTimeSessionId, editTimeTitle, editTimeValue, onEditSession]);
+
+  const handleEditTimeCancel = useCallback(() => {
+    setEditingTimeSessionId(null);
+  }, []);
+
+  // ESC to dismiss edit created time modal
+  useEffect(() => {
+    if (editingTimeSessionId === null) return;
+    const h = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setEditingTimeSessionId(null);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [editingTimeSessionId]);
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const handleRegenerateClick = useCallback(() => {
@@ -1828,6 +1868,26 @@ export function HistoryPanel({
                       Edit Info
                     </div>
                   )}
+                  {isCompleted && onEditSession && (
+                    <div
+                      onClick={handleEditTimeClick}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        color: "var(--text-primary)",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.backgroundColor =
+                          "var(--accent-glow)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.backgroundColor = "transparent")
+                      }
+                    >
+                      Edit Created Time
+                    </div>
+                  )}
                   {/* Move to... submenu */}
                   {onUpdateCategory && (
                     <>
@@ -2157,6 +2217,124 @@ export function HistoryPanel({
                     color: "#000",
                     cursor: editTitle.trim() ? "pointer" : "not-allowed",
                     opacity: editTitle.trim() ? 1 : 0.5,
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Edit Created Time modal */}
+      {editingTimeSessionId !== null &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+            }}
+            onClick={handleEditTimeCancel}
+          >
+            <div
+              style={{
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+                backgroundColor: "rgba(28, 28, 31, 0.92)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "20px 24px",
+                maxWidth: "380px",
+                width: "100%",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  marginBottom: "16px",
+                  color: "var(--text-primary)",
+                }}
+              >
+                Edit Created Time
+              </div>
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Recorded At
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editTimeValue}
+                  onChange={(e) => setEditTimeValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleEditTimeSave();
+                  }}
+                  autoFocus
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    fontSize: "13px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    color: "var(--text-primary)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    colorScheme: "dark",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                <button
+                  onClick={handleEditTimeCancel}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditTimeSave}
+                  disabled={!editTimeValue}
+                  style={{
+                    padding: "6px 16px",
+                    fontSize: "13px",
+                    borderRadius: "6px",
+                    border: "none",
+                    backgroundColor: "var(--accent)",
+                    color: "#000",
+                    cursor: editTimeValue ? "pointer" : "not-allowed",
+                    opacity: editTimeValue ? 1 : 0.5,
                   }}
                 >
                   Save
