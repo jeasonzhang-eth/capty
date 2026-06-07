@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface ModelInfo {
   readonly id: string;
@@ -2970,9 +2971,7 @@ function LanguageModelsTab({
     models: [] as string[],
   });
   const [showFetchDialog, setShowFetchDialog] = useState(false);
-  const [fetchedModels, setFetchedModels] = useState<
-    ModelOption[]
-  >([]);
+  const [fetchedModels, setFetchedModels] = useState<ModelOption[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [manualModelInput, setManualModelInput] = useState("");
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -3674,20 +3673,69 @@ function UnifiedModelSelector({
 }): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [menuRect, setMenuRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    openUp: boolean;
+  } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The dropdown menu is rendered through a portal (position: fixed) so it
+  // can escape the settings card's stacking context (backdrop-filter on
+  // cardStyle) — otherwise later sibling cards paint on top of the menu.
+  const openMenu = useCallback((): void => {
+    const trigger = dropdownRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const openUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+    const maxHeight = Math.min(280, openUp ? spaceAbove : spaceBelow);
+    setMenuRect({
+      top: openUp ? rect.top : rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+      openUp,
+    });
+    setIsOpen(true);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent): void => {
+      const target = event.target as Node;
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
+        !dropdownRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
       ) {
         setIsOpen(false);
         setSearch("");
       }
     };
-    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    // Close on outer scroll/resize so the fixed-position menu never drifts
+    // away from its trigger (scroll events inside the menu are ignored).
+    const handleScroll = (event: Event): void => {
+      if (menuRef.current && menuRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setIsOpen(false);
+      setSearch("");
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("scroll", handleScroll, true);
+      window.addEventListener("resize", handleScroll);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+    };
   }, [isOpen]);
 
   // Build flat list: all models from all providers that have models
@@ -3739,7 +3787,14 @@ function UnifiedModelSelector({
     >
       {/* Closed state */}
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (isOpen) {
+            setIsOpen(false);
+            setSearch("");
+          } else {
+            openMenu();
+          }
+        }}
         style={{
           background: "var(--bg-primary)",
           border: `1px solid ${isOpen ? "var(--accent)" : "var(--border)"}`,
@@ -3843,146 +3898,153 @@ function UnifiedModelSelector({
         </button>
       )}
 
-      {/* Dropdown */}
-      {isOpen && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            background: "var(--bg-surface, #1e1e1e)",
-            border: "1px solid var(--accent)",
-            borderTop: "1px solid var(--border)",
-            borderRadius: "0 0 6px 6px",
-            maxHeight: "280px",
-            overflowY: "auto",
-            zIndex: 1000,
-          }}
-        >
-          {/* Search */}
+      {/* Dropdown — portaled to body to escape the card's stacking context */}
+      {isOpen &&
+        menuRect &&
+        createPortal(
           <div
+            ref={menuRef}
             style={{
-              padding: "6px 8px",
-              borderBottom: "1px solid var(--border)",
+              position: "fixed",
+              ...(menuRect.openUp
+                ? { bottom: window.innerHeight - menuRect.top }
+                : { top: menuRect.top }),
+              left: menuRect.left,
+              width: menuRect.width,
+              background: "var(--bg-surface, #1e1e1e)",
+              border: "1px solid var(--accent)",
+              borderTop: "1px solid var(--border)",
+              borderRadius: menuRect.openUp ? "6px 6px 0 0" : "0 0 6px 6px",
+              maxHeight: `${menuRect.maxHeight}px`,
+              overflowY: "auto",
+              zIndex: 10000,
+              boxSizing: "border-box",
             }}
           >
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter..."
-              autoFocus
-              style={{
-                width: "100%",
-                background: "var(--bg-primary, #1a1a1a)",
-                border: "1px solid var(--border)",
-                borderRadius: "4px",
-                padding: "4px 8px",
-                color: "var(--text-primary)",
-                fontSize: "12px",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          {/* Grouped items */}
-          {allModels.length === 0 && (
+            {/* Search */}
             <div
               style={{
-                padding: "12px",
-                textAlign: "center",
-                color: "var(--text-muted)",
-                fontSize: "12px",
+                padding: "6px 8px",
+                borderBottom: "1px solid var(--border)",
               }}
             >
-              No models available. Add models in Language Models tab.
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter..."
+                autoFocus
+                style={{
+                  width: "100%",
+                  background: "var(--bg-primary, #1a1a1a)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px",
+                  padding: "4px 8px",
+                  color: "var(--text-primary)",
+                  fontSize: "12px",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
             </div>
-          )}
-          {Array.from(groups).map(([providerName, models]) => (
-            <div key={providerName}>
+
+            {/* Grouped items */}
+            {allModels.length === 0 && (
               <div
                 style={{
-                  padding: "6px 12px 2px",
+                  padding: "12px",
+                  textAlign: "center",
                   color: "var(--text-muted)",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
+                  fontSize: "12px",
                 }}
               >
-                {providerName}
+                No models available. Add models in Language Models tab.
               </div>
-              {models.map((m) => {
-                const isSelected =
-                  selected?.providerId === m.providerId &&
-                  selected?.model === m.model;
-                return (
-                  <div
-                    key={`${m.providerId}-${m.model}`}
-                    onClick={() => {
-                      onChange({
-                        providerId: m.providerId,
-                        model: m.model,
-                      });
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
-                    style={{
-                      padding: "6px 12px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      cursor: "pointer",
-                      background: isSelected
-                        ? "rgba(139,139,240,0.1)"
-                        : "transparent",
-                    }}
-                  >
+            )}
+            {Array.from(groups).map(([providerName, models]) => (
+              <div key={providerName}>
+                <div
+                  style={{
+                    padding: "6px 12px 2px",
+                    color: "var(--text-muted)",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  {providerName}
+                </div>
+                {models.map((m) => {
+                  const isSelected =
+                    selected?.providerId === m.providerId &&
+                    selected?.model === m.model;
+                  return (
                     <div
+                      key={`${m.providerId}-${m.model}`}
+                      onClick={() => {
+                        onChange({
+                          providerId: m.providerId,
+                          model: m.model,
+                        });
+                        setIsOpen(false);
+                        setSearch("");
+                      }}
                       style={{
-                        width: "18px",
-                        height: "18px",
-                        borderRadius: "50%",
-                        background: "rgba(139,139,240,0.15)",
+                        padding: "6px 12px",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--accent)",
-                        fontSize: "9px",
-                        fontWeight: 700,
-                        flexShrink: 0,
+                        gap: "8px",
+                        cursor: "pointer",
+                        background: isSelected
+                          ? "rgba(139,139,240,0.1)"
+                          : "transparent",
                       }}
                     >
-                      {getInitial(m.providerName)}
+                      <div
+                        style={{
+                          width: "18px",
+                          height: "18px",
+                          borderRadius: "50%",
+                          background: "rgba(139,139,240,0.15)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--accent)",
+                          fontSize: "9px",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {getInitial(m.providerName)}
+                      </div>
+                      <span
+                        style={{
+                          color: isSelected
+                            ? "var(--accent)"
+                            : "var(--text-primary)",
+                          fontSize: "13px",
+                        }}
+                      >
+                        {m.model}
+                      </span>
+                      <span
+                        style={{
+                          color: "var(--text-muted)",
+                          fontSize: "11px",
+                          marginLeft: "auto",
+                        }}
+                      >
+                        {m.providerName}
+                      </span>
                     </div>
-                    <span
-                      style={{
-                        color: isSelected
-                          ? "var(--accent)"
-                          : "var(--text-primary)",
-                        fontSize: "13px",
-                      }}
-                    >
-                      {m.model}
-                    </span>
-                    <span
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "11px",
-                        marginLeft: "auto",
-                      }}
-                    >
-                      {m.providerName}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
+                  );
+                })}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

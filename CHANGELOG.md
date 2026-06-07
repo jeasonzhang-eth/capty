@@ -9,6 +9,10 @@ All notable changes to Capty are documented in this file.
 - Transcript export menu (middle column): new "Copy Markdown to Clipboard" item that copies the Markdown export of the current session directly to the clipboard, alongside the existing TXT/SRT/Markdown file exports.
 - Keyboard shortcut: Cmd/Ctrl+. opens the Settings modal.
 
+### Fixed
+
+- Settings → Default Models: model dropdowns (Summary/Rapid/Translate) were occluded by the cards below them — `backdrop-filter` on each card creates a stacking context, so the menu's z-index could not escape and later sibling cards painted on top. The dropdown is now rendered through a portal to `document.body` with fixed positioning, flips upward when there is not enough space below, and closes on outer scroll/resize to stay anchored to its trigger.
+
 ### Changed
 
 - Imported local audio files now default to the "个人录音" (recording) category instead of "下载内容" (download). The startup migration that re-categorizes download sessions no longer matches `model_name = 'imported'` — it previously ran on every launch and would have flipped imported sessions back to download.
