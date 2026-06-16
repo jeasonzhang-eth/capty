@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, net } from "electron";
 import type { IpcDeps } from "./types";
 import { assertPathWithin } from "../shared/path";
 import { spawn } from "../shared/spawn";
+import { sanitizeSessionDirName } from "../shared/session-name";
 import {
   saveSegmentAudio,
   saveFullAudio,
@@ -349,4 +350,91 @@ export function register(deps: IpcDeps): void {
 
     return importAudioBatch(win, valid);
   });
+
+  // Pick audio files via the OS dialog WITHOUT importing — the renderer
+  // decides whether to import separately or merge.
+  ipcMain.handle("audio:pick-files", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audio Files", extensions: AUDIO_EXTENSIONS }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    return result.filePaths;
+  });
+
+  // Merge several audio files (in the given order) into ONE session.
+  ipcMain.handle(
+    "audio:import-merged",
+    async (_event, paths: string[], title: string) => {
+      const win = getMainWindow();
+      if (!win) return null;
+
+      const valid = (Array.isArray(paths) ? paths : []).filter((f) => {
+        if (typeof f !== "string" || !path.isAbsolute(f)) return false;
+        const ext = path.extname(f).slice(1).toLowerCase();
+        if (!AUDIO_EXTENSIONS.includes(ext)) return false;
+        try {
+          return fs.statSync(f).isFile();
+        } catch {
+          return false;
+        }
+      });
+      if (valid.length < 2) return null;
+
+      const send = (data: Record<string, unknown>): void =>
+        win.webContents.send("audio:import-progress", data);
+
+      const displayName = path.basename(valid[0]);
+      send({ type: "start", files: [displayName] });
+      send({ type: "file", index: 0, file: displayName, status: "converting" });
+
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+
+      const pad = (n: number): string => String(n).padStart(2, "0");
+      const birthtimes = valid.map((f) => fs.statSync(f).birthtime.getTime());
+      const earliest = new Date(Math.min(...birthtimes));
+      const startedAt = `${earliest.getFullYear()}-${pad(earliest.getMonth() + 1)}-${pad(earliest.getDate())} ${pad(earliest.getHours())}:${pad(earliest.getMinutes())}:${pad(earliest.getSeconds())}`;
+
+      const cleanTitle = (title ?? "").trim();
+      const fallback = path.basename(valid[0], path.extname(valid[0]));
+      const finalTitle = cleanTitle || fallback;
+      const baseName = sanitizeSessionDirName(finalTitle) || startedAt;
+
+      try {
+        const built = await createSessionFromWav({
+          db,
+          dataDir,
+          baseName,
+          buildTitle: () => finalTitle,
+          startedAt,
+          modelName: "imported",
+          category: "recording",
+          writeWav: (destPath) => mergeAudioFiles(valid, destPath),
+        });
+        send({
+          type: "file",
+          index: 0,
+          file: displayName,
+          status: "done",
+          sessionId: built.sessionId,
+        });
+        send({ type: "finished" });
+        return { imported: [built], errors: [] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        send({
+          type: "file",
+          index: 0,
+          file: displayName,
+          status: "failed",
+          error: message,
+        });
+        send({ type: "finished" });
+        return { imported: [], errors: [{ file: displayName, message }] };
+      }
+    },
+  );
 }
