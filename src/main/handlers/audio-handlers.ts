@@ -11,6 +11,8 @@ import {
 } from "../audio-files";
 import { createSession, getSession, updateSession } from "../database";
 import { readConfig } from "../config";
+import { createSessionFromWav } from "../audio/session-from-wav";
+import { mergeAudioFiles } from "../audio/merge";
 import fs from "fs";
 import path from "path";
 import { join } from "path";
@@ -218,75 +220,31 @@ export function register(deps: IpcDeps): void {
   async function importOneAudioFile(
     filePath: string,
   ): Promise<{ sessionId: number; timestamp: string; audioPath: string }> {
-    // 1. Session title and directory name reuse the source file name.
-    //    (Creation-time naming collided when files shared a birthtime and
-    //    lost the original, meaningful names.)
+    // Session title and directory name reuse the source file name.
     const sourceName = path.basename(filePath, path.extname(filePath));
-    // Strip characters that are illegal/awkward in directory names
     const safeName =
       sourceName.replace(/[\\/:*?"<>|]/g, "_").trim() || "imported";
 
-    // File birthtime is still used as the session start time
+    // File birthtime is used as the session start time.
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
     const pad = (n: number): string => String(n).padStart(2, "0");
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 2. Deduplicate audio directory name
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    let dirName = safeName;
-    let sessionDir = join(dataDir, "audio", dirName);
-    let suffix = 1;
-    while (fs.existsSync(sessionDir)) {
-      dirName = `${safeName}-${suffix}`;
-      sessionDir = join(dataDir, "audio", dirName);
-      suffix++;
-    }
 
-    let sessionId: number | null = null;
-    try {
-      fs.mkdirSync(sessionDir, { recursive: true });
-      const destPath = join(sessionDir, `${dirName}.wav`);
-      await convertToWav(filePath, destPath);
-
-      // 3. Create session only after conversion succeeds.
-      sessionId = createSession(db, {
-        modelName: "imported",
-        category: "recording",
-      });
-      updateSession(db, sessionId, {
-        audioPath: dirName,
-        title:
-          dirName === safeName ? sourceName : `${sourceName} (${suffix - 1})`,
-        startedAt: readableTimestamp,
-      });
-
-      // 4. Calculate duration from WAV and update session
-      const wavStat = fs.statSync(destPath);
-      const pcmBytes = wavStat.size - 44; // 44-byte WAV header
-      const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
-      updateSession(db, sessionId, {
-        status: "completed",
-        durationSeconds,
-      });
-
-      return { sessionId, timestamp: dirName, audioPath: destPath };
-    } catch (err) {
-      if (sessionId !== null) {
-        try {
-          db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
-      try {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup errors
-      }
-      throw err;
-    }
+    return createSessionFromWav({
+      db,
+      dataDir,
+      baseName: safeName,
+      buildTitle: (collisionIndex) =>
+        collisionIndex === 0 ? sourceName : `${sourceName} (${collisionIndex})`,
+      startedAt: readableTimestamp,
+      modelName: "imported",
+      category: "recording",
+      writeWav: (destPath) => convertToWav(filePath, destPath),
+    });
   }
 
   // Audio import (upload one or more existing audio files)
