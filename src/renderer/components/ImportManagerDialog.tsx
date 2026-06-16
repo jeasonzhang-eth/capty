@@ -17,6 +17,11 @@ interface ImportManagerDialogProps {
   readonly onDropFiles: (files: File[]) => void;
   readonly onSelectSession: (sessionId: number) => void;
   readonly onClose: () => void;
+  // Staging: when non-empty (>=2), show the reorder+merge view instead of the dropzone.
+  readonly stagingPaths?: readonly string[];
+  readonly onConfirmMerge?: (orderedPaths: string[], title: string) => void;
+  readonly onConfirmSeparate?: (orderedPaths: string[]) => void;
+  readonly onCancelStaging?: () => void;
 }
 
 function formatDate(iso: string): string {
@@ -122,6 +127,10 @@ export function ImportManagerDialog({
   onDropFiles,
   onSelectSession,
   onClose,
+  stagingPaths,
+  onConfirmMerge,
+  onConfirmSeparate,
+  onCancelStaging,
 }: ImportManagerDialogProps): React.ReactElement {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -136,6 +145,33 @@ export function ImportManagerDialog({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  const [order, setOrder] = useState<string[]>([]);
+  const [mergeTitle, setMergeTitle] = useState("");
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const staging = (stagingPaths?.length ?? 0) >= 2;
+
+  useEffect(() => {
+    if (staging) {
+      const sorted = [...(stagingPaths as string[])];
+      setOrder(sorted);
+      const first = sorted[0].split(/[/\\]/).pop() ?? "";
+      setMergeTitle(first.replace(/\.[^.]+$/, ""));
+    }
+  }, [staging, stagingPaths]);
+
+  const baseName = (p: string): string => p.split(/[/\\]/).pop() ?? p;
+
+  function moveItem(from: number, to: number): void {
+    setOrder((prev) => {
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
 
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -237,83 +273,249 @@ export function ImportManagerDialog({
           </button>
         </div>
 
-        {/* Drop zone */}
-        <div
-          data-testid="import-manager-dropzone"
-          onClick={isImporting ? undefined : onUpload}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          style={{
-            margin: "0 20px 16px",
-            minHeight: records.length > 0 ? "140px" : "240px",
-            border: dropBorder,
-            borderRadius: "12px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
-            cursor: isImporting ? "default" : "pointer",
-            backgroundColor: isDragOver
-              ? "rgba(139,139,240,0.08)"
-              : "transparent",
-            transition: "background-color 0.15s, border-color 0.15s",
-            flexShrink: 0,
-          }}
-        >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={isDragOver ? "var(--accent)" : "var(--text-muted)"}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
+        {staging && (
           <div
+            data-testid="merge-staging"
             style={{
-              fontSize: "13px",
-              fontWeight: 500,
-              color: isDragOver ? "var(--accent)" : "var(--text-primary)",
-            }}
-          >
-            {isImporting
-              ? "Importing..."
-              : isDragOver
-                ? "Release to import"
-                : "Drag audio files here"}
-          </div>
-          {!isImporting && !isDragOver && (
-            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-              or click to browse (multi-select supported)
-            </div>
-          )}
-        </div>
-
-        {/* Records list */}
-        {records.length > 0 && (
-          <div
-            data-testid="import-manager-list"
-            style={{
-              overflowY: "auto",
               padding: "0 20px 16px",
-              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
             }}
           >
-            {records.map((record) => (
-              <ImportRecordRow
-                key={record.id}
-                record={record}
-                onSelectSession={onSelectSession}
-              />
-            ))}
+            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+              拖拽调整顺序，合并为一个 session（共 {order.length} 段）
+            </div>
+
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+            >
+              {order.map((p, i) => (
+                <div
+                  key={p}
+                  data-testid={`merge-item-${i}`}
+                  draggable
+                  onDragStart={() => setDragIdx(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragIdx !== null && dragIdx !== i) moveItem(dragIdx, i);
+                    setDragIdx(null);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 10px",
+                    backgroundColor: "var(--bg-secondary, #1c1c1f)",
+                    borderRadius: "8px",
+                    cursor: "grab",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "12px",
+                      width: "18px",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: "13px",
+                      color: "var(--text-primary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={baseName(p)}
+                  >
+                    {baseName(p)}
+                  </span>
+                  <button
+                    onClick={() => moveItem(i, i - 1)}
+                    disabled={i === 0}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: i === 0 ? "default" : "pointer",
+                    }}
+                    title="上移"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => moveItem(i, i + 1)}
+                    disabled={i === order.length - 1}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: i === order.length - 1 ? "default" : "pointer",
+                    }}
+                    title="下移"
+                  >
+                    ↓
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <input
+              data-testid="merge-title"
+              value={mergeTitle}
+              onChange={(e) => setMergeTitle(e.target.value)}
+              placeholder="合并后的 session 名称"
+              style={{
+                fontSize: "13px",
+                padding: "8px 10px",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                backgroundColor: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                data-testid="merge-cancel"
+                onClick={() => onCancelStaging?.()}
+                disabled={isImporting}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                取消
+              </button>
+              <button
+                data-testid="merge-separate"
+                onClick={() => onConfirmSeparate?.([...order])}
+                disabled={isImporting}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "none",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                }}
+              >
+                分别导入
+              </button>
+              <button
+                data-testid="merge-confirm"
+                onClick={() => onConfirmMerge?.([...order], mergeTitle.trim())}
+                disabled={isImporting || order.length < 2}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                合并为一个 session
+              </button>
+            </div>
           </div>
+        )}
+
+        {!staging && (
+          <>
+            {/* Drop zone */}
+            <div
+              data-testid="import-manager-dropzone"
+              onClick={isImporting ? undefined : onUpload}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{
+                margin: "0 20px 16px",
+                minHeight: records.length > 0 ? "140px" : "240px",
+                border: dropBorder,
+                borderRadius: "12px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                cursor: isImporting ? "default" : "pointer",
+                backgroundColor: isDragOver
+                  ? "rgba(139,139,240,0.08)"
+                  : "transparent",
+                transition: "background-color 0.15s, border-color 0.15s",
+                flexShrink: 0,
+              }}
+            >
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={isDragOver ? "var(--accent)" : "var(--text-muted)"}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: isDragOver ? "var(--accent)" : "var(--text-primary)",
+                }}
+              >
+                {isImporting
+                  ? "Importing..."
+                  : isDragOver
+                    ? "Release to import"
+                    : "Drag audio files here"}
+              </div>
+              {!isImporting && !isDragOver && (
+                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  or click to browse (multi-select supported)
+                </div>
+              )}
+            </div>
+
+            {/* Records list */}
+            {records.length > 0 && (
+              <div
+                data-testid="import-manager-list"
+                style={{
+                  overflowY: "auto",
+                  padding: "0 20px 16px",
+                  flex: 1,
+                }}
+              >
+                {records.map((record) => (
+                  <ImportRecordRow
+                    key={record.id}
+                    record={record}
+                    onSelectSession={onSelectSession}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>,
