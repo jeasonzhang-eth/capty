@@ -10,6 +10,8 @@ All notable changes to Capty are documented in this file.
   - `isaac.ts`: ISAAC64 stream cipher that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Verified against the Go reference (wx_channels_download) with golden keystream vectors.
   - `resolver.ts`: resolves a `/sph/<code>` share link into a downloadable `videoUrl` + `decodeKey` via Tencent Yuanbao's parse API (using the user's own yuanbao login) followed by 视频号 `get_feed_info`.
   - `downloader.ts`: downloads the video and decrypts its prefix, producing a playable MP4.
+  - `yuanbao-auth.ts`: one-time Tencent Yuanbao login in an embedded window (dedicated `persist:yuanbao` session partition); resolver requests reuse that cookie jar, so no other app's credentials are touched.
+- 视频号 links in the Download Audio manager: paste a `weixin.qq.com/sph/...` share link and Capty resolves → downloads → (optionally keeps the video) → transcribes it as a new session, reusing the existing download/convert/session pipeline. On first use it opens a window to log into Tencent Yuanbao. The download manager shows a "视频号" badge for these links.
 
 ## [0.3.1] - 2026-06-07
 

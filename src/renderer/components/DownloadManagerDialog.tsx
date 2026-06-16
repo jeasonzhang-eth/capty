@@ -102,6 +102,11 @@ const PLATFORM_MAP: readonly { pattern: RegExp; info: PlatformInfo }[] = [
     info: { label: "NetEase", color: "#c20c0c", bg: "rgba(194,12,12,0.12)" },
   },
   {
+    // 视频号 share links — must precede the generic qq.com rule below.
+    pattern: /weixin\.qq\.com\/sph|channels\.weixin\.qq\.com/i,
+    info: { label: "视频号", color: "#fa9d3b", bg: "rgba(250,157,59,0.12)" },
+  },
+  {
     pattern: /qq\.com/i,
     info: { label: "QQ", color: "#12b7f5", bg: "rgba(18,183,245,0.12)" },
   },
@@ -277,7 +282,7 @@ export function DownloadManagerDialog({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Paste URL (YouTube, Bilibili, 小宇宙, TikTok, ...)"
+            placeholder="Paste URL (YouTube, Bilibili, 视频号, 小宇宙, TikTok, ...)"
             style={{
               flex: 1,
               padding: "8px 12px",
