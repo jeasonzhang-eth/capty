@@ -241,6 +241,17 @@ const api = {
       }[];
       errors: { file: string; message: string }[];
     } | null>,
+  pickFiles: () =>
+    ipcRenderer.invoke("audio:pick-files") as Promise<string[] | null>,
+  importMerged: (paths: string[], title: string) =>
+    ipcRenderer.invoke("audio:import-merged", paths, title) as Promise<{
+      imported: {
+        sessionId: number;
+        timestamp: string;
+        audioPath: string;
+      }[];
+      errors: { file: string; message: string }[];
+    } | null>,
   // Resolve the filesystem path of a dropped File (Electron 32+ removed File.path)
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getAudioDuration: (filePath: string) =>
