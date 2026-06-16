@@ -14,6 +14,7 @@ import {
   hasYuanbaoLogin,
   openYuanbaoLogin,
   ensureYuanbaoHeaders,
+  clearYuanbaoLogin,
   yuanbaoFetch,
 } from "../wechat/yuanbao-auth";
 import {
@@ -646,5 +647,16 @@ export function register(deps: IpcDeps): void {
     if (win) {
       win.webContents.send("audio:download-retry-trigger", { url });
     }
+  });
+
+  // ─── 视频号 / Tencent Yuanbao login management ───
+
+  ipcMain.handle("wechat:yuanbao-status", async () => {
+    return { loggedIn: await hasYuanbaoLogin() };
+  });
+
+  ipcMain.handle("wechat:yuanbao-logout", async () => {
+    await clearYuanbaoLogin();
+    return { ok: true };
   });
 }

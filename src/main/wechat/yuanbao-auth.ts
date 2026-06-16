@@ -166,6 +166,12 @@ export function openYuanbaoLogin(parent?: BrowserWindow): Promise<boolean> {
   });
 }
 
+/** Clear the yuanbao login (cookies + storage) and forget captured headers. */
+export async function clearYuanbaoLogin(): Promise<void> {
+  capturedHeaders = {};
+  await getYuanbaoSession().clearStorageData();
+}
+
 /**
  * A {@link FetchLike} bound to the yuanbao session: carries the partition's
  * cookies and replays the live-captured device headers (caller headers win).
