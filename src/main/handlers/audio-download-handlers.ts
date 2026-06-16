@@ -13,6 +13,7 @@ import { downloadAndDecrypt } from "../wechat/downloader";
 import {
   hasYuanbaoLogin,
   openYuanbaoLogin,
+  ensureYuanbaoHeaders,
   yuanbaoFetch,
 } from "../wechat/yuanbao-auth";
 import {
@@ -346,6 +347,8 @@ export function register(deps: IpcDeps): void {
             }
           }
 
+          // Capture the user's own live device/fingerprint headers (best effort).
+          await ensureYuanbaoHeaders();
           const resolved = await resolveShareUrl(url, yuanbaoFetch());
           videoTitle = resolved.title;
           if (videoTitle) {

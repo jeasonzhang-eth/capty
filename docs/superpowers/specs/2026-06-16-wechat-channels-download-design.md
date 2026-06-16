@@ -57,8 +57,28 @@ share link (pasted into Download Audio manager)
   `YuanbaoAuthError`. Injectable `FetchLike` for unit tests.
 - `downloader.ts` — `downloadAndDecrypt(videoUrl, decodeKey, dest, fetchFn)`.
 - `yuanbao-auth.ts` — `persist:yuanbao` session partition, `hasYuanbaoLogin`,
-  `openYuanbaoLogin`, `yuanbaoFetch`. Credentials never leave the partition; we
-  never read another app's cookie store.
+  `openYuanbaoLogin`, `ensureYuanbaoHeaders`, `yuanbaoFetch`. Credentials never
+  leave the partition; we never read another app's cookie store.
+
+### On the device/fingerprint headers
+
+The original tool hardcoded a long list of headers on the yuanbao call
+(`x-hy92`, `x-hy93`, `x-device-id`, `t-userid`, `x-agentid: naQivTmsDa/...`,
+`sec-ch-ua*`, ...). Empirically these are **not required** — a bare login
+cookie returns 200. They are there mostly because the author copy-pasted the
+request straight out of browser DevTools ("Copy as fetch") and never trimmed
+it; `x-agentid` is a leftover pointing at the author's own yuanbao agent. The
+one real reason to send them: the author shipped a **Cloudflare Worker**
+(fixed IP, high call volume) where a complete browser/device fingerprint lowers
+the chance of being flagged by Tencent's rate-limiting.
+
+Our usage is the opposite (desktop client, the user's own login, low volume),
+so a bare cookie suffices. To still look like a normal browser without copying
+anyone else's values, `yuanbao-auth` **sniffs the headers live** from the
+user's own yuanbao traffic (`webRequest.onBeforeSendHeaders` on the partition,
+populated by the login window or a brief hidden page load) and replays the
+current set, falling back to cookie-only when none are captured. Nothing is
+hardcoded, so the values stay fresh as yuanbao rotates them.
 
 ### Integration
 

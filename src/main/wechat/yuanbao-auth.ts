@@ -6,6 +6,13 @@
  * user signs into once via an embedded window. Resolver requests run through
  * that session's cookie jar, so credentials never leave the partition — we
  * never read another app's cookie store.
+ *
+ * Yuanbao's web client decorates its API calls with device/fingerprint headers
+ * (`x-hy*`, `x-device-id`, `t-userid`, `sec-ch-ua*`, ...). They are NOT required
+ * (a bare cookie works), but sending the user's own current values makes the
+ * request look like a normal browser and reduces the chance of being rate-
+ * limited. Rather than hardcoding someone else's captured values, we sniff them
+ * live from the user's own yuanbao traffic via `webRequest` and replay them.
  */
 
 import { BrowserWindow, session as electronSession } from "electron";
@@ -21,10 +28,104 @@ export function getYuanbaoSession(): Session {
 
 /** True if the partition holds a yuanbao login cookie (`hy_token`). */
 export async function hasYuanbaoLogin(): Promise<boolean> {
-  const cookies = await getYuanbaoSession().cookies.get({
-    domain: "yuanbao.tencent.com",
+  const ses = getYuanbaoSession();
+  const hasToken = (cookies: Electron.Cookie[]): boolean =>
+    cookies.some((c) => c.name === "hy_token" && !!c.value);
+  try {
+    // `url` filter matches domain/path robustly (the `domain` filter can miss
+    // cookies stored with a leading-dot domain).
+    if (hasToken(await ses.cookies.get({ url: YUANBAO_URL }))) return true;
+    return hasToken(await ses.cookies.get({}));
+  } catch {
+    return false;
+  }
+}
+
+// ── Live device/fingerprint header capture ──────────────────────────────────
+
+/** Headers worth replaying — device/fingerprint/UA hints, never cookies. */
+function isInterestingHeader(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    n.startsWith("x-hy") ||
+    n === "x-id" ||
+    n === "x-instance-id" ||
+    n === "x-source" ||
+    n === "x-platform" ||
+    n === "x-language" ||
+    n === "x-os_version" ||
+    n === "x-web-third-source" ||
+    n === "x-webversion" ||
+    n === "x-commit-tag" ||
+    n === "x-requested-with" ||
+    n === "x-device-id" ||
+    n === "t-userid" ||
+    n.startsWith("sec-ch-ua")
+  );
+}
+
+/**
+ * Merge live-captured device headers under the caller's explicit headers
+ * (explicit wins). Pure helper so it can be unit-tested without Electron.
+ */
+export function mergeYuanbaoHeaders(
+  captured: Record<string, string>,
+  explicit: Record<string, string>,
+): Record<string, string> {
+  return { ...captured, ...explicit };
+}
+
+let capturedHeaders: Record<string, string> = {};
+let captureInstalled = false;
+
+/** Install a one-time webRequest sniffer that snapshots yuanbao's own headers. */
+function installCapture(): void {
+  if (captureInstalled) return;
+  captureInstalled = true;
+  getYuanbaoSession().webRequest.onBeforeSendHeaders(
+    { urls: ["https://yuanbao.tencent.com/api/*"] },
+    (details, callback) => {
+      const snap: Record<string, string> = {};
+      for (const [k, v] of Object.entries(details.requestHeaders ?? {})) {
+        if (typeof v === "string" && isInterestingHeader(k)) snap[k] = v;
+      }
+      // Only adopt a snapshot from a real signed API call (has an x-hy* token).
+      if (Object.keys(snap).some((k) => k.toLowerCase().startsWith("x-hy"))) {
+        capturedHeaders = snap;
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    },
+  );
+}
+
+/**
+ * Best-effort: make sure we have device headers captured from a live yuanbao
+ * session. If none yet (e.g. already logged in, no window opened this run),
+ * briefly load yuanbao in a hidden window so its startup API calls are sniffed.
+ */
+export async function ensureYuanbaoHeaders(timeoutMs = 6000): Promise<void> {
+  installCapture();
+  if (Object.keys(capturedHeaders).length > 0) return;
+  await new Promise<void>((resolve) => {
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { partition: PARTITION },
+    });
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      clearTimeout(deadline);
+      if (!win.isDestroyed()) win.destroy();
+      resolve();
+    };
+    const poll = setInterval(() => {
+      if (Object.keys(capturedHeaders).length > 0) finish();
+    }, 400);
+    const deadline = setTimeout(finish, timeoutMs);
+    void win.loadURL(YUANBAO_URL);
   });
-  return cookies.some((c) => c.name === "hy_token" && !!c.value);
 }
 
 /**
@@ -32,6 +133,7 @@ export async function hasYuanbaoLogin(): Promise<boolean> {
  * `hy_token` cookie appears, false if the user closes the window first.
  */
 export function openYuanbaoLogin(parent?: BrowserWindow): Promise<boolean> {
+  installCapture();
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       width: 1000,
@@ -64,13 +166,16 @@ export function openYuanbaoLogin(parent?: BrowserWindow): Promise<boolean> {
   });
 }
 
-/** A {@link FetchLike} bound to the yuanbao session (carries its cookies). */
+/**
+ * A {@link FetchLike} bound to the yuanbao session: carries the partition's
+ * cookies and replays the live-captured device headers (caller headers win).
+ */
 export function yuanbaoFetch(): FetchLike {
   const ses = getYuanbaoSession();
   return async (url, init) => {
     const resp = await ses.fetch(url, {
       method: init.method,
-      headers: init.headers,
+      headers: mergeYuanbaoHeaders(capturedHeaders, init.headers),
       body: init.body,
     });
     return { status: resp.status, text: () => resp.text() };
