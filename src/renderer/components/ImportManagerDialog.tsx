@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface ImportRecord {
@@ -50,9 +50,7 @@ function ImportRecordRow({
         marginBottom: "8px",
         cursor: clickable ? "pointer" : "default",
       }}
-      onClick={
-        clickable ? () => onSelectSession(record.sessionId!) : undefined
-      }
+      onClick={clickable ? () => onSelectSession(record.sessionId!) : undefined}
     >
       {/* Title row */}
       <div
@@ -126,6 +124,18 @@ export function ImportManagerDialog({
   onClose,
 }: ImportManagerDialogProps): React.ReactElement {
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Close on ESC
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
