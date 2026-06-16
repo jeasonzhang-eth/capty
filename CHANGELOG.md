@@ -2,6 +2,12 @@
 
 All notable changes to Capty are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- WeChat Channels (视频号) video decryption module in the sidecar (`capty_sidecar/wechat_channels.py`): ISAAC64 stream cipher port that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Cross-checked against the Go reference implementation with golden keystream vectors. First piece of the upcoming "paste a 视频号 share link → download → transcribe" feature.
+
 ## [0.3.1] - 2026-06-07
 
 ### Changed
