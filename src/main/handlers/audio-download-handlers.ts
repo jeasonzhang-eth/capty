@@ -26,6 +26,7 @@ import {
 } from "../database";
 import { createSession, updateSession } from "../database";
 import { readConfig } from "../config";
+import { sanitizeSessionDirName } from "../shared/session-name";
 
 /** Track active yt-dlp child processes by download ID for cancel support. */
 const activeDownloads = new Map<number, ChildProcess>();
@@ -538,18 +539,30 @@ export function register(deps: IpcDeps): void {
           });
         }
 
+        // Session title shown in the UI.
+        const sessionTitle = videoTitle
+          ? `${readableTimestamp} ${videoTitle}`
+          : readableTimestamp;
+
+        // Name the on-disk folder after the (sanitized) session title so it
+        // matches the displayed name — same convention as the rename handler
+        // in session-handlers.ts. Falls back to the timestamp when the title
+        // sanitizes to nothing.
+        const sanitizedBase =
+          sanitizeSessionDirName(sessionTitle) || dirTimestamp;
+
         // Deduplicate session directory
-        let finalTimestamp = dirTimestamp;
-        let sessionDir = join(dataDir, "audio", finalTimestamp);
+        let dirName = sanitizedBase;
+        let sessionDir = join(dataDir, "audio", dirName);
         let suffix = 1;
         while (fs.existsSync(sessionDir)) {
-          finalTimestamp = `${dirTimestamp}-${suffix}`;
-          sessionDir = join(dataDir, "audio", finalTimestamp);
+          dirName = `${sanitizedBase}-${suffix}`;
+          sessionDir = join(dataDir, "audio", dirName);
           suffix++;
         }
         fs.mkdirSync(sessionDir, { recursive: true });
 
-        const wavPath = join(sessionDir, `${finalTimestamp}.wav`);
+        const wavPath = join(sessionDir, `${dirName}.wav`);
         await convertToWav(downloadedFilePath, wavPath);
 
         // Optionally keep the source video (视频号) alongside the audio.
@@ -557,7 +570,7 @@ export function register(deps: IpcDeps): void {
           try {
             fs.copyFileSync(
               keepVideoSourcePath,
-              join(sessionDir, `${finalTimestamp}.mp4`),
+              join(sessionDir, `${dirName}.mp4`),
             );
           } catch {
             // keeping the video is best-effort; transcription already succeeded
@@ -575,15 +588,12 @@ export function register(deps: IpcDeps): void {
           : isWxch
             ? "wechat-channels"
             : "yt-dlp";
-        const sessionTitle = videoTitle
-          ? `${readableTimestamp} ${videoTitle}`
-          : readableTimestamp;
         const sessionId = createSession(db, {
           modelName: modelTag,
           category: "download",
         });
         updateSession(db, sessionId, {
-          audioPath: finalTimestamp,
+          audioPath: dirName,
           title: sessionTitle,
           startedAt: readableTimestamp,
           status: "completed",

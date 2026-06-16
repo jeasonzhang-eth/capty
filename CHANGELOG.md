@@ -14,6 +14,12 @@ All notable changes to Capty are documented in this file.
 - 视频号 links in the Download Audio manager: paste a `weixin.qq.com/sph/...` share link and Capty resolves → downloads → (optionally keeps the video) → transcribes it as a new session, reusing the existing download/convert/session pipeline. On first use it opens a window to log into Tencent Yuanbao. The download manager shows a "视频号" badge for these links.
 - Settings → General: a "视频号下载（腾讯元宝登录）" section showing the yuanbao login status with a "清除登录" button to sign out / switch accounts (clears the `persist:yuanbao` session).
 
+### Fixed
+
+- Downloaded sessions (视频号 / 小宇宙 / yt-dlp) now name their on-disk audio folder after the (sanitized) session title instead of a bare timestamp, so the folder on disk matches the name shown in the app — the same convention recordings get after rename. Extracted the shared `sanitizeSessionDirName` helper (`src/main/shared/session-name.ts`) used by both the rename and download paths; covered by `tests/main/shared/session-name.test.ts`.
+- Session inline rename: the title field is now a multi-line `<textarea>` (Enter confirms, Shift+Enter inserts a newline) and the row is no longer `draggable` while renaming, so you can drag-select text in the title instead of accidentally starting a session move.
+- Audio import (upload) dialog now closes on the ESC key.
+
 ## [0.3.1] - 2026-06-07
 
 ### Changed

@@ -20,6 +20,7 @@ import {
   type SessionCategory,
 } from "../config";
 import { deleteSessionAudio } from "../audio-files";
+import { sanitizeSessionDirName } from "../shared/session-name";
 
 export function register(deps: IpcDeps): void {
   const { db, configDir } = deps;
@@ -97,7 +98,7 @@ export function register(deps: IpcDeps): void {
     if (!trimmed) throw new Error("Title cannot be empty");
 
     // Sanitize title for filesystem use
-    const sanitized = trimmed.replace(/[/\\:*?"<>|]/g, "-").replace(/^\.+/, "");
+    const sanitized = sanitizeSessionDirName(trimmed);
     if (!sanitized) throw new Error("Invalid title");
 
     const config = readConfig(configDir);

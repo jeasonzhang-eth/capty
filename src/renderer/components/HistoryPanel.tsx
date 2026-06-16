@@ -442,7 +442,7 @@ export function HistoryPanel({
     null,
   );
   const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleRenameClick = useCallback(() => {
     if (contextMenu.sessionId !== null) {
@@ -749,7 +749,7 @@ export function HistoryPanel({
         <div
           className={`session-row${isDragged ? " dragging" : ""}`}
           data-testid={`session-row-${session.id}`}
-          draggable
+          draggable={renamingSessionId !== session.id}
           onDragStart={(e) => {
             setDragSessionId(session.id);
             e.dataTransfer.effectAllowed = "move";
@@ -854,12 +854,15 @@ export function HistoryPanel({
           }}
         >
           {renamingSessionId === session.id ? (
-            <input
+            <textarea
               ref={renameInputRef}
               value={renameValue}
+              rows={2}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // Enter confirms; Shift+Enter inserts a newline (multi-line title)
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
                   handleRenameConfirm();
                 } else if (e.key === "Escape") {
                   handleRenameCancel();
@@ -868,9 +871,12 @@ export function HistoryPanel({
               }}
               onBlur={handleRenameConfirm}
               onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 fontSize: "13px",
                 fontWeight: 500,
+                fontFamily: "inherit",
+                lineHeight: "1.4",
                 marginBottom: "4px",
                 width: "100%",
                 padding: "2px 4px",
@@ -880,6 +886,7 @@ export function HistoryPanel({
                 color: "var(--text-primary)",
                 outline: "none",
                 boxSizing: "border-box",
+                resize: "vertical",
               }}
             />
           ) : (
