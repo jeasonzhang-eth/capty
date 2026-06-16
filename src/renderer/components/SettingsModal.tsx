@@ -1194,6 +1194,27 @@ function GeneralTab({
   const [hfUrlSaved, setHfUrlSaved] = useState(false);
   const hfUrlChanged = editingHfUrl !== hfMirrorUrl;
 
+  // 视频号 / Tencent Yuanbao login state
+  const [yuanbaoLoggedIn, setYuanbaoLoggedIn] = useState<boolean | null>(null);
+  const [yuanbaoClearing, setYuanbaoClearing] = useState(false);
+
+  useEffect(() => {
+    void window.capty
+      .getYuanbaoStatus()
+      .then((s) => setYuanbaoLoggedIn(s.loggedIn))
+      .catch(() => setYuanbaoLoggedIn(null));
+  }, []);
+
+  const handleClearYuanbao = useCallback(async () => {
+    setYuanbaoClearing(true);
+    try {
+      await window.capty.logoutYuanbao();
+      setYuanbaoLoggedIn(false);
+    } finally {
+      setYuanbaoClearing(false);
+    }
+  }, []);
+
   const handleSaveHfUrl = useCallback(() => {
     onChangeHfMirrorUrl(editingHfUrl);
     setHfUrlSaved(true);
@@ -1445,6 +1466,60 @@ function GeneralTab({
             title="Reset to default"
           >
             Reset
+          </button>
+        </div>
+      </div>
+
+      {/* 视频号 / 腾讯元宝 */}
+      <div style={sectionTitleStyle}>视频号下载（腾讯元宝登录）</div>
+      <div style={sectionDescStyle}>
+        下载视频号链接需要登录腾讯元宝（仅用于解析链接）。登录态保存在独立分区，可随时清除。
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              元宝登录状态
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              {yuanbaoLoggedIn === null
+                ? "检测中…"
+                : yuanbaoLoggedIn
+                  ? "已登录（下次下载视频号链接将直接使用）"
+                  : "未登录（下载视频号链接时会提示登录）"}
+            </div>
+          </div>
+          <button
+            onClick={handleClearYuanbao}
+            disabled={yuanbaoClearing || yuanbaoLoggedIn !== true}
+            style={{
+              ...secondaryBtnStyle,
+              fontSize: "12px",
+              padding: "0 12px",
+              whiteSpace: "nowrap",
+              cursor: yuanbaoLoggedIn === true ? "pointer" : "not-allowed",
+              opacity: yuanbaoLoggedIn === true ? 1 : 0.4,
+            }}
+          >
+            {yuanbaoClearing ? "清除中…" : "清除登录"}
           </button>
         </div>
       </div>

@@ -1,9 +1,22 @@
-import { ipcMain, net } from "electron";
+import { ipcMain, net, dialog } from "electron";
 import type { ChildProcess } from "child_process";
 import fs from "fs";
 import { join } from "path";
 import type { IpcDeps } from "./types";
 import { spawn } from "../shared/spawn";
+import {
+  isChannelsShareUrl,
+  resolveShareUrl,
+  YuanbaoAuthError,
+} from "../wechat/resolver";
+import { downloadAndDecrypt } from "../wechat/downloader";
+import {
+  hasYuanbaoLogin,
+  openYuanbaoLogin,
+  ensureYuanbaoHeaders,
+  clearYuanbaoLogin,
+  yuanbaoFetch,
+} from "../wechat/yuanbao-auth";
 import {
   createDownload,
   getDownload,
@@ -214,9 +227,10 @@ export function register(deps: IpcDeps): void {
     const win = getMainWindow();
     const source = extractSource(url);
     const isXyz = isXiaoyuzhouUrl(url);
+    const isWxch = isChannelsShareUrl(url);
 
-    // 1. Check yt-dlp exists (skip for Xiaoyuzhou — uses direct HTTP)
-    if (!isXyz) {
+    // 1. Check yt-dlp exists (skip for Xiaoyuzhou / 视频号 — direct HTTP)
+    if (!isXyz && !isWxch) {
       try {
         await new Promise<void>((resolve, reject) => {
           const check = spawn("which", ["yt-dlp"]);
@@ -269,6 +283,8 @@ export function register(deps: IpcDeps): void {
 
         let videoTitle = "";
         let downloadedFilePath = "";
+        // For 视频号: the decrypted MP4 to optionally keep in the session dir.
+        let keepVideoSourcePath: string | null = null;
 
         if (isXyz) {
           // ── Xiaoyuzhou (小宇宙) direct download path ──
@@ -320,6 +336,63 @@ export function register(deps: IpcDeps): void {
           // Check if cancelled during download
           const currentDl = getDownload(db, downloadId);
           if (currentDl?.status === "cancelled") return;
+        } else if (isWxch) {
+          // ── WeChat Channels (视频号) path ──
+          // Ensure the user is logged into yuanbao (needed to resolve the link).
+          if (!(await hasYuanbaoLogin())) {
+            const ok = await openYuanbaoLogin(win ?? undefined);
+            if (!ok) {
+              throw new YuanbaoAuthError(
+                "未登录腾讯元宝，无法解析视频号链接。请登录后重试。",
+              );
+            }
+          }
+
+          // Capture the user's own live device/fingerprint headers (best effort).
+          await ensureYuanbaoHeaders();
+          const resolved = await resolveShareUrl(url, yuanbaoFetch());
+          videoTitle = resolved.title;
+          if (videoTitle) {
+            updateDownload(db, downloadId, { title: videoTitle });
+          }
+          updateDownload(db, downloadId, {
+            temp_dir: tempDir,
+            status: "downloading",
+          });
+          if (win) {
+            win.webContents.send("audio:download-progress", {
+              id: downloadId,
+              stage: "downloading",
+              title: videoTitle || undefined,
+              source,
+            });
+          }
+
+          downloadedFilePath = join(tempDir, `${dirTimestamp}.mp4`);
+          await downloadAndDecrypt(
+            resolved.videoUrl,
+            resolved.decodeKey,
+            downloadedFilePath,
+            (u, init) => net.fetch(u, init),
+          );
+          updateDownload(db, downloadId, { progress: 100 });
+
+          const currentDl = getDownload(db, downloadId);
+          if (currentDl?.status === "cancelled") return;
+
+          // Ask whether to keep the source video alongside the audio.
+          if (win) {
+            const { response } = await dialog.showMessageBox(win, {
+              type: "question",
+              buttons: ["仅音频", "保留视频"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "视频号下载",
+              message: "是否在会话目录中保留原视频文件？",
+              detail: "默认仅保留转录用的音频；保留视频会额外占用空间。",
+            });
+            if (response === 1) keepVideoSourcePath = downloadedFilePath;
+          }
         } else {
           // ── yt-dlp download path ──
 
@@ -479,13 +552,29 @@ export function register(deps: IpcDeps): void {
         const wavPath = join(sessionDir, `${finalTimestamp}.wav`);
         await convertToWav(downloadedFilePath, wavPath);
 
+        // Optionally keep the source video (视频号) alongside the audio.
+        if (keepVideoSourcePath) {
+          try {
+            fs.copyFileSync(
+              keepVideoSourcePath,
+              join(sessionDir, `${finalTimestamp}.mp4`),
+            );
+          } catch {
+            // keeping the video is best-effort; transcription already succeeded
+          }
+        }
+
         // Calculate duration
         const wavStat = fs.statSync(wavPath);
         const pcmBytes = wavStat.size - 44;
         const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
 
         // Create session
-        const modelTag = isXyz ? "xiaoyuzhou" : "yt-dlp";
+        const modelTag = isXyz
+          ? "xiaoyuzhou"
+          : isWxch
+            ? "wechat-channels"
+            : "yt-dlp";
         const sessionTitle = videoTitle
           ? `${readableTimestamp} ${videoTitle}`
           : readableTimestamp;
@@ -558,5 +647,16 @@ export function register(deps: IpcDeps): void {
     if (win) {
       win.webContents.send("audio:download-retry-trigger", { url });
     }
+  });
+
+  // ─── 视频号 / Tencent Yuanbao login management ───
+
+  ipcMain.handle("wechat:yuanbao-status", async () => {
+    return { loggedIn: await hasYuanbaoLogin() };
+  });
+
+  ipcMain.handle("wechat:yuanbao-logout", async () => {
+    await clearYuanbaoLogin();
+    return { ok: true };
   });
 }

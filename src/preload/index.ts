@@ -197,6 +197,14 @@ const api = {
   openAudioFolder: (sessionId: number) =>
     ipcRenderer.invoke("audio:open-folder", sessionId),
 
+  // 视频号 / Tencent Yuanbao login management
+  getYuanbaoStatus: () =>
+    ipcRenderer.invoke("wechat:yuanbao-status") as Promise<{
+      loggedIn: boolean;
+    }>,
+  logoutYuanbao: () =>
+    ipcRenderer.invoke("wechat:yuanbao-logout") as Promise<{ ok: boolean }>,
+
   // Audio import (supports selecting multiple files)
   onAudioImportProgress: (
     callback: (event: {
