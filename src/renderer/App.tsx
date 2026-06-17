@@ -319,6 +319,8 @@ function App(): React.JSX.Element {
     >
       {vad.degraded && !vadBannerDismissed && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             background: "#5a4a00",
             color: "#ffe08a",
@@ -332,6 +334,7 @@ function App(): React.JSX.Element {
           <span>高级降噪 VAD 不可用，已回退基础模式</span>
           <button
             onClick={() => setVadBannerDismissed(true)}
+            aria-label="关闭"
             style={{
               background: "none",
               border: "none",
