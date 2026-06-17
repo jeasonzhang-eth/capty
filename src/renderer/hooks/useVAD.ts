@@ -110,7 +110,10 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
       })
       .catch((err) => {
         if (cancelled) return;
-        console.warn("Silero VAD unavailable, falling back to energy VAD:", err);
+        console.warn(
+          "Silero VAD unavailable, falling back to energy VAD:",
+          err,
+        );
         degradedRef.current = true;
         setState((prev) => ({ ...prev, isLoaded: true, degraded: true }));
       });
@@ -135,7 +138,10 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
           isSpeech = prob > THRESHOLD;
         } catch (err) {
           // Conservative: treat inference errors as silence.
-          console.warn("Silero inference error, treating window as silence:", err);
+          console.warn(
+            "Silero inference error, treating window as silence:",
+            err,
+          );
           isSpeech = false;
         }
         sileroDebouncerRef.current!.push(isSpeech);
@@ -199,13 +205,9 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
     setSpeaking(false);
   }, [setSpeaking]);
 
-  // Retained for backward compatibility; loading is now driven by the model.
-  const markLoaded = useCallback(() => {}, []);
-
   return {
     ...state,
     feedAudio,
     reset,
-    markLoaded,
   };
 }
