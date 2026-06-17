@@ -39,7 +39,9 @@ test.describe("history session management", () => {
     await alphaRow.click({ button: "right" });
     await window.getByText("Rename").click();
 
-    const renameInput = alphaRow.locator("input");
+    // Inline rename uses a multi-line <textarea> (Enter confirms, Shift+Enter
+    // inserts a newline), not an <input>.
+    const renameInput = alphaRow.locator("textarea");
     await expect(renameInput).toBeVisible({ timeout: 5_000 });
     await renameInput.fill("Renamed Session");
     await renameInput.press("Enter");

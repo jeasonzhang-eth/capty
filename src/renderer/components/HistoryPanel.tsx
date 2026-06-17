@@ -896,6 +896,7 @@ export function HistoryPanel({
           {renamingSessionId === session.id ? (
             <textarea
               ref={renameInputRef}
+              data-testid={`session-rename-input-${session.id}`}
               value={renameValue}
               rows={2}
               onChange={(e) => setRenameValue(e.target.value)}
