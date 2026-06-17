@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, net } from "electron";
 import type { IpcDeps } from "./types";
 import { assertPathWithin } from "../shared/path";
 import { spawn } from "../shared/spawn";
+import { sanitizeSessionDirName } from "../shared/session-name";
 import {
   saveSegmentAudio,
   saveFullAudio,
@@ -11,6 +12,8 @@ import {
 } from "../audio-files";
 import { createSession, getSession, updateSession } from "../database";
 import { readConfig } from "../config";
+import { createSessionFromWav } from "../audio/session-from-wav";
+import { mergeAudioFiles } from "../audio/merge";
 import fs from "fs";
 import path from "path";
 import { join } from "path";
@@ -218,75 +221,31 @@ export function register(deps: IpcDeps): void {
   async function importOneAudioFile(
     filePath: string,
   ): Promise<{ sessionId: number; timestamp: string; audioPath: string }> {
-    // 1. Session title and directory name reuse the source file name.
-    //    (Creation-time naming collided when files shared a birthtime and
-    //    lost the original, meaningful names.)
+    // Session title and directory name reuse the source file name.
     const sourceName = path.basename(filePath, path.extname(filePath));
-    // Strip characters that are illegal/awkward in directory names
     const safeName =
       sourceName.replace(/[\\/:*?"<>|]/g, "_").trim() || "imported";
 
-    // File birthtime is still used as the session start time
+    // File birthtime is used as the session start time.
     const stat = fs.statSync(filePath);
     const birthtime = stat.birthtime;
     const pad = (n: number): string => String(n).padStart(2, "0");
     const readableTimestamp = `${birthtime.getFullYear()}-${pad(birthtime.getMonth() + 1)}-${pad(birthtime.getDate())} ${pad(birthtime.getHours())}:${pad(birthtime.getMinutes())}:${pad(birthtime.getSeconds())}`;
 
-    // 2. Deduplicate audio directory name
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
-    let dirName = safeName;
-    let sessionDir = join(dataDir, "audio", dirName);
-    let suffix = 1;
-    while (fs.existsSync(sessionDir)) {
-      dirName = `${safeName}-${suffix}`;
-      sessionDir = join(dataDir, "audio", dirName);
-      suffix++;
-    }
 
-    let sessionId: number | null = null;
-    try {
-      fs.mkdirSync(sessionDir, { recursive: true });
-      const destPath = join(sessionDir, `${dirName}.wav`);
-      await convertToWav(filePath, destPath);
-
-      // 3. Create session only after conversion succeeds.
-      sessionId = createSession(db, {
-        modelName: "imported",
-        category: "recording",
-      });
-      updateSession(db, sessionId, {
-        audioPath: dirName,
-        title:
-          dirName === safeName ? sourceName : `${sourceName} (${suffix - 1})`,
-        startedAt: readableTimestamp,
-      });
-
-      // 4. Calculate duration from WAV and update session
-      const wavStat = fs.statSync(destPath);
-      const pcmBytes = wavStat.size - 44; // 44-byte WAV header
-      const durationSeconds = Math.round(pcmBytes / 32000); // 16kHz * 16bit * mono
-      updateSession(db, sessionId, {
-        status: "completed",
-        durationSeconds,
-      });
-
-      return { sessionId, timestamp: dirName, audioPath: destPath };
-    } catch (err) {
-      if (sessionId !== null) {
-        try {
-          db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
-      try {
-        fs.rmSync(sessionDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup errors
-      }
-      throw err;
-    }
+    return createSessionFromWav({
+      db,
+      dataDir,
+      baseName: safeName,
+      buildTitle: (collisionIndex) =>
+        collisionIndex === 0 ? sourceName : `${sourceName} (${collisionIndex})`,
+      startedAt: readableTimestamp,
+      modelName: "imported",
+      category: "recording",
+      writeWav: (destPath) => convertToWav(filePath, destPath),
+    });
   }
 
   // Audio import (upload one or more existing audio files)
@@ -391,4 +350,91 @@ export function register(deps: IpcDeps): void {
 
     return importAudioBatch(win, valid);
   });
+
+  // Pick audio files via the OS dialog WITHOUT importing — the renderer
+  // decides whether to import separately or merge.
+  ipcMain.handle("audio:pick-files", async () => {
+    const win = getMainWindow();
+    if (!win) return null;
+    const result = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "Audio Files", extensions: AUDIO_EXTENSIONS }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    return result.filePaths;
+  });
+
+  // Merge several audio files (in the given order) into ONE session.
+  ipcMain.handle(
+    "audio:import-merged",
+    async (_event, paths: string[], title: string) => {
+      const win = getMainWindow();
+      if (!win) return null;
+
+      const valid = (Array.isArray(paths) ? paths : []).filter((f) => {
+        if (typeof f !== "string" || !path.isAbsolute(f)) return false;
+        const ext = path.extname(f).slice(1).toLowerCase();
+        if (!AUDIO_EXTENSIONS.includes(ext)) return false;
+        try {
+          return fs.statSync(f).isFile();
+        } catch {
+          return false;
+        }
+      });
+      if (valid.length < 2) return null;
+
+      const send = (data: Record<string, unknown>): void =>
+        win.webContents.send("audio:import-progress", data);
+
+      const displayName = path.basename(valid[0]);
+      send({ type: "start", files: [displayName] });
+      send({ type: "file", index: 0, file: displayName, status: "converting" });
+
+      const config = readConfig(configDir);
+      const dataDir = config.dataDir ?? join(configDir, "data");
+
+      const pad = (n: number): string => String(n).padStart(2, "0");
+      const birthtimes = valid.map((f) => fs.statSync(f).birthtime.getTime());
+      const earliest = new Date(Math.min(...birthtimes));
+      const startedAt = `${earliest.getFullYear()}-${pad(earliest.getMonth() + 1)}-${pad(earliest.getDate())} ${pad(earliest.getHours())}:${pad(earliest.getMinutes())}:${pad(earliest.getSeconds())}`;
+
+      const cleanTitle = (title ?? "").trim();
+      const fallback = path.basename(valid[0], path.extname(valid[0]));
+      const finalTitle = cleanTitle || fallback;
+      const baseName = sanitizeSessionDirName(finalTitle) || startedAt;
+
+      try {
+        const built = await createSessionFromWav({
+          db,
+          dataDir,
+          baseName,
+          buildTitle: () => finalTitle,
+          startedAt,
+          modelName: "imported",
+          category: "recording",
+          writeWav: (destPath) => mergeAudioFiles(valid, destPath),
+        });
+        send({
+          type: "file",
+          index: 0,
+          file: displayName,
+          status: "done",
+          sessionId: built.sessionId,
+        });
+        send({ type: "finished" });
+        return { imported: [built], errors: [] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        send({
+          type: "file",
+          index: 0,
+          file: displayName,
+          status: "failed",
+          error: message,
+        });
+        send({ type: "finished" });
+        return { imported: [], errors: [{ file: displayName, message }] };
+      }
+    },
+  );
 }

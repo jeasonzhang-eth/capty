@@ -3,6 +3,7 @@ import { SessionCategory } from "../components/HistoryPanel";
 import { ImportRecord } from "../components/ImportManagerDialog";
 import { Summary } from "../components/SummaryPanel";
 import { useAppStore } from "../stores/appStore";
+import { sortPathsByName } from "../shared/natural-sort";
 
 // ── Param types ──────────────────────────────────────────────────────────
 
@@ -662,6 +663,7 @@ export function useSessionManagement(params: UseSessionManagementParams) {
   );
   const [showImportManager, setShowImportManager] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [stagingPaths, setStagingPaths] = useState<readonly string[]>([]);
   const importIdRef = useRef(0);
   // Record ids of the in-flight batch, indexed by file position
   const importBatchIdsRef = useRef<number[]>([]);
@@ -739,10 +741,25 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     [regeneratingSessionId, isImporting, handleSelectSession],
   );
 
-  const handleUploadAudio = useCallback(
-    () => runImport(() => window.capty.importAudio()),
+  // 1 file → import immediately; >=2 files → open staging to choose merge vs separate.
+  const beginImportFromPaths = useCallback(
+    (paths: string[]) => {
+      if (paths.length === 0) return Promise.resolve();
+      if (paths.length === 1) {
+        return runImport(() => window.capty.importAudioPaths(paths));
+      }
+      setStagingPaths(sortPathsByName(paths));
+      setShowImportManager(true);
+      return Promise.resolve();
+    },
     [runImport],
   );
+
+  const handleUploadAudio = useCallback(async () => {
+    const paths = await window.capty.pickFiles();
+    if (!paths || paths.length === 0) return;
+    await beginImportFromPaths(paths);
+  }, [beginImportFromPaths]);
 
   const handleDropAudioFiles = useCallback(
     (files: File[]) => {
@@ -755,11 +772,30 @@ export function useSessionManagement(params: UseSessionManagementParams) {
           }
         })
         .filter(Boolean);
-      if (paths.length === 0) return Promise.resolve();
-      return runImport(() => window.capty.importAudioPaths(paths));
+      return beginImportFromPaths(paths);
+    },
+    [beginImportFromPaths],
+  );
+
+  const handleConfirmMerge = useCallback(
+    async (orderedPaths: string[], title: string) => {
+      setStagingPaths([]);
+      await runImport(() => window.capty.importMerged(orderedPaths, title));
     },
     [runImport],
   );
+
+  const handleConfirmSeparate = useCallback(
+    async (orderedPaths: string[]) => {
+      setStagingPaths([]);
+      await runImport(() => window.capty.importAudioPaths(orderedPaths));
+    },
+    [runImport],
+  );
+
+  const handleCancelStaging = useCallback(() => {
+    setStagingPaths([]);
+  }, []);
 
   const handleImportSelectSession = useCallback(
     async (sessionId: number) => {
@@ -860,6 +896,10 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     handleOpenImportManager,
     handleCloseImportManager,
     handleImportSelectSession,
+    stagingPaths,
+    handleConfirmMerge,
+    handleConfirmSeparate,
+    handleCancelStaging,
 
     // Init
     initFromConfig,
