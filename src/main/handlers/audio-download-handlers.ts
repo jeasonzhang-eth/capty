@@ -80,6 +80,15 @@ export function ytdlpCookieArgs(browser: string | null | undefined): string[] {
   return COOKIE_BROWSERS.has(b) ? ["--cookies-from-browser", b] : [];
 }
 
+/**
+ * yt-dlp flag enabling its remote JS-challenge solver (EJS) so YouTube's
+ * "n" challenge can be solved via a local JS runtime (deno). Empty array when
+ * disabled. Opt-in because it fetches and runs a script from yt-dlp's GitHub.
+ */
+export function ytdlpSolverArgs(enabled: boolean | undefined): string[] {
+  return enabled ? ["--remote-components", "ejs:github"] : [];
+}
+
 /** Check if URL is a Xiaoyuzhou (小宇宙) podcast episode. */
 export function isXiaoyuzhouUrl(url: string): boolean {
   try {
@@ -424,11 +433,14 @@ export function register(deps: IpcDeps): void {
 
           // Cookie flag (e.g. for YouTube's bot check) — empty when unset.
           const cookieArgs = ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
+          // JS-challenge solver flag (YouTube "n" challenge) — empty when off.
+          const solverArgs = ytdlpSolverArgs(config.ytdlpSolveJsChallenges);
 
           // Fetch video title
           try {
             videoTitle = await new Promise<string>((resolve, reject) => {
               const proc = spawn("yt-dlp", [
+                ...solverArgs,
                 ...cookieArgs,
                 "--print",
                 "title",
@@ -471,9 +483,10 @@ export function register(deps: IpcDeps): void {
           }
 
           const ytdlp = spawn("yt-dlp", [
+            ...solverArgs,
             ...cookieArgs,
             "-f",
-            "ba",
+            "ba/b",
             "--continue",
             "--newline",
             "--no-playlist",

@@ -1200,6 +1200,8 @@ function GeneralTab({
 
   // yt-dlp cookie source (YouTube bot check). "" = off.
   const [cookieBrowser, setCookieBrowser] = useState<string>("");
+  // yt-dlp JS-challenge solver (YouTube "n" challenge via deno).
+  const [solveJsChallenges, setSolveJsChallenges] = useState(false);
 
   useEffect(() => {
     void window.capty
@@ -1215,6 +1217,10 @@ function GeneralTab({
         const v = (c as { ytdlpCookiesFromBrowser?: string | null })
           .ytdlpCookiesFromBrowser;
         setCookieBrowser(typeof v === "string" ? v : "");
+        setSolveJsChallenges(
+          (c as { ytdlpSolveJsChallenges?: boolean }).ytdlpSolveJsChallenges ===
+            true,
+        );
       })
       .catch(() => setCookieBrowser(""));
   }, []);
@@ -1224,6 +1230,11 @@ function GeneralTab({
     await window.capty.setConfig({
       ytdlpCookiesFromBrowser: value === "" ? null : value,
     });
+  }, []);
+
+  const handleToggleSolveJsChallenges = useCallback(async (value: boolean) => {
+    setSolveJsChallenges(value);
+    await window.capty.setConfig({ ytdlpSolveJsChallenges: value });
   }, []);
 
   const handleClearYuanbao = useCallback(async () => {
@@ -1601,6 +1612,73 @@ function GeneralTab({
             <option value="edge">Edge</option>
             <option value="brave">Brave</option>
           </select>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+            marginTop: "14px",
+            paddingTop: "14px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              解 JS 挑战（YouTube）
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              YouTube 要求解 JS 挑战才给出视频格式。开启后 yt-dlp 会从其官方
+              GitHub 拉取求解脚本并用本地 deno 运行（需已安装
+              deno）。涉及执行远程脚本，默认关闭。
+            </div>
+          </div>
+          <button
+            onClick={() =>
+              void handleToggleSolveJsChallenges(!solveJsChallenges)
+            }
+            style={{
+              position: "relative",
+              width: "36px",
+              height: "20px",
+              borderRadius: "10px",
+              border: "none",
+              backgroundColor: solveJsChallenges
+                ? "var(--accent)"
+                : "var(--bg-surface)",
+              cursor: "pointer",
+              transition: "background-color 0.2s",
+              flexShrink: 0,
+              padding: 0,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: "2px",
+                left: solveJsChallenges ? "18px" : "2px",
+                width: "16px",
+                height: "16px",
+                borderRadius: "50%",
+                backgroundColor: "#fff",
+                transition: "left 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              }}
+            />
+          </button>
         </div>
       </div>
     </>

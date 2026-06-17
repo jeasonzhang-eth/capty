@@ -192,3 +192,21 @@ describe("ytdlpCookieArgs", () => {
     expect(ytdlpCookieArgs("netscape")).toEqual([]);
   });
 });
+
+describe("ytdlpSolverArgs", () => {
+  it("returns the EJS remote-components flag when enabled", async () => {
+    const { ytdlpSolverArgs } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(ytdlpSolverArgs(true)).toEqual([
+      "--remote-components",
+      "ejs:github",
+    ]);
+  });
+
+  it("returns no args when disabled or unset", async () => {
+    const { ytdlpSolverArgs } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(ytdlpSolverArgs(false)).toEqual([]);
+    expect(ytdlpSolverArgs(undefined)).toEqual([]);
+  });
+});

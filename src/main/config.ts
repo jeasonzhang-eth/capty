@@ -119,6 +119,14 @@ export interface AppConfig {
    * lets yt-dlp authenticate as the logged-in user.
    */
   readonly ytdlpCookiesFromBrowser: string | null;
+  /**
+   * When true, pass `--remote-components ejs:github` to yt-dlp so it can solve
+   * YouTube's JS ("n") challenge via a local JavaScript runtime (e.g. deno).
+   * This makes yt-dlp fetch and run its official solver script from GitHub, so
+   * it defaults to false (off) and is opt-in. Without it, YouTube increasingly
+   * returns "Requested format is not available" (only storyboard images).
+   */
+  readonly ytdlpSolveJsChallenges: boolean;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -242,6 +250,7 @@ const DEFAULT_CONFIG: AppConfig = {
     autoStart: true,
   },
   ytdlpCookiesFromBrowser: null,
+  ytdlpSolveJsChallenges: false,
 };
 
 export function readConfig(configDir: string): AppConfig {
