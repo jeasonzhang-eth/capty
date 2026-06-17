@@ -111,9 +111,7 @@ describe("audio-handlers", () => {
     it("returns null when session has no audio_path", () => {
       // Insert session without audio_path via DB directly
       const result = db
-        .prepare(
-          "INSERT INTO sessions (model_name, status) VALUES (?, ?)",
-        )
+        .prepare("INSERT INTO sessions (model_name, status) VALUES (?, ?)")
         .run("test-model", "recording");
       const sessionId = result.lastInsertRowid as number;
 
@@ -198,7 +196,7 @@ describe("audio-handlers", () => {
       register({
         db,
         configDir,
-        getMainWindow: () => ({ webContents: {} } as any),
+        getMainWindow: () => ({ webContents: { send: () => {} } }) as any,
       });
 
       const sourcePath = path.join(tmpDir, "broken.mp3");
@@ -216,9 +214,15 @@ describe("audio-handlers", () => {
       });
 
       const handler = handlers.get("audio:import")!;
-      await expect(handler({} as any)).rejects.toThrow(
-        "ffmpeg exited with code 1",
-      );
+      // Import reports per-file failures rather than throwing, but the failed
+      // file must still be rolled back (no session / no audio dir left behind).
+      const result = (await handler({} as any)) as {
+        imported: unknown[];
+        errors: { file: string; message: string }[];
+      };
+      expect(result.imported).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].message).toContain("ffmpeg exited with code 1");
 
       const row = db
         .prepare("SELECT COUNT(*) AS count FROM sessions")

@@ -4,6 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-17
+
 ### Changed
 
 - VAD now uses the Silero v5 neural model (onnxruntime-web, bundled & offline) instead of a fixed energy threshold, eliminating steady-noise (e.g. fan) false positives. Falls back to the energy VAD with a notice banner if the model fails to load.
