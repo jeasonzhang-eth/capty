@@ -256,6 +256,10 @@ function App(): React.JSX.Element {
     handleOpenImportManager,
     handleCloseImportManager,
     handleImportSelectSession,
+    stagingPaths,
+    handleConfirmMerge,
+    handleConfirmSeparate,
+    handleCancelStaging,
   } = sessionMgmt;
 
   // Populate ref bridges for transcription/VAD callbacks
@@ -611,6 +615,10 @@ function App(): React.JSX.Element {
           onDropFiles={handleDropAudioFiles}
           onSelectSession={handleImportSelectSession}
           onClose={handleCloseImportManager}
+          stagingPaths={stagingPaths}
+          onConfirmMerge={handleConfirmMerge}
+          onConfirmSeparate={handleConfirmSeparate}
+          onCancelStaging={handleCancelStaging}
         />
       )}
       {showDownloadManager && (
