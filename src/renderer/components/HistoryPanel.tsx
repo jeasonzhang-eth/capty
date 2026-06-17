@@ -459,10 +459,17 @@ export function HistoryPanel({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, sessionId: number) => {
       e.preventDefault();
-      // Reset measured position so the first paint uses the raw click point,
-      // then the layout effect clamps it.
+      // Anchor the menu to the clicked row's top-left corner — a consistent
+      // spot — instead of following the mouse cursor. The layout effect below
+      // then clamps/flips it so it never overflows the window.
+      const rect = e.currentTarget.getBoundingClientRect();
       setMenuPos(null);
-      setContextMenu({ visible: true, x: e.clientX, y: e.clientY, sessionId });
+      setContextMenu({
+        visible: true,
+        x: rect.left,
+        y: rect.top,
+        sessionId,
+      });
     },
     [],
   );
