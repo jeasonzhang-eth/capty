@@ -20,6 +20,8 @@ All notable changes to Capty are documented in this file.
 - Downloaded sessions (视频号 / 小宇宙 / yt-dlp) now name their on-disk audio folder after the (sanitized) session title instead of a bare timestamp, so the folder on disk matches the name shown in the app — the same convention recordings get after rename. Extracted the shared `sanitizeSessionDirName` helper (`src/main/shared/session-name.ts`) used by both the rename and download paths; covered by `tests/main/shared/session-name.test.ts`.
 - Session inline rename: the title field is now a multi-line `<textarea>` (Enter confirms, Shift+Enter inserts a newline) and the row is no longer `draggable` while renaming, so you can drag-select text in the title instead of accidentally starting a session move.
 - Audio import (upload) dialog now closes on the ESC key.
+- Session right-click context menu now opens at a consistent anchored position — just to the right of the sidebar, aligned with the clicked row's top — instead of following the mouse cursor and covering the list, and no longer gets clipped by the window edge: it measures itself and flips/clamps into the viewport (and scrolls if taller than the window), so items like the "MOVE TO" categories stay reachable near the bottom.
+- Starting a recording while another session is open now resets the right-hand Summary/Questions panel (and translations) to the new recording session instead of leaving the previous session's summary on screen. The transcript pane was already cleared; the summary state is now cleared alongside it. (Note: live transcript lines still appear per segment — i.e. after each speech pause — since transcription is segment-based, not streaming.)
 
 ## [0.3.1] - 2026-06-07
 

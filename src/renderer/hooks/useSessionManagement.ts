@@ -214,9 +214,16 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     // Stop any active playback before recording
     p.current.audioPlayer.stop();
 
-    // Immediately show recording UI (optimistic)
+    // Immediately show recording UI (optimistic). Reset the middle + right
+    // panels so they reflect the NEW recording session instead of whichever
+    // session was open before (clearSegments empties the transcript; the
+    // summary/translation state must be cleared too or the right panel keeps
+    // showing the previous session's summary until it is reselected).
     p.current.store.setRecording(true);
     p.current.store.clearSegments();
+    p.current.summary.setSummaries([]);
+    p.current.summary.setGenerateError(null);
+    p.current.translation.setTranslations({});
     p.current.store.setElapsedSeconds(0);
     elapsedRef.current = 0;
     audioSamplesRef.current = 0;

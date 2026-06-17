@@ -2,6 +2,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
 } from "react";
@@ -428,11 +429,48 @@ export function HistoryPanel({
     sessionId: null,
   });
   const menuRef = useRef<HTMLDivElement>(null);
+  // Position after measuring, so the menu never overflows the window edges.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+
+  // Clamp/flip the menu into the viewport once it has rendered and we can
+  // measure its size (the item list — e.g. the "MOVE TO" categories — varies).
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !menuRef.current) return;
+    const margin = 8;
+    const rect = menuRef.current.getBoundingClientRect();
+    let top = contextMenu.y;
+    let left = contextMenu.x;
+    if (top + rect.height > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - rect.height - margin);
+    }
+    if (left + rect.width > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - rect.width - margin);
+    }
+    setMenuPos({ top, left });
+  }, [
+    contextMenu.visible,
+    contextMenu.x,
+    contextMenu.y,
+    contextMenu.sessionId,
+  ]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, sessionId: number) => {
       e.preventDefault();
-      setContextMenu({ visible: true, x: e.clientX, y: e.clientY, sessionId });
+      // Anchor the menu just to the RIGHT of the sidebar row (the row's right
+      // edge), aligned with the row's top — a consistent spot that doesn't
+      // cover the session list — instead of following the mouse cursor. The
+      // layout effect below then clamps/flips it so it never overflows.
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPos(null);
+      setContextMenu({
+        visible: true,
+        x: rect.right,
+        y: rect.top,
+        sessionId,
+      });
     },
     [],
   );
@@ -1774,8 +1812,10 @@ export function HistoryPanel({
             ref={menuRef}
             style={{
               position: "fixed",
-              top: contextMenu.y,
-              left: contextMenu.x,
+              top: menuPos?.top ?? contextMenu.y,
+              left: menuPos?.left ?? contextMenu.x,
+              maxHeight: "calc(100vh - 16px)",
+              overflowY: "auto",
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
               backgroundColor: "rgba(28, 28, 31, 0.92)",
