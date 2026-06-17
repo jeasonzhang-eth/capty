@@ -27,11 +27,16 @@ describe("createSileroVad", () => {
 
   it("reset() makes the output sequence reproducible", async () => {
     const vad = await createSileroVad(MODEL);
-    const noise = new Float32Array(512).map((_, i) => Math.sin(i) * 0.3);
-    const a = await vad.process(noise);
-    await vad.process(noise);
+    const tone = new Float32Array(512).map((_, i) => Math.sin(i) * 0.3);
+    const a = await vad.process(tone);
+    await vad.process(tone);
     vad.reset();
-    const b = await vad.process(noise);
-    expect(b).toBeCloseTo(a, 5); // same state (zero) → same first output
+    const b = await vad.process(tone);
+    expect(b).toBeCloseTo(a, 5); // same reset state → same first output
+  });
+
+  it("rejects a window that is not 512 samples", async () => {
+    const vad = await createSileroVad(MODEL);
+    await expect(vad.process(new Float32Array(256))).rejects.toThrow();
   });
 });

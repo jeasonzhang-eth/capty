@@ -31,7 +31,7 @@ export async function createSileroVad(modelUrl: string): Promise<SileroVad> {
       const input = new ort.Tensor("float32", window, [1, WINDOW]);
       const stateTensor = new ort.Tensor("float32", state, [...STATE_DIMS]);
       const out = await session.run({ input, state: stateTensor, sr });
-      state = out.stateN.data as Float32Array;
+      state = Float32Array.from(out.stateN.data as Float32Array);
       return (out.output.data as Float32Array)[0];
     },
     reset(): void {
