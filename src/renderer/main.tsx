@@ -4,8 +4,13 @@ import * as ort from "onnxruntime-web";
 import "./styles/global.css";
 import App from "./App";
 
-// ORT wasm assets are copied to `<renderer-out>/ort/` by vite-plugin-static-copy.
-ort.env.wasm.wasmPaths = "./ort/";
+// ORT wasm assets are copied to the `ort/` dir next to index.html by
+// vite-plugin-static-copy. Resolve to an absolute URL against the document so
+// onnxruntime-web fetches them from there — a bare "./ort/" would be resolved
+// relative to the ort module itself (node_modules/.../dist/) and 404 in dev.
+// document.baseURI works in both dev (http://localhost:PORT/) and the packaged
+// app (file://.../out/renderer/index.html).
+ort.env.wasm.wasmPaths = new URL("ort/", document.baseURI).href;
 ort.env.wasm.numThreads = 1;
 
 class ErrorBoundary extends React.Component<
