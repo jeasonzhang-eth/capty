@@ -34,9 +34,8 @@ describe("useVAD with Silero", () => {
     await waitFor(() => expect(result.current.isLoaded).toBe(true));
     await act(async () => {
       result.current.feedAudio(buffer4096());
-      await new Promise((r) => setTimeout(r, 50));
     });
-    expect(onSpeechStart).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSpeechStart).toHaveBeenCalledTimes(1));
     expect(result.current.degraded).toBe(false);
   });
 
@@ -51,8 +50,22 @@ describe("useVAD with Silero", () => {
     await act(async () => {
       result.current.feedAudio(loud);
       result.current.feedAudio(loud);
-      await new Promise((r) => setTimeout(r, 10));
     });
-    expect(onSpeechStart).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onSpeechStart).toHaveBeenCalledTimes(1));
+  });
+
+  it("carries a sub-window remainder across feedAudio calls", async () => {
+    const onSpeechStart = vi.fn();
+    const { result } = renderHook(() =>
+      useVAD({ onSpeechStart }, { createVad: fakeVadFactory([0.9]) }),
+    );
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
+    // 300 samples per call: no full 512-window until enough accumulate.
+    // After 14 calls = 4200 samples → 8 full windows (4096) → ≥ SPEECH_WINDOWS(8) → start.
+    await act(async () => {
+      for (let i = 0; i < 14; i++)
+        result.current.feedAudio(new Int16Array(300).fill(8000));
+    });
+    await waitFor(() => expect(onSpeechStart).toHaveBeenCalledTimes(1));
   });
 });
