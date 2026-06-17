@@ -9,6 +9,12 @@ interface VADState {
   readonly isLoaded: boolean;
   /** True when Silero is unavailable and the energy fallback is active. */
   readonly degraded: boolean;
+  /**
+   * Latest speech probability (0..1), throttled for UI display. In degraded
+   * (energy fallback) mode this is a normalized energy level rather than a
+   * model probability.
+   */
+  readonly speechProb: number;
 }
 
 interface VADCallbacks {
@@ -41,10 +47,21 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
     isSpeaking: false,
     isLoaded: false,
     degraded: false,
+    speechProb: 0,
   });
 
   const callbacksRef = useRef(callbacks);
   callbacksRef.current = callbacks;
+
+  // Throttle live probability updates to the UI (~every 4th window ≈ 128ms)
+  // to keep the meter smooth without re-rendering on every 32ms window.
+  const probTickRef = useRef(0);
+  const reportProb = useCallback((value: number) => {
+    probTickRef.current = (probTickRef.current + 1) % 4;
+    if (probTickRef.current === 0) {
+      setState((prev) => ({ ...prev, speechProb: value }));
+    }
+  }, []);
 
   const setSpeaking = useCallback((speaking: boolean) => {
     setState((prev) =>
@@ -136,6 +153,7 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
         try {
           const prob = await silero.process(win);
           isSpeech = prob > THRESHOLD;
+          reportProb(prob);
         } catch (err) {
           // Conservative: treat inference errors as silence.
           console.warn(
@@ -149,17 +167,22 @@ export function useVAD(callbacks: VADCallbacks = {}, options: VADOptions = {}) {
     } finally {
       pumpingRef.current = false;
     }
-  }, []);
+  }, [reportProb]);
 
-  const feedAudioEnergy = useCallback((int16: Int16Array) => {
-    let energy = 0;
-    for (let i = 0; i < int16.length; i++) {
-      const s = int16[i] / 32768.0;
-      energy += s * s;
-    }
-    energy /= int16.length;
-    energyDebouncerRef.current!.push(energy > ENERGY_THRESHOLD);
-  }, []);
+  const feedAudioEnergy = useCallback(
+    (int16: Int16Array) => {
+      let energy = 0;
+      for (let i = 0; i < int16.length; i++) {
+        const s = int16[i] / 32768.0;
+        energy += s * s;
+      }
+      energy /= int16.length;
+      // Normalize energy to a rough 0..1 for the meter in fallback mode.
+      reportProb(Math.min(1, energy / (ENERGY_THRESHOLD * 4)));
+      energyDebouncerRef.current!.push(energy > ENERGY_THRESHOLD);
+    },
+    [reportProb],
+  );
 
   const feedAudio = useCallback(
     (int16: Int16Array) => {

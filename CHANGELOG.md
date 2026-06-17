@@ -8,6 +8,7 @@ All notable changes to Capty are documented in this file.
 
 - VAD now uses the Silero v5 neural model (onnxruntime-web, bundled & offline) instead of a fixed energy threshold, eliminating steady-noise (e.g. fan) false positives. Falls back to the energy VAD with a notice banner if the model fails to load.
 - Forced segment break during continuous speech lowered from ~30s to ~8s, so transcripts appear several times sooner when speaking without pauses (transcription remains segment-based: a chunk is sent to ASR on a ~1s silence pause or this ~8s cap).
+- The recording meter is now driven by the VAD speech probability (0..1) instead of raw input volume, with a live numeric readout (`VAD 0.xx ● speech / ○ silence`) below it, so you can see what the VAD is actually detecting.
 
 ### Added
 

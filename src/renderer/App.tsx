@@ -228,7 +228,6 @@ function App(): React.JSX.Element {
   const {
     regeneratingSessionId,
     regenerationProgress,
-    audioLevel,
     sessionCategories,
     onFinalCallback,
     onErrorCallback,
@@ -535,7 +534,8 @@ function App(): React.JSX.Element {
           <RecordingControls
             isRecording={store.isRecording}
             elapsedSeconds={store.elapsedSeconds}
-            audioLevel={audioLevel}
+            speechProb={vad.speechProb}
+            isSpeaking={vad.isSpeaking}
             onStart={handleStart}
             onStop={handleStop}
           />
