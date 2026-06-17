@@ -26,13 +26,13 @@ const WINDOW = 512;
 const THRESHOLD = 0.5;
 const SPEECH_WINDOWS = 8; // ~0.25s
 const SILENCE_WINDOWS = 32; // ~1.0s
-const MAX_SPEECH_WINDOWS = 938; // ~30s
+const MAX_SPEECH_WINDOWS = 250; // ~8s — force a flush during continuous speech
 
 // Energy fallback granularity (4096-sample buffers ≈ 256ms).
 const ENERGY_THRESHOLD = 0.002;
 const ENERGY_SPEECH_FRAMES = 2;
 const ENERGY_SILENCE_FRAMES = 6;
-const ENERGY_MAX_SPEECH_FRAMES = 120;
+const ENERGY_MAX_SPEECH_FRAMES = 31; // ~8s
 
 const MAX_BACKLOG = 64; // drop oldest windows beyond this (should never trigger)
 
