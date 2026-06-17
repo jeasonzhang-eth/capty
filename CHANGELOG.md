@@ -7,6 +7,7 @@ All notable changes to Capty are documented in this file.
 ### Added
 
 - Silero VAD: bundle onnxruntime-web + Silero v5 model, copy ORT wasm into renderer build.
+- Silero VAD: `src/renderer/vad/silero.ts` — stateful onnxruntime-web wrapper around the Silero v5 model (`process(window)` → speech probability in [0,1]; `reset()` clears recurrent state), covered by unit tests.
 - WeChat Channels (视频号) support — core modules for the upcoming "paste a 视频号 share link → download → transcribe" feature (`src/main/wechat/`):
   - `isaac.ts`: ISAAC64 stream cipher that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Verified against the Go reference (wx_channels_download) with golden keystream vectors.
   - `resolver.ts`: resolves a `/sph/<code>` share link into a downloadable `videoUrl` + `decodeKey` via Tencent Yuanbao's parse API (using the user's own yuanbao login) followed by 视频号 `get_feed_info`.
