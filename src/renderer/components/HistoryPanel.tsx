@@ -459,14 +459,15 @@ export function HistoryPanel({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, sessionId: number) => {
       e.preventDefault();
-      // Anchor the menu to the clicked row's top-left corner — a consistent
-      // spot — instead of following the mouse cursor. The layout effect below
-      // then clamps/flips it so it never overflows the window.
+      // Anchor the menu just to the RIGHT of the sidebar row (the row's right
+      // edge), aligned with the row's top — a consistent spot that doesn't
+      // cover the session list — instead of following the mouse cursor. The
+      // layout effect below then clamps/flips it so it never overflows.
       const rect = e.currentTarget.getBoundingClientRect();
       setMenuPos(null);
       setContextMenu({
         visible: true,
-        x: rect.left,
+        x: rect.right,
         y: rect.top,
         sessionId,
       });
