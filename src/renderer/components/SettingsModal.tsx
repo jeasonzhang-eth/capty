@@ -1203,6 +1203,37 @@ function GeneralTab({
   // yt-dlp JS-challenge solver (YouTube "n" challenge via deno).
   const [solveJsChallenges, setSolveJsChallenges] = useState(false);
 
+  // YouTube login state (cookies for yt-dlp).
+  const [ytLoggedIn, setYtLoggedIn] = useState<boolean | null>(null);
+  const [ytBusy, setYtBusy] = useState(false);
+
+  useEffect(() => {
+    void window.capty
+      .getYoutubeStatus()
+      .then((s) => setYtLoggedIn(s.loggedIn))
+      .catch(() => setYtLoggedIn(null));
+  }, []);
+
+  const handleLoginYoutube = useCallback(async () => {
+    setYtBusy(true);
+    try {
+      const s = await window.capty.loginYoutube();
+      setYtLoggedIn(s.loggedIn);
+    } finally {
+      setYtBusy(false);
+    }
+  }, []);
+
+  const handleClearYoutube = useCallback(async () => {
+    setYtBusy(true);
+    try {
+      await window.capty.logoutYoutube();
+      setYtLoggedIn(false);
+    } finally {
+      setYtBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void window.capty
       .getYuanbaoStatus()
@@ -1556,11 +1587,85 @@ function GeneralTab({
         </div>
       </div>
 
-      {/* YouTube / yt-dlp cookies */}
-      <div style={sectionTitleStyle}>YouTube 下载 Cookie</div>
+      {/* YouTube 登录 */}
+      <div style={sectionTitleStyle}>YouTube 登录</div>
       <div style={sectionDescStyle}>
-        YouTube 现在会拦截匿名下载（“确认你不是机器人”）。选择一个已登录 YouTube
-        的浏览器，yt-dlp 会读取其 Cookie 完成下载。Cookie 仅本地使用，不会上传。
+        登录一次 YouTube，Capty 会把登录 Cookie 保存在独立分区并在下载时导出给
+        yt-dlp 使用（优先于下方的浏览器 Cookie）。比读取系统浏览器更稳，且不依赖
+        已安装 Chrome。Cookie 仅本地使用，不会上传。
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              YouTube 登录状态
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              {ytLoggedIn === null
+                ? "检测中…"
+                : ytLoggedIn
+                  ? "已登录（下载 YouTube 链接将使用此登录）"
+                  : "未登录（点击右侧按钮登录）"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+            <button
+              onClick={() => void handleLoginYoutube()}
+              disabled={ytBusy}
+              style={{
+                ...secondaryBtnStyle,
+                fontSize: "12px",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                cursor: ytBusy ? "not-allowed" : "pointer",
+                opacity: ytBusy ? 0.5 : 1,
+              }}
+            >
+              {ytBusy ? "处理中…" : ytLoggedIn ? "重新登录" : "登录"}
+            </button>
+            <button
+              onClick={() => void handleClearYoutube()}
+              disabled={ytBusy || ytLoggedIn !== true}
+              style={{
+                ...secondaryBtnStyle,
+                fontSize: "12px",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                cursor:
+                  ytLoggedIn === true && !ytBusy ? "pointer" : "not-allowed",
+                opacity: ytLoggedIn === true && !ytBusy ? 1 : 0.4,
+              }}
+            >
+              清除登录
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* YouTube / yt-dlp cookies */}
+      <div style={sectionTitleStyle}>YouTube 下载 Cookie（备用）</div>
+      <div style={sectionDescStyle}>
+        若未用上面的 YouTube 登录，可选择一个已登录 YouTube 的浏览器，yt-dlp
+        会读取其 Cookie 完成下载。Cookie 仅本地使用，不会上传。
       </div>
       <div style={cardStyle}>
         <div

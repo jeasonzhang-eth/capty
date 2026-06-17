@@ -18,6 +18,12 @@ import {
   yuanbaoFetch,
 } from "../wechat/yuanbao-auth";
 import {
+  hasYoutubeLogin,
+  openYoutubeLogin,
+  clearYoutubeLogin,
+  exportYoutubeCookies,
+} from "../youtube/yt-auth";
+import {
   createDownload,
   getDownload,
   listDownloads,
@@ -25,7 +31,7 @@ import {
   deleteDownload,
 } from "../database";
 import { createSession, updateSession } from "../database";
-import { readConfig } from "../config";
+import { readConfig, type AppConfig } from "../config";
 import { sanitizeSessionDirName } from "../shared/session-name";
 
 /** Track active yt-dlp child processes by download ID for cancel support. */
@@ -87,6 +93,44 @@ export function ytdlpCookieArgs(browser: string | null | undefined): string[] {
  */
 export function ytdlpSolverArgs(enabled: boolean | undefined): string[] {
   return enabled ? ["--remote-components", "ejs:github"] : [];
+}
+
+/** Check if URL points at YouTube (youtube.com / youtu.be). */
+export function isYoutubeUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve the yt-dlp cookie args for a URL. Prefers an exported YouTube login
+ * (Netscape cookies.txt via `--cookies`) when the URL is YouTube and the user
+ * has signed in; otherwise falls back to the configured `--cookies-from-browser`
+ * source. `--cookies` and `--cookies-from-browser` are mutually exclusive, so
+ * only one is returned.
+ */
+async function resolveCookieArgs(
+  url: string,
+  config: AppConfig,
+  cookieFilePath: string,
+): Promise<string[]> {
+  if (isYoutubeUrl(url)) {
+    try {
+      if (await exportYoutubeCookies(cookieFilePath)) {
+        return ["--cookies", cookieFilePath];
+      }
+    } catch {
+      // fall through to browser cookies
+    }
+  }
+  return ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
 }
 
 /** Check if URL is a Xiaoyuzhou (小宇宙) podcast episode. */
@@ -431,8 +475,13 @@ export function register(deps: IpcDeps): void {
         } else {
           // ── yt-dlp download path ──
 
-          // Cookie flag (e.g. for YouTube's bot check) — empty when unset.
-          const cookieArgs = ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
+          // Cookie flag (YouTube bot check) — prefers an exported YouTube login
+          // (cookies.txt), else the configured browser cookie source.
+          const cookieArgs = await resolveCookieArgs(
+            url,
+            config,
+            join(configDir, "youtube-cookies.txt"),
+          );
           // JS-challenge solver flag (YouTube "n" challenge) — empty when off.
           const solverArgs = ytdlpSolverArgs(config.ytdlpSolveJsChallenges);
 
@@ -710,6 +759,23 @@ export function register(deps: IpcDeps): void {
 
   ipcMain.handle("wechat:yuanbao-logout", async () => {
     await clearYuanbaoLogin();
+    return { ok: true };
+  });
+
+  // ─── YouTube login management (cookies for yt-dlp) ───
+
+  ipcMain.handle("youtube:status", async () => {
+    return { loggedIn: await hasYoutubeLogin() };
+  });
+
+  ipcMain.handle("youtube:login", async () => {
+    const win = getMainWindow();
+    const ok = await openYoutubeLogin(win ?? undefined);
+    return { loggedIn: ok };
+  });
+
+  ipcMain.handle("youtube:logout", async () => {
+    await clearYoutubeLogin();
     return { ok: true };
   });
 }
