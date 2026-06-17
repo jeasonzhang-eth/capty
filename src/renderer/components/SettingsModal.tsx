@@ -1198,11 +1198,32 @@ function GeneralTab({
   const [yuanbaoLoggedIn, setYuanbaoLoggedIn] = useState<boolean | null>(null);
   const [yuanbaoClearing, setYuanbaoClearing] = useState(false);
 
+  // yt-dlp cookie source (YouTube bot check). "" = off.
+  const [cookieBrowser, setCookieBrowser] = useState<string>("");
+
   useEffect(() => {
     void window.capty
       .getYuanbaoStatus()
       .then((s) => setYuanbaoLoggedIn(s.loggedIn))
       .catch(() => setYuanbaoLoggedIn(null));
+  }, []);
+
+  useEffect(() => {
+    void window.capty
+      .getConfig()
+      .then((c) => {
+        const v = (c as { ytdlpCookiesFromBrowser?: string | null })
+          .ytdlpCookiesFromBrowser;
+        setCookieBrowser(typeof v === "string" ? v : "");
+      })
+      .catch(() => setCookieBrowser(""));
+  }, []);
+
+  const handleChangeCookieBrowser = useCallback(async (value: string) => {
+    setCookieBrowser(value);
+    await window.capty.setConfig({
+      ytdlpCookiesFromBrowser: value === "" ? null : value,
+    });
   }, []);
 
   const handleClearYuanbao = useCallback(async () => {
@@ -1521,6 +1542,65 @@ function GeneralTab({
           >
             {yuanbaoClearing ? "清除中…" : "清除登录"}
           </button>
+        </div>
+      </div>
+
+      {/* YouTube / yt-dlp cookies */}
+      <div style={sectionTitleStyle}>YouTube 下载 Cookie</div>
+      <div style={sectionDescStyle}>
+        YouTube 现在会拦截匿名下载（“确认你不是机器人”）。选择一个已登录 YouTube
+        的浏览器，yt-dlp 会读取其 Cookie 完成下载。Cookie 仅本地使用，不会上传。
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              Cookie 来源浏览器
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              选「不使用」则按匿名下载（YouTube 可能失败）。
+            </div>
+          </div>
+          <select
+            value={cookieBrowser}
+            onChange={(e) => void handleChangeCookieBrowser(e.target.value)}
+            style={{
+              height: "32px",
+              padding: "0 10px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              backgroundColor: "var(--bg-primary)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">不使用</option>
+            <option value="chrome">Chrome</option>
+            <option value="safari">Safari</option>
+            <option value="firefox">Firefox</option>
+            <option value="edge">Edge</option>
+            <option value="brave">Brave</option>
+          </select>
         </div>
       </div>
     </>

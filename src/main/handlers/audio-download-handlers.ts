@@ -55,6 +55,31 @@ function parseYtdlpProgress(line: string): {
   return { percent: parseFloat(m[1]), speed: m[2], eta: m[3] };
 }
 
+/** Browsers yt-dlp can extract cookies from via --cookies-from-browser. */
+const COOKIE_BROWSERS = new Set([
+  "chrome",
+  "chromium",
+  "brave",
+  "edge",
+  "firefox",
+  "opera",
+  "safari",
+  "vivaldi",
+  "whale",
+]);
+
+/**
+ * Build the yt-dlp cookie flag for a configured browser. Returns an empty
+ * array when no/unknown browser is set, so callers can spread it
+ * unconditionally. YouTube blocks anonymous requests with a bot check;
+ * supplying browser cookies authenticates as the logged-in user.
+ */
+export function ytdlpCookieArgs(browser: string | null | undefined): string[] {
+  if (!browser) return [];
+  const b = browser.toLowerCase().trim();
+  return COOKIE_BROWSERS.has(b) ? ["--cookies-from-browser", b] : [];
+}
+
 /** Check if URL is a Xiaoyuzhou (小宇宙) podcast episode. */
 export function isXiaoyuzhouUrl(url: string): boolean {
   try {
@@ -397,10 +422,14 @@ export function register(deps: IpcDeps): void {
         } else {
           // ── yt-dlp download path ──
 
+          // Cookie flag (e.g. for YouTube's bot check) — empty when unset.
+          const cookieArgs = ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
+
           // Fetch video title
           try {
             videoTitle = await new Promise<string>((resolve, reject) => {
               const proc = spawn("yt-dlp", [
+                ...cookieArgs,
                 "--print",
                 "title",
                 "--no-playlist",
@@ -442,6 +471,7 @@ export function register(deps: IpcDeps): void {
           }
 
           const ytdlp = spawn("yt-dlp", [
+            ...cookieArgs,
             "-f",
             "ba",
             "--continue",

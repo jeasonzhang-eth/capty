@@ -60,7 +60,12 @@ describe("audio-download-handlers", () => {
       // Directly insert a download record via DB
       db.prepare(
         "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, ?, ?)",
-      ).run("https://example.com/video", "example.com", "pending", new Date().toISOString());
+      ).run(
+        "https://example.com/video",
+        "example.com",
+        "pending",
+        new Date().toISOString(),
+      );
 
       const handler = handlers.get("audio:download-list")!;
       const result = handler();
@@ -74,9 +79,16 @@ describe("audio-download-handlers", () => {
     it("removes a download record from the database", () => {
       register(makeDeps());
 
-      const { lastInsertRowid } = db.prepare(
-        "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, ?, ?)",
-      ).run("https://example.com/video", "example.com", "completed", new Date().toISOString());
+      const { lastInsertRowid } = db
+        .prepare(
+          "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, ?, ?)",
+        )
+        .run(
+          "https://example.com/video",
+          "example.com",
+          "completed",
+          new Date().toISOString(),
+        );
 
       const id = Number(lastInsertRowid);
 
@@ -93,16 +105,25 @@ describe("audio-download-handlers", () => {
     it("marks a download as cancelled", () => {
       register(makeDeps());
 
-      const { lastInsertRowid } = db.prepare(
-        "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, ?, ?)",
-      ).run("https://example.com/video", "example.com", "downloading", new Date().toISOString());
+      const { lastInsertRowid } = db
+        .prepare(
+          "INSERT INTO downloads (url, source, status, created_at) VALUES (?, ?, ?, ?)",
+        )
+        .run(
+          "https://example.com/video",
+          "example.com",
+          "downloading",
+          new Date().toISOString(),
+        );
 
       const id = Number(lastInsertRowid);
 
       const cancelHandler = handlers.get("audio:download-cancel")!;
       cancelHandler({} as any, id);
 
-      const row = db.prepare("SELECT status FROM downloads WHERE id = ?").get(id) as { status: string };
+      const row = db
+        .prepare("SELECT status FROM downloads WHERE id = ?")
+        .get(id) as { status: string };
       expect(row.status).toBe("cancelled");
     });
   });
@@ -111,7 +132,9 @@ describe("audio-download-handlers", () => {
     it("throws when download is not found", async () => {
       register(makeDeps());
       const handler = handlers.get("audio:download-retry")!;
-      await expect(handler({} as any, 9999)).rejects.toThrow("Download not found");
+      await expect(handler({} as any, 9999)).rejects.toThrow(
+        "Download not found",
+      );
     });
   });
 });
@@ -121,17 +144,51 @@ describe("helper functions (extractSource / isXiaoyuzhouUrl)", () => {
   // through audio:download-list and audio:download-start handler side effects,
   // but we also export them for direct testing.
   it("extractSource returns hostname without www prefix", async () => {
-    const { extractSource } = await import("../../../src/main/handlers/audio-download-handlers");
-    expect(extractSource("https://www.youtube.com/watch?v=abc")).toBe("youtube.com");
+    const { extractSource } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(extractSource("https://www.youtube.com/watch?v=abc")).toBe(
+      "youtube.com",
+    );
     expect(extractSource("https://example.com/path")).toBe("example.com");
     expect(extractSource("not-a-url")).toBe("unknown");
   });
 
   it("isXiaoyuzhouUrl returns true for xiaoyuzhoufm.com URLs", async () => {
-    const { isXiaoyuzhouUrl } = await import("../../../src/main/handlers/audio-download-handlers");
-    expect(isXiaoyuzhouUrl("https://www.xiaoyuzhoufm.com/episode/123")).toBe(true);
+    const { isXiaoyuzhouUrl } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(isXiaoyuzhouUrl("https://www.xiaoyuzhoufm.com/episode/123")).toBe(
+      true,
+    );
     expect(isXiaoyuzhouUrl("https://xiaoyuzhoufm.com/episode/123")).toBe(true);
     expect(isXiaoyuzhouUrl("https://www.youtube.com/watch?v=abc")).toBe(false);
     expect(isXiaoyuzhouUrl("not-a-url")).toBe(false);
+  });
+});
+
+describe("ytdlpCookieArgs", () => {
+  it("returns the cookie flag for a known browser (case/space-insensitive)", async () => {
+    const { ytdlpCookieArgs } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(ytdlpCookieArgs("chrome")).toEqual([
+      "--cookies-from-browser",
+      "chrome",
+    ]);
+    expect(ytdlpCookieArgs(" Safari ")).toEqual([
+      "--cookies-from-browser",
+      "safari",
+    ]);
+    expect(ytdlpCookieArgs("Firefox")).toEqual([
+      "--cookies-from-browser",
+      "firefox",
+    ]);
+  });
+
+  it("returns no args when unset or unknown", async () => {
+    const { ytdlpCookieArgs } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(ytdlpCookieArgs(null)).toEqual([]);
+    expect(ytdlpCookieArgs(undefined)).toEqual([]);
+    expect(ytdlpCookieArgs("")).toEqual([]);
+    expect(ytdlpCookieArgs("netscape")).toEqual([]);
   });
 });

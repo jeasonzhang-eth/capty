@@ -112,6 +112,13 @@ export interface AppConfig {
   readonly selectedTtsVoice: string;
   readonly translatePrompt: string;
   readonly sidecar: SidecarConfig;
+  /**
+   * Browser to pull cookies from for yt-dlp downloads (e.g. "chrome",
+   * "safari", "firefox", "edge"). null = no cookies (default). YouTube now
+   * blocks anonymous requests with a bot check; supplying browser cookies
+   * lets yt-dlp authenticate as the logged-in user.
+   */
+  readonly ytdlpCookiesFromBrowser: string | null;
 }
 
 export function getEffectivePromptTypes(config: AppConfig): PromptType[] {
@@ -234,6 +241,7 @@ const DEFAULT_CONFIG: AppConfig = {
     port: 8765,
     autoStart: true,
   },
+  ytdlpCookiesFromBrowser: null,
 };
 
 export function readConfig(configDir: string): AppConfig {
