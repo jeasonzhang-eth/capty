@@ -4,8 +4,15 @@ All notable changes to Capty are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- VAD now uses the Silero v5 neural model (onnxruntime-web, bundled & offline) instead of a fixed energy threshold, eliminating steady-noise (e.g. fan) false positives. Falls back to the energy VAD with a notice banner if the model fails to load.
+- Forced segment break during continuous speech lowered from ~30s to ~8s, so transcripts appear several times sooner when speaking without pauses (transcription remains segment-based: a chunk is sent to ASR on a ~1s silence pause or this ~8s cap).
+- The recording meter is now driven by the VAD speech probability (0..1) instead of raw input volume, with a live numeric readout (`VAD 0.xx ● speech / ○ silence`) below it, so you can see what the VAD is actually detecting.
+
 ### Added
 
+- Silero VAD implementation: bundled onnxruntime-web + Silero v5 model (ORT wasm copied into the renderer build, fully offline); a stateful model wrapper (`src/renderer/vad/silero.ts`, `process(window)` → speech probability, `reset()` clears recurrent state); a pure frame-count speech debouncer parameterized by frame thresholds so it works at any frame rate (`src/renderer/vad/debounce.ts`); `useVAD` rewritten to drive detection from the Silero model (512-sample windows via an ordered async inference queue) with an automatic energy-VAD fallback (`degraded` flag); recurrent VAD state reset at the start of each recording; and a dismissible banner when Silero fails to load. Covered by unit and hook tests.
 - WeChat Channels (视频号) support — core modules for the upcoming "paste a 视频号 share link → download → transcribe" feature (`src/main/wechat/`):
   - `isaac.ts`: ISAAC64 stream cipher that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Verified against the Go reference (wx_channels_download) with golden keystream vectors.
   - `resolver.ts`: resolves a `/sph/<code>` share link into a downloadable `videoUrl` + `decodeKey` via Tencent Yuanbao's parse API (using the user's own yuanbao login) followed by 视频号 `get_feed_info`.
@@ -17,6 +24,8 @@ All notable changes to Capty are documented in this file.
 
 ### Fixed
 
+- Silero VAD detected no speech at all (every window scored ~0, so segments only ever flushed on the forced cap / recording stop). Root cause: the Silero v5 ONNX model requires the previous chunk's last 64 samples to be prepended as context (576-sample input), which we weren't doing — so the model saw a discontinuity and returned ~0 for everything, including clear speech. `silero.ts` now maintains and prepends the 64-sample context. Added a regression test that runs a real speech clip through the wrapper and asserts it scores high (the prior tests only covered silence).
+- Silero VAD failed to load (degraded banner shown, fell back to energy VAD) due to two onnxruntime-web + Vite issues: (1) Vite's dependency pre-bundling rewrote ORT's runtime wasm/.mjs glue paths into `.vite/deps` — fixed by excluding `onnxruntime-web` from the renderer's `optimizeDeps`; (2) a relative `wasmPaths` ("./ort/") resolved against the ORT module dir (`node_modules/.../dist/`) and 404'd — fixed by resolving the wasm dir to an absolute URL via `document.baseURI`, which works in both dev and the packaged app.
 - Downloaded sessions (视频号 / 小宇宙 / yt-dlp) now name their on-disk audio folder after the (sanitized) session title instead of a bare timestamp, so the folder on disk matches the name shown in the app — the same convention recordings get after rename. Extracted the shared `sanitizeSessionDirName` helper (`src/main/shared/session-name.ts`) used by both the rename and download paths; covered by `tests/main/shared/session-name.test.ts`.
 - Session inline rename: the title field is now a multi-line `<textarea>` (Enter confirms, Shift+Enter inserts a newline) and the row is no longer `draggable` while renaming, so you can drag-select text in the title instead of accidentally starting a session move.
 - Audio import (upload) dialog now closes on the ESC key.

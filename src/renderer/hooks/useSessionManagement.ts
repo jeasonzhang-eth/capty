@@ -81,6 +81,7 @@ interface UseSessionManagementParams {
   };
   readonly vad: {
     readonly feedAudio: (pcm: Int16Array) => void;
+    readonly reset: () => void;
   };
   readonly summary: {
     readonly setSummaries: (s: Summary[]) => void;
@@ -224,6 +225,7 @@ export function useSessionManagement(params: UseSessionManagementParams) {
     p.current.summary.setSummaries([]);
     p.current.summary.setGenerateError(null);
     p.current.translation.setTranslations({});
+    p.current.vad.reset();
     p.current.store.setElapsedSeconds(0);
     elapsedRef.current = 0;
     audioSamplesRef.current = 0;

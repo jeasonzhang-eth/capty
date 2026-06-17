@@ -3,7 +3,10 @@ import React from "react";
 interface RecordingControlsProps {
   readonly isRecording: boolean;
   readonly elapsedSeconds: number;
-  readonly audioLevel: number;
+  /** Speech probability from the VAD (0..1) — drives the meter + readout. */
+  readonly speechProb: number;
+  /** Whether the VAD currently considers the audio speech. */
+  readonly isSpeaking: boolean;
   readonly onStart: () => void;
   readonly onStop: () => void;
 }
@@ -43,7 +46,8 @@ function VUMeter({ level }: { level: number }): React.ReactElement {
 export function RecordingControls({
   isRecording,
   elapsedSeconds,
-  audioLevel,
+  speechProb,
+  isSpeaking,
   onStart,
   onStop,
 }: RecordingControlsProps): React.ReactElement {
@@ -77,7 +81,27 @@ export function RecordingControls({
       >
         {isRecording && (
           <>
-            <VUMeter level={audioLevel} />
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "3px",
+                flexShrink: 0,
+              }}
+            >
+              <VUMeter level={speechProb} />
+              <span
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: "10px",
+                  color: isSpeaking ? "#4ADE80" : "var(--text-muted)",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                VAD {speechProb.toFixed(2)}{" "}
+                {isSpeaking ? "● speech" : "○ silence"}
+              </span>
+            </div>
             <span
               style={{
                 width: "8px",

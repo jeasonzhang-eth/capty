@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ControlBar } from "./components/ControlBar";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { TranscriptArea } from "./components/TranscriptArea";
@@ -124,6 +124,7 @@ function App(): React.JSX.Element {
     onSpeechStart: () => onSpeechStartRef.current(),
     onSpeechEnd: () => onSpeechEndRef.current(),
   });
+  const [vadBannerDismissed, setVadBannerDismissed] = useState(false);
 
   const ttsSettingsHook = useTtsSettings({ store, downloads, setDownloads });
   const {
@@ -227,7 +228,6 @@ function App(): React.JSX.Element {
   const {
     regeneratingSessionId,
     regenerationProgress,
-    audioLevel,
     sessionCategories,
     onFinalCallback,
     onErrorCallback,
@@ -316,6 +316,35 @@ function App(): React.JSX.Element {
       className={store.isRecording ? "recording-mode" : ""}
       style={{ display: "flex", flexDirection: "column", height: "100vh" }}
     >
+      {vad.degraded && !vadBannerDismissed && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "#5a4a00",
+            color: "#ffe08a",
+            padding: "6px 12px",
+            fontSize: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>高级降噪 VAD 不可用，已回退基础模式</span>
+          <button
+            onClick={() => setVadBannerDismissed(true)}
+            aria-label="关闭"
+            style={{
+              background: "none",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <ControlBar
         isRecording={store.isRecording}
         sidecarReady={store.sidecarReady}
@@ -505,7 +534,8 @@ function App(): React.JSX.Element {
           <RecordingControls
             isRecording={store.isRecording}
             elapsedSeconds={store.elapsedSeconds}
-            audioLevel={audioLevel}
+            speechProb={vad.speechProb}
+            isSpeaking={vad.isSpeaking}
             onStart={handleStart}
             onStop={handleStop}
           />
