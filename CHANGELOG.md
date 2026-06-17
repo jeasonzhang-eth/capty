@@ -4,6 +4,10 @@ All notable changes to Capty are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- CI e2e (`history-session-management`) was failing because the inline session-rename control became a multi-line `<textarea>` while the test still targeted an `<input>`. Updated the selector and added a `session-rename-input-<id>` test id.
+
 ## [0.4.0] - 2026-06-17
 
 ### Changed
