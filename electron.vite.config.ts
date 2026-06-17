@@ -33,6 +33,12 @@ export default defineConfig({
         ],
       }),
     ],
+    // onnxruntime-web loads its wasm/.mjs glue dynamically at runtime; Vite's
+    // dep pre-bundling rewrites those paths into .vite/deps and breaks the load.
+    // Excluding it keeps the package's own relative resolution intact.
+    optimizeDeps: {
+      exclude: ["onnxruntime-web"],
+    },
     build: {
       outDir: resolve(__dirname, "out/renderer"),
       rollupOptions: {

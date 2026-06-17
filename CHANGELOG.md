@@ -22,6 +22,7 @@ All notable changes to Capty are documented in this file.
 
 ### Fixed
 
+- Silero VAD failed to load (degraded banner shown, fell back to energy VAD) because Vite's dependency pre-bundling rewrote onnxruntime-web's runtime wasm/.mjs glue paths into `.vite/deps`, which don't exist. Excluded `onnxruntime-web` from the renderer's `optimizeDeps` so it resolves its wasm assets from the bundled `ort/` dir.
 - Downloaded sessions (视频号 / 小宇宙 / yt-dlp) now name their on-disk audio folder after the (sanitized) session title instead of a bare timestamp, so the folder on disk matches the name shown in the app — the same convention recordings get after rename. Extracted the shared `sanitizeSessionDirName` helper (`src/main/shared/session-name.ts`) used by both the rename and download paths; covered by `tests/main/shared/session-name.test.ts`.
 - Session inline rename: the title field is now a multi-line `<textarea>` (Enter confirms, Shift+Enter inserts a newline) and the row is no longer `draggable` while renaming, so you can drag-select text in the title instead of accidentally starting a session move.
 - Audio import (upload) dialog now closes on the ESC key.
