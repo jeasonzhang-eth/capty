@@ -173,6 +173,16 @@ export function ImportManagerDialog({
     });
   }
 
+  function removeItem(i: number): void {
+    const next = order.filter((_, idx) => idx !== i);
+    // Removing the last item leaves nothing to import — exit the staging view.
+    if (next.length === 0) {
+      onCancelStaging?.();
+      return;
+    }
+    setOrder(next);
+  }
+
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -284,7 +294,8 @@ export function ImportManagerDialog({
             }}
           >
             <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-              拖拽调整顺序，合并为一个 session（共 {order.length} 段）
+              拖拽调整顺序、✕ 移除不需要的段，合并为一个 session（共{" "}
+              {order.length} 段）
             </div>
 
             <div
@@ -358,6 +369,21 @@ export function ImportManagerDialog({
                     title="下移"
                   >
                     ↓
+                  </button>
+                  <button
+                    data-testid={`merge-remove-${i}`}
+                    onClick={() => removeItem(i)}
+                    disabled={isImporting}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: isImporting ? "default" : "pointer",
+                      fontSize: "14px",
+                    }}
+                    title="移除"
+                  >
+                    ✕
                   </button>
                 </div>
               ))}
