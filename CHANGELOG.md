@@ -4,13 +4,13 @@ All notable changes to Capty are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- VAD now uses the Silero v5 neural model (onnxruntime-web, bundled & offline) instead of a fixed energy threshold, eliminating steady-noise (e.g. fan) false positives. Falls back to the energy VAD with a notice banner if the model fails to load.
+
 ### Added
 
-- Silero VAD: bundle onnxruntime-web + Silero v5 model, copy ORT wasm into renderer build.
-- Silero VAD: `src/renderer/vad/silero.ts` — stateful onnxruntime-web wrapper around the Silero v5 model (`process(window)` → speech probability in [0,1]; `reset()` clears recurrent state), covered by unit tests.
-- Silero VAD: `src/renderer/vad/debounce.ts` — pure, synchronous, frame-count speech debouncer extracted from the energy VAD and parameterized by frame thresholds (speech/silence/max), so it works at any frame rate (256ms energy frames or 32ms Silero windows); covered by unit tests.
-- Silero VAD: `useVAD` now drives speech detection with the Silero model (512-sample windows via an ordered async inference queue) and automatically falls back to the energy VAD with a `degraded` flag when Silero is unavailable; covered by hook tests.
-- Silero VAD: the recurrent VAD state is now reset at the start of each recording, and a dismissible banner appears when Silero fails to load and the energy fallback is active.
+- Silero VAD implementation: bundled onnxruntime-web + Silero v5 model (ORT wasm copied into the renderer build, fully offline); a stateful model wrapper (`src/renderer/vad/silero.ts`, `process(window)` → speech probability, `reset()` clears recurrent state); a pure frame-count speech debouncer parameterized by frame thresholds so it works at any frame rate (`src/renderer/vad/debounce.ts`); `useVAD` rewritten to drive detection from the Silero model (512-sample windows via an ordered async inference queue) with an automatic energy-VAD fallback (`degraded` flag); recurrent VAD state reset at the start of each recording; and a dismissible banner when Silero fails to load. Covered by unit and hook tests.
 - WeChat Channels (视频号) support — core modules for the upcoming "paste a 视频号 share link → download → transcribe" feature (`src/main/wechat/`):
   - `isaac.ts`: ISAAC64 stream cipher that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Verified against the Go reference (wx_channels_download) with golden keystream vectors.
   - `resolver.ts`: resolves a `/sph/<code>` share link into a downloadable `videoUrl` + `decodeKey` via Tencent Yuanbao's parse API (using the user's own yuanbao login) followed by 视频号 `get_feed_info`.
