@@ -7,6 +7,7 @@ import React, {
   useMemo,
 } from "react";
 import { createPortal } from "react-dom";
+import { getPlatform } from "../shared/platform";
 
 interface SessionSummary {
   readonly id: number;
@@ -15,6 +16,7 @@ interface SessionSummary {
   readonly duration_seconds: number | null;
   readonly status: string;
   readonly category: string;
+  readonly source_url?: string | null;
 }
 
 const HISTORY_MIN_WIDTH = 160;
@@ -1032,7 +1034,31 @@ export function HistoryPanel({
               alignItems: "center",
             }}
           >
-            <span>{formatDate(session.started_at)}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {session.source_url &&
+                (() => {
+                  const p = getPlatform(session.source_url);
+                  return (
+                    <span
+                      title={`来源：${p.label}`}
+                      style={{
+                        fontFamily: "system-ui, sans-serif",
+                        fontSize: "9px",
+                        fontWeight: 600,
+                        lineHeight: 1,
+                        padding: "2px 5px",
+                        borderRadius: "4px",
+                        color: p.color,
+                        backgroundColor: p.bg,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.label}
+                    </span>
+                  );
+                })()}
+              <span>{formatDate(session.started_at)}</span>
+            </span>
             <span
               style={{
                 display: "flex",

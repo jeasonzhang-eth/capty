@@ -485,6 +485,27 @@ export function register(deps: IpcDeps): void {
           // JS-challenge solver flag (YouTube "n" challenge) — empty when off.
           const solverArgs = ytdlpSolverArgs(config.ytdlpSolveJsChallenges);
 
+          // Ask whether to also keep the video (default audio-only). When kept,
+          // download a merged mp4 (video+audio); audio is still extracted for
+          // transcription downstream.
+          let keepVideo = false;
+          if (win) {
+            const { response } = await dialog.showMessageBox(win, {
+              type: "question",
+              buttons: ["仅音频", "保留视频"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "下载",
+              message: "是否同时下载并保留视频文件？",
+              detail:
+                "默认仅下载转录用的音频；保留视频会下载完整画面并额外占用空间。",
+            });
+            keepVideo = response === 1;
+          }
+          // bv*+ba/b → best video+audio merged; falls back to ba/b if the source
+          // has no separate video stream.
+          const formatArg = keepVideo ? "bv*+ba/b" : "ba/b";
+
           // Fetch video title
           try {
             videoTitle = await new Promise<string>((resolve, reject) => {
@@ -535,7 +556,9 @@ export function register(deps: IpcDeps): void {
             ...solverArgs,
             ...cookieArgs,
             "-f",
-            "ba/b",
+            formatArg,
+            // Merge into mp4 when keeping the video so the kept file is .mp4.
+            ...(keepVideo ? ["--merge-output-format", "mp4"] : []),
             "--continue",
             "--newline",
             "--no-playlist",
@@ -618,6 +641,8 @@ export function register(deps: IpcDeps): void {
             return;
           }
           downloadedFilePath = join(tempDir, downloadedFile);
+          // Keep the downloaded video alongside the audio when requested.
+          if (keepVideo) keepVideoSourcePath = downloadedFilePath;
         }
 
         // ── Shared: convert → session → cleanup ──
@@ -690,6 +715,7 @@ export function register(deps: IpcDeps): void {
           startedAt: readableTimestamp,
           status: "completed",
           durationSeconds,
+          sourceUrl: url,
         });
 
         // Update download record
