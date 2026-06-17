@@ -9,6 +9,7 @@ All notable changes to Capty are documented in this file.
 - Silero VAD: bundle onnxruntime-web + Silero v5 model, copy ORT wasm into renderer build.
 - Silero VAD: `src/renderer/vad/silero.ts` — stateful onnxruntime-web wrapper around the Silero v5 model (`process(window)` → speech probability in [0,1]; `reset()` clears recurrent state), covered by unit tests.
 - Silero VAD: `src/renderer/vad/debounce.ts` — pure, synchronous, frame-count speech debouncer extracted from the energy VAD and parameterized by frame thresholds (speech/silence/max), so it works at any frame rate (256ms energy frames or 32ms Silero windows); covered by unit tests.
+- Silero VAD: `useVAD` now drives speech detection with the Silero model (512-sample windows via an ordered async inference queue) and automatically falls back to the energy VAD with a `degraded` flag when Silero is unavailable; covered by hook tests.
 - WeChat Channels (视频号) support — core modules for the upcoming "paste a 视频号 share link → download → transcribe" feature (`src/main/wechat/`):
   - `isaac.ts`: ISAAC64 stream cipher that decrypts the encrypted prefix (first 128 KiB) of a 视频号 video given its `decodeKey`. Verified against the Go reference (wx_channels_download) with golden keystream vectors.
   - `resolver.ts`: resolves a `/sph/<code>` share link into a downloadable `videoUrl` + `decodeKey` via Tencent Yuanbao's parse API (using the user's own yuanbao login) followed by 视频号 `get_feed_info`.

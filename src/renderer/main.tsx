@@ -1,7 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import * as ort from "onnxruntime-web";
 import "./styles/global.css";
 import App from "./App";
+
+// ORT wasm assets are copied to `<renderer-out>/ort/` by vite-plugin-static-copy.
+ort.env.wasm.wasmPaths = "./ort/";
+ort.env.wasm.numThreads = 1;
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
