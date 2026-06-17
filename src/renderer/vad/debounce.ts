@@ -3,7 +3,12 @@ export interface SpeechDebouncerOptions {
   readonly speechFrames: number;
   /** Consecutive silence frames required to confirm speech end. */
   readonly silenceFrames: number;
-  /** Max consecutive speech frames before forcing a segment break. */
+  /**
+   * Max consecutive speech frames AFTER a confirmed start before forcing a
+   * segment break. (Counting begins once speaking is confirmed, mirroring the
+   * original energy-VAD behavior; the ~speechFrames before confirmation are
+   * not counted.)
+   */
   readonly maxSpeechFrames: number;
   readonly onSpeechStart?: () => void;
   readonly onSpeechEnd?: () => void;
@@ -21,7 +26,9 @@ export interface SpeechDebouncer {
  * by frame thresholds so it works at any frame rate (256ms energy frames or
  * 32ms Silero windows).
  */
-export function createSpeechDebouncer(opts: SpeechDebouncerOptions): SpeechDebouncer {
+export function createSpeechDebouncer(
+  opts: SpeechDebouncerOptions,
+): SpeechDebouncer {
   let isSpeaking = false;
   let speechCount = 0;
   let silenceCount = 0;

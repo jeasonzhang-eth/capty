@@ -51,6 +51,22 @@ describe("createSpeechDebouncer", () => {
     expect(onSpeechStart).toHaveBeenCalledTimes(2); // initial + forced restart
   });
 
+  it("does not fire onSpeechEnd when silence arrives while not speaking", () => {
+    const { d, onSpeechEnd } = make();
+    for (let i = 0; i < 50; i++) d.push(false);
+    expect(onSpeechEnd).not.toHaveBeenCalled();
+  });
+
+  it("can end a segment normally via silence after a forced break", () => {
+    const { d, onSpeechStart, onSpeechEnd } = make({ maxSpeechFrames: 10 });
+    for (let i = 0; i < 8; i++) d.push(true); // confirmed start (start #1)
+    for (let i = 0; i < 10; i++) d.push(true); // hits maxSpeechFrames → end #1 + start #2
+    expect(onSpeechStart).toHaveBeenCalledTimes(2);
+    expect(onSpeechEnd).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 32; i++) d.push(false); // silence threshold → end #2
+    expect(onSpeechEnd).toHaveBeenCalledTimes(2);
+  });
+
   it("reset() clears state so a new start requires speechFrames again", () => {
     const { d, onSpeechStart } = make();
     for (let i = 0; i < 8; i++) d.push(true);
