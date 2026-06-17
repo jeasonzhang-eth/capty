@@ -81,6 +81,20 @@ describe("database", () => {
     expect(session.duration_seconds).toBe(120);
   });
 
+  it("stores and returns source_url (defaults to null)", () => {
+    const id = createSession(db, { modelName: "yt-dlp", category: "download" });
+    expect(getSession(db, id).source_url).toBeNull();
+    updateSession(db, id, {
+      sourceUrl: "https://www.youtube.com/watch?v=abc",
+    });
+    expect(getSession(db, id).source_url).toBe(
+      "https://www.youtube.com/watch?v=abc",
+    );
+    expect(listSessions(db).find((s) => s.id === id)?.source_url).toBe(
+      "https://www.youtube.com/watch?v=abc",
+    );
+  });
+
   it("reorders sessions by sort_order descending", () => {
     const a = createSession(db, { modelName: "model-a" });
     const b = createSession(db, { modelName: "model-b" });

@@ -32,6 +32,7 @@ export interface UpdateSessionFields {
   readonly playbackPosition?: number;
   readonly category?: string;
   readonly sortOrder?: number;
+  readonly sourceUrl?: string;
 }
 
 function initTables(db: Database.Database): void {
@@ -44,7 +45,8 @@ function initTables(db: Database.Database): void {
       duration_seconds INTEGER,
       audio_path TEXT,
       model_name TEXT NOT NULL,
-      status TEXT DEFAULT 'recording'
+      status TEXT DEFAULT 'recording',
+      source_url TEXT
     )
   `);
 
@@ -104,6 +106,14 @@ function initTables(db: Database.Database): void {
     db.exec(
       "ALTER TABLE sessions ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
     );
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migrate: add source_url column so download sessions remember where they
+  // came from (used to show a platform badge in the session list).
+  try {
+    db.exec("ALTER TABLE sessions ADD COLUMN source_url TEXT");
   } catch {
     // Column already exists — ignore
   }
@@ -288,6 +298,7 @@ export interface SessionRow {
   readonly playback_position: number | null;
   readonly category: string;
   readonly sort_order: number;
+  readonly source_url: string | null;
 }
 
 export interface SegmentRow {
@@ -428,6 +439,10 @@ export function updateSession(
   if (fields.sortOrder !== undefined) {
     setClauses.push("sort_order = ?");
     values.push(fields.sortOrder);
+  }
+  if (fields.sourceUrl !== undefined) {
+    setClauses.push("source_url = ?");
+    values.push(fields.sourceUrl);
   }
 
   if (setClauses.length === 0) {

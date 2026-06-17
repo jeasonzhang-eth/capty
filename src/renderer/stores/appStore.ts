@@ -16,6 +16,7 @@ interface SessionSummary {
   readonly status: string;
   readonly category: string;
   readonly sort_order: number;
+  readonly source_url?: string | null;
 }
 
 interface ModelInfo {
@@ -74,9 +75,7 @@ interface AppState {
   readonly setSidecarStarting: (v: boolean) => void;
   readonly setTtsProviderReady: (v: boolean) => void;
   readonly setDataDir: (dir: string | null) => void;
-  readonly setAsrProviders: (
-    providers: readonly AsrProviderState[],
-  ) => void;
+  readonly setAsrProviders: (providers: readonly AsrProviderState[]) => void;
   readonly setSelectedAsrProviderId: (id: string | null) => void;
   readonly setCurrentSessionId: (id: number | null) => void;
   readonly addSegment: (seg: Segment) => void;

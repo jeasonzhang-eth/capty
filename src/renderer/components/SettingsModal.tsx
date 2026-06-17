@@ -1198,11 +1198,74 @@ function GeneralTab({
   const [yuanbaoLoggedIn, setYuanbaoLoggedIn] = useState<boolean | null>(null);
   const [yuanbaoClearing, setYuanbaoClearing] = useState(false);
 
+  // yt-dlp cookie source (YouTube bot check). "" = off.
+  const [cookieBrowser, setCookieBrowser] = useState<string>("");
+  // yt-dlp JS-challenge solver (YouTube "n" challenge via deno).
+  const [solveJsChallenges, setSolveJsChallenges] = useState(false);
+
+  // YouTube login state (cookies for yt-dlp).
+  const [ytLoggedIn, setYtLoggedIn] = useState<boolean | null>(null);
+  const [ytBusy, setYtBusy] = useState(false);
+
+  useEffect(() => {
+    void window.capty
+      .getYoutubeStatus()
+      .then((s) => setYtLoggedIn(s.loggedIn))
+      .catch(() => setYtLoggedIn(null));
+  }, []);
+
+  const handleLoginYoutube = useCallback(async () => {
+    setYtBusy(true);
+    try {
+      const s = await window.capty.loginYoutube();
+      setYtLoggedIn(s.loggedIn);
+    } finally {
+      setYtBusy(false);
+    }
+  }, []);
+
+  const handleClearYoutube = useCallback(async () => {
+    setYtBusy(true);
+    try {
+      await window.capty.logoutYoutube();
+      setYtLoggedIn(false);
+    } finally {
+      setYtBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void window.capty
       .getYuanbaoStatus()
       .then((s) => setYuanbaoLoggedIn(s.loggedIn))
       .catch(() => setYuanbaoLoggedIn(null));
+  }, []);
+
+  useEffect(() => {
+    void window.capty
+      .getConfig()
+      .then((c) => {
+        const v = (c as { ytdlpCookiesFromBrowser?: string | null })
+          .ytdlpCookiesFromBrowser;
+        setCookieBrowser(typeof v === "string" ? v : "");
+        setSolveJsChallenges(
+          (c as { ytdlpSolveJsChallenges?: boolean }).ytdlpSolveJsChallenges ===
+            true,
+        );
+      })
+      .catch(() => setCookieBrowser(""));
+  }, []);
+
+  const handleChangeCookieBrowser = useCallback(async (value: string) => {
+    setCookieBrowser(value);
+    await window.capty.setConfig({
+      ytdlpCookiesFromBrowser: value === "" ? null : value,
+    });
+  }, []);
+
+  const handleToggleSolveJsChallenges = useCallback(async (value: boolean) => {
+    setSolveJsChallenges(value);
+    await window.capty.setConfig({ ytdlpSolveJsChallenges: value });
   }, []);
 
   const handleClearYuanbao = useCallback(async () => {
@@ -1520,6 +1583,206 @@ function GeneralTab({
             }}
           >
             {yuanbaoClearing ? "清除中…" : "清除登录"}
+          </button>
+        </div>
+      </div>
+
+      {/* YouTube 登录 */}
+      <div style={sectionTitleStyle}>YouTube 登录</div>
+      <div style={sectionDescStyle}>
+        登录一次 YouTube，Capty 会把登录 Cookie 保存在独立分区并在下载时导出给
+        yt-dlp 使用（优先于下方的浏览器 Cookie）。比读取系统浏览器更稳，且不依赖
+        已安装 Chrome。Cookie 仅本地使用，不会上传。
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              YouTube 登录状态
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              {ytLoggedIn === null
+                ? "检测中…"
+                : ytLoggedIn
+                  ? "已登录（下载 YouTube 链接将使用此登录）"
+                  : "未登录（点击右侧按钮登录）"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+            <button
+              onClick={() => void handleLoginYoutube()}
+              disabled={ytBusy}
+              style={{
+                ...secondaryBtnStyle,
+                fontSize: "12px",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                cursor: ytBusy ? "not-allowed" : "pointer",
+                opacity: ytBusy ? 0.5 : 1,
+              }}
+            >
+              {ytBusy ? "处理中…" : ytLoggedIn ? "重新登录" : "登录"}
+            </button>
+            <button
+              onClick={() => void handleClearYoutube()}
+              disabled={ytBusy || ytLoggedIn !== true}
+              style={{
+                ...secondaryBtnStyle,
+                fontSize: "12px",
+                padding: "0 12px",
+                whiteSpace: "nowrap",
+                cursor:
+                  ytLoggedIn === true && !ytBusy ? "pointer" : "not-allowed",
+                opacity: ytLoggedIn === true && !ytBusy ? 1 : 0.4,
+              }}
+            >
+              清除登录
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* YouTube / yt-dlp cookies */}
+      <div style={sectionTitleStyle}>YouTube 下载 Cookie（备用）</div>
+      <div style={sectionDescStyle}>
+        若未用上面的 YouTube 登录，可选择一个已登录 YouTube 的浏览器，yt-dlp
+        会读取其 Cookie 完成下载。Cookie 仅本地使用，不会上传。
+      </div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              Cookie 来源浏览器
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              选「不使用」则按匿名下载（YouTube 可能失败）。
+            </div>
+          </div>
+          <select
+            value={cookieBrowser}
+            onChange={(e) => void handleChangeCookieBrowser(e.target.value)}
+            style={{
+              height: "32px",
+              padding: "0 10px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              backgroundColor: "var(--bg-primary)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">不使用</option>
+            <option value="chrome">Chrome</option>
+            <option value="safari">Safari</option>
+            <option value="firefox">Firefox</option>
+            <option value="edge">Edge</option>
+            <option value="brave">Brave</option>
+          </select>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+            marginTop: "14px",
+            paddingTop: "14px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+              }}
+            >
+              解 JS 挑战（YouTube）
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-muted)",
+                marginTop: "2px",
+              }}
+            >
+              YouTube 要求解 JS 挑战才给出视频格式。开启后 yt-dlp 会从其官方
+              GitHub 拉取求解脚本并用本地 deno 运行（需已安装
+              deno）。涉及执行远程脚本，默认关闭。
+            </div>
+          </div>
+          <button
+            onClick={() =>
+              void handleToggleSolveJsChallenges(!solveJsChallenges)
+            }
+            style={{
+              position: "relative",
+              width: "36px",
+              height: "20px",
+              borderRadius: "10px",
+              border: "none",
+              backgroundColor: solveJsChallenges
+                ? "var(--accent)"
+                : "var(--bg-surface)",
+              cursor: "pointer",
+              transition: "background-color 0.2s",
+              flexShrink: 0,
+              padding: 0,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: "2px",
+                left: solveJsChallenges ? "18px" : "2px",
+                width: "16px",
+                height: "16px",
+                borderRadius: "50%",
+                backgroundColor: "#fff",
+                transition: "left 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              }}
+            />
           </button>
         </div>
       </div>

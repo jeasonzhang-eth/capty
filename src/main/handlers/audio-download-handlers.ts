@@ -18,6 +18,12 @@ import {
   yuanbaoFetch,
 } from "../wechat/yuanbao-auth";
 import {
+  hasYoutubeLogin,
+  openYoutubeLogin,
+  clearYoutubeLogin,
+  exportYoutubeCookies,
+} from "../youtube/yt-auth";
+import {
   createDownload,
   getDownload,
   listDownloads,
@@ -25,7 +31,7 @@ import {
   deleteDownload,
 } from "../database";
 import { createSession, updateSession } from "../database";
-import { readConfig } from "../config";
+import { readConfig, type AppConfig } from "../config";
 import { sanitizeSessionDirName } from "../shared/session-name";
 
 /** Track active yt-dlp child processes by download ID for cancel support. */
@@ -53,6 +59,78 @@ function parseYtdlpProgress(line: string): {
   );
   if (!m) return null;
   return { percent: parseFloat(m[1]), speed: m[2], eta: m[3] };
+}
+
+/** Browsers yt-dlp can extract cookies from via --cookies-from-browser. */
+const COOKIE_BROWSERS = new Set([
+  "chrome",
+  "chromium",
+  "brave",
+  "edge",
+  "firefox",
+  "opera",
+  "safari",
+  "vivaldi",
+  "whale",
+]);
+
+/**
+ * Build the yt-dlp cookie flag for a configured browser. Returns an empty
+ * array when no/unknown browser is set, so callers can spread it
+ * unconditionally. YouTube blocks anonymous requests with a bot check;
+ * supplying browser cookies authenticates as the logged-in user.
+ */
+export function ytdlpCookieArgs(browser: string | null | undefined): string[] {
+  if (!browser) return [];
+  const b = browser.toLowerCase().trim();
+  return COOKIE_BROWSERS.has(b) ? ["--cookies-from-browser", b] : [];
+}
+
+/**
+ * yt-dlp flag enabling its remote JS-challenge solver (EJS) so YouTube's
+ * "n" challenge can be solved via a local JS runtime (deno). Empty array when
+ * disabled. Opt-in because it fetches and runs a script from yt-dlp's GitHub.
+ */
+export function ytdlpSolverArgs(enabled: boolean | undefined): string[] {
+  return enabled ? ["--remote-components", "ejs:github"] : [];
+}
+
+/** Check if URL points at YouTube (youtube.com / youtu.be). */
+export function isYoutubeUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtu.be"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve the yt-dlp cookie args for a URL. Prefers an exported YouTube login
+ * (Netscape cookies.txt via `--cookies`) when the URL is YouTube and the user
+ * has signed in; otherwise falls back to the configured `--cookies-from-browser`
+ * source. `--cookies` and `--cookies-from-browser` are mutually exclusive, so
+ * only one is returned.
+ */
+async function resolveCookieArgs(
+  url: string,
+  config: AppConfig,
+  cookieFilePath: string,
+): Promise<string[]> {
+  if (isYoutubeUrl(url)) {
+    try {
+      if (await exportYoutubeCookies(cookieFilePath)) {
+        return ["--cookies", cookieFilePath];
+      }
+    } catch {
+      // fall through to browser cookies
+    }
+  }
+  return ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
 }
 
 /** Check if URL is a Xiaoyuzhou (小宇宙) podcast episode. */
@@ -397,10 +475,43 @@ export function register(deps: IpcDeps): void {
         } else {
           // ── yt-dlp download path ──
 
+          // Cookie flag (YouTube bot check) — prefers an exported YouTube login
+          // (cookies.txt), else the configured browser cookie source.
+          const cookieArgs = await resolveCookieArgs(
+            url,
+            config,
+            join(configDir, "youtube-cookies.txt"),
+          );
+          // JS-challenge solver flag (YouTube "n" challenge) — empty when off.
+          const solverArgs = ytdlpSolverArgs(config.ytdlpSolveJsChallenges);
+
+          // Ask whether to also keep the video (default audio-only). When kept,
+          // download a merged mp4 (video+audio); audio is still extracted for
+          // transcription downstream.
+          let keepVideo = false;
+          if (win) {
+            const { response } = await dialog.showMessageBox(win, {
+              type: "question",
+              buttons: ["仅音频", "保留视频"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "下载",
+              message: "是否同时下载并保留视频文件？",
+              detail:
+                "默认仅下载转录用的音频；保留视频会下载完整画面并额外占用空间。",
+            });
+            keepVideo = response === 1;
+          }
+          // bv*+ba/b → best video+audio merged; falls back to ba/b if the source
+          // has no separate video stream.
+          const formatArg = keepVideo ? "bv*+ba/b" : "ba/b";
+
           // Fetch video title
           try {
             videoTitle = await new Promise<string>((resolve, reject) => {
               const proc = spawn("yt-dlp", [
+                ...solverArgs,
+                ...cookieArgs,
                 "--print",
                 "title",
                 "--no-playlist",
@@ -442,8 +553,12 @@ export function register(deps: IpcDeps): void {
           }
 
           const ytdlp = spawn("yt-dlp", [
+            ...solverArgs,
+            ...cookieArgs,
             "-f",
-            "ba",
+            formatArg,
+            // Merge into mp4 when keeping the video so the kept file is .mp4.
+            ...(keepVideo ? ["--merge-output-format", "mp4"] : []),
             "--continue",
             "--newline",
             "--no-playlist",
@@ -526,6 +641,8 @@ export function register(deps: IpcDeps): void {
             return;
           }
           downloadedFilePath = join(tempDir, downloadedFile);
+          // Keep the downloaded video alongside the audio when requested.
+          if (keepVideo) keepVideoSourcePath = downloadedFilePath;
         }
 
         // ── Shared: convert → session → cleanup ──
@@ -598,6 +715,7 @@ export function register(deps: IpcDeps): void {
           startedAt: readableTimestamp,
           status: "completed",
           durationSeconds,
+          sourceUrl: url,
         });
 
         // Update download record
@@ -667,6 +785,23 @@ export function register(deps: IpcDeps): void {
 
   ipcMain.handle("wechat:yuanbao-logout", async () => {
     await clearYuanbaoLogin();
+    return { ok: true };
+  });
+
+  // ─── YouTube login management (cookies for yt-dlp) ───
+
+  ipcMain.handle("youtube:status", async () => {
+    return { loggedIn: await hasYoutubeLogin() };
+  });
+
+  ipcMain.handle("youtube:login", async () => {
+    const win = getMainWindow();
+    const ok = await openYoutubeLogin(win ?? undefined);
+    return { loggedIn: ok };
+  });
+
+  ipcMain.handle("youtube:logout", async () => {
+    await clearYoutubeLogin();
     return { ok: true };
   });
 }

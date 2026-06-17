@@ -205,6 +205,14 @@ const api = {
   logoutYuanbao: () =>
     ipcRenderer.invoke("wechat:yuanbao-logout") as Promise<{ ok: boolean }>,
 
+  // YouTube login management (cookies for yt-dlp)
+  getYoutubeStatus: () =>
+    ipcRenderer.invoke("youtube:status") as Promise<{ loggedIn: boolean }>,
+  loginYoutube: () =>
+    ipcRenderer.invoke("youtube:login") as Promise<{ loggedIn: boolean }>,
+  logoutYoutube: () =>
+    ipcRenderer.invoke("youtube:logout") as Promise<{ ok: boolean }>,
+
   // Audio import (supports selecting multiple files)
   onAudioImportProgress: (
     callback: (event: {
