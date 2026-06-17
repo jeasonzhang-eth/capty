@@ -1,6 +1,7 @@
 import { resolve } from "path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   main: {
@@ -17,7 +18,21 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, "src/renderer"),
-    plugins: [react()],
+    plugins: [
+      react(),
+      viteStaticCopy({
+        targets: [
+          {
+            src: resolve(__dirname, "node_modules/onnxruntime-web/dist/*.wasm"),
+            dest: "ort",
+          },
+          {
+            src: resolve(__dirname, "node_modules/onnxruntime-web/dist/*.mjs"),
+            dest: "ort",
+          },
+        ],
+      }),
+    ],
     build: {
       outDir: resolve(__dirname, "out/renderer"),
       rollupOptions: {
