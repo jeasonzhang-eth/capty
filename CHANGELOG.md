@@ -4,6 +4,8 @@ All notable changes to Capty are documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-18
+
 ### Fixed
 
 - YouTube/yt-dlp downloads could fail on some machines with a raw `FileNotFoundError: [Errno 2] No such file or directory` and no further detail. Root cause: yt-dlp writes its cookie jar **back** to the `--cookies` file on exit (even on failed downloads), and a missing parent directory crashes it with that bare Python error. Hardening:
