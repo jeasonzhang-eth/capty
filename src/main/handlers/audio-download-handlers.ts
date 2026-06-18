@@ -1,7 +1,7 @@
 import { ipcMain, net, dialog } from "electron";
 import type { ChildProcess } from "child_process";
 import fs from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import type { IpcDeps } from "./types";
 import { spawn } from "../shared/spawn";
 import {
@@ -59,6 +59,24 @@ function parseYtdlpProgress(line: string): {
   );
   if (!m) return null;
   return { percent: parseFloat(m[1]), speed: m[2], eta: m[3] };
+}
+
+/**
+ * Pick the most informative line from yt-dlp's stderr for display. Prefers a
+ * line that names the actual error (`ERROR:` from yt-dlp, or a Python
+ * `SomethingError: ...` traceback tail such as `FileNotFoundError`) over the
+ * raw last line, which for a traceback can be an unhelpful caret/source line.
+ */
+export function pickYtdlpErrorLine(stderr: string): string {
+  const lines = stderr
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "";
+  const errorLine = [...lines]
+    .reverse()
+    .find((l) => /^ERROR:/.test(l) || /^[A-Za-z_]*Error: /.test(l));
+  return errorLine ?? lines[lines.length - 1];
 }
 
 /** Browsers yt-dlp can extract cookies from via --cookies-from-browser. */
@@ -123,11 +141,24 @@ async function resolveCookieArgs(
 ): Promise<string[]> {
   if (isYoutubeUrl(url)) {
     try {
+      // Guarantee the cookie file's directory exists. yt-dlp writes the cookie
+      // jar BACK to this path on exit; a missing dir crashes it with a raw
+      // `FileNotFoundError: [Errno 2] No such file or directory`.
+      fs.mkdirSync(dirname(cookieFilePath), { recursive: true });
       if (await exportYoutubeCookies(cookieFilePath)) {
+        console.log(
+          `[audio-download] using exported YouTube cookies: ${cookieFilePath}`,
+        );
         return ["--cookies", cookieFilePath];
       }
-    } catch {
-      // fall through to browser cookies
+      console.log(
+        "[audio-download] no YouTube login; using browser cookies if configured",
+      );
+    } catch (err) {
+      console.error(
+        "[audio-download] cookie export failed, falling back to browser cookies:",
+        err,
+      );
     }
   }
   return ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
@@ -224,6 +255,25 @@ async function httpDownload(
 /** Convert any audio file to 16kHz mono 16-bit WAV via ffmpeg. */
 function convertToWav(inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (!fs.existsSync(inputPath)) {
+      console.error(
+        `[audio-download] convertToWav: input file missing: ${inputPath}`,
+      );
+      reject(new Error(`Input file not found for conversion: ${inputPath}`));
+      return;
+    }
+    // ffmpeg needs the output directory to exist.
+    try {
+      fs.mkdirSync(dirname(outputPath), { recursive: true });
+    } catch (err) {
+      console.error(
+        `[audio-download] convertToWav: cannot create output dir for ${outputPath}:`,
+        err,
+      );
+      reject(err as Error);
+      return;
+    }
+    console.log(`[audio-download] convertToWav: ${inputPath} -> ${outputPath}`);
     const ffmpeg = spawn("ffmpeg", [
       "-i",
       inputPath,
@@ -335,6 +385,9 @@ export function register(deps: IpcDeps): void {
     // 3. Run download async (don't await — return downloadId immediately)
     const config = readConfig(configDir);
     const dataDir = config.dataDir ?? join(configDir, "data");
+    console.log(
+      `[audio-download] start id=${downloadId} source=${source} configDir=${configDir} dataDir=${dataDir}`,
+    );
 
     (async () => {
       try {
@@ -358,7 +411,16 @@ export function register(deps: IpcDeps): void {
           ".downloading",
           String(downloadId),
         );
-        fs.mkdirSync(tempDir, { recursive: true });
+        try {
+          fs.mkdirSync(tempDir, { recursive: true });
+        } catch (err) {
+          console.error(
+            `[audio-download] FAILED to create temp dir ${tempDir}:`,
+            err,
+          );
+          throw err;
+        }
+        console.log(`[audio-download] temp dir ready: ${tempDir}`);
 
         let videoTitle = "";
         let downloadedFilePath = "";
@@ -552,7 +614,7 @@ export function register(deps: IpcDeps): void {
             });
           }
 
-          const ytdlp = spawn("yt-dlp", [
+          const ytdlpArgs = [
             ...solverArgs,
             ...cookieArgs,
             "-f",
@@ -565,7 +627,11 @@ export function register(deps: IpcDeps): void {
             "-o",
             outputTemplate,
             url,
-          ]);
+          ];
+          console.log(
+            `[audio-download] spawning: yt-dlp ${ytdlpArgs.join(" ")}`,
+          );
+          const ytdlp = spawn("yt-dlp", ytdlpArgs);
           activeDownloads.set(downloadId, ytdlp);
 
           let stderrBuf = "";
@@ -605,9 +671,35 @@ export function register(deps: IpcDeps): void {
           const currentDl = getDownload(db, downloadId);
           if (currentDl?.status === "cancelled") return;
 
+          // Always dump the full stderr on a non-zero exit so the real failing
+          // path (e.g. a Python `FileNotFoundError: ... '<path>'`) is visible in
+          // the console — the UI only shows one line, which can hide the cause.
           if (exitCode !== 0) {
+            console.error(
+              `[audio-download] yt-dlp exited with code ${exitCode}. Full stderr:\n${stderrBuf}`,
+            );
+          }
+
+          // Decide success by whether a usable (non-.part) media file landed in
+          // the temp dir — NOT purely by exit code. yt-dlp can exit non-zero on
+          // a post-download step (e.g. writing its cookie jar back to a missing
+          // dir → raw FileNotFoundError) even though the media downloaded fine.
+          let files: string[] = [];
+          try {
+            files = fs.readdirSync(tempDir);
+          } catch (err) {
+            console.error(
+              `[audio-download] cannot read temp dir ${tempDir}:`,
+              err,
+            );
+          }
+          const downloadedFile = files.find((f) => !f.endsWith(".part"));
+
+          if (!downloadedFile) {
+            // No file produced → a genuine failure. Surface the most useful
+            // stderr line (prefer an ERROR / *Error line over the last line).
             const errMsg =
-              stderrBuf.trim().split("\n").pop() ||
+              pickYtdlpErrorLine(stderrBuf) ||
               `yt-dlp exited with code ${exitCode}`;
             updateDownload(db, downloadId, {
               status: "failed",
@@ -623,24 +715,15 @@ export function register(deps: IpcDeps): void {
             return;
           }
 
-          // Find downloaded file
-          const files = fs.readdirSync(tempDir);
-          const downloadedFile = files.find((f) => !f.endsWith(".part"));
-          if (!downloadedFile) {
-            updateDownload(db, downloadId, {
-              status: "failed",
-              error: "Downloaded file not found in temp directory",
-            });
-            if (win) {
-              win.webContents.send("audio:download-progress", {
-                id: downloadId,
-                stage: "error",
-                error: "Downloaded file not found",
-              });
-            }
-            return;
+          if (exitCode !== 0) {
+            console.warn(
+              `[audio-download] yt-dlp exited ${exitCode} but produced "${downloadedFile}" — treating as success (likely a post-download/cookie-writeback error).`,
+            );
           }
           downloadedFilePath = join(tempDir, downloadedFile);
+          console.log(
+            `[audio-download] downloaded file: ${downloadedFilePath}`,
+          );
           // Keep the downloaded video alongside the audio when requested.
           if (keepVideo) keepVideoSourcePath = downloadedFilePath;
         }
@@ -747,6 +830,10 @@ export function register(deps: IpcDeps): void {
         ) {
           return;
         }
+        console.error(
+          `[audio-download] download id=${downloadId} failed:`,
+          err instanceof Error ? (err.stack ?? err.message) : err,
+        );
         const message = err instanceof Error ? err.message : String(err);
         updateDownload(db, downloadId, { status: "failed", error: message });
         if (win) {

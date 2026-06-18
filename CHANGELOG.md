@@ -6,6 +6,11 @@ All notable changes to Capty are documented in this file.
 
 ### Fixed
 
+- YouTube/yt-dlp downloads could fail on some machines with a raw `FileNotFoundError: [Errno 2] No such file or directory` and no further detail. Root cause: yt-dlp writes its cookie jar **back** to the `--cookies` file on exit (even on failed downloads), and a missing parent directory crashes it with that bare Python error. Hardening:
+  - `exportYoutubeCookies` and `resolveCookieArgs` now `mkdirSync(dirname(...), { recursive: true })` before passing `--cookies` to yt-dlp, guaranteeing both our write and yt-dlp's writeback succeed.
+  - Download success is now decided by whether a usable (non-`.part`) media file landed in the temp dir, not purely by yt-dlp's exit code — so a post-download/cookie-writeback error no longer discards an already-downloaded file.
+  - On any failure the **full** yt-dlp stderr is logged to the console (the UI only shows one line), and the surfaced error line now prefers the actual `ERROR:` / `*Error:` line over an unhelpful traceback caret line (new tested `pickYtdlpErrorLine` helper). Added diagnostic `console.log`/`console.error` at key points (configDir/dataDir, temp dir, the exact yt-dlp command, downloaded file path, conversion input/output) to pinpoint path issues from a user's console.
+  - `convertToWav` now verifies the input file exists and creates the output directory before invoking ffmpeg, failing with a clear message instead of an opaque ffmpeg error.
 - CI e2e (`history-session-management`) was failing because the inline session-rename control became a multi-line `<textarea>` while the test still targeted an `<input>`. Updated the selector and added a `session-rename-input-<id>` test id.
 
 ## [0.4.0] - 2026-06-17

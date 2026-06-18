@@ -14,6 +14,7 @@
 import { BrowserWindow, session as electronSession } from "electron";
 import type { Session } from "electron";
 import fs from "fs";
+import { dirname } from "path";
 
 const PARTITION = "persist:youtube";
 const YOUTUBE_URL = "https://www.youtube.com/";
@@ -125,9 +126,15 @@ export function cookiesToNetscape(cookies: readonly NetscapeCookie[]): string {
     const expiry = c.expirationDate ? Math.floor(c.expirationDate) : 0;
     const domainField = (c.httpOnly ? "#HttpOnly_" : "") + domain;
     lines.push(
-      [domainField, includeSub, path, secure, String(expiry), c.name, c.value].join(
-        "\t",
-      ),
+      [
+        domainField,
+        includeSub,
+        path,
+        secure,
+        String(expiry),
+        c.name,
+        c.value,
+      ].join("\t"),
     );
   }
   return lines.join("\n") + "\n";
@@ -162,6 +169,11 @@ export async function exportYoutubeCookies(filePath: string): Promise<boolean> {
       expirationDate: c.expirationDate,
     })),
   );
+  // Ensure the parent directory exists before writing. yt-dlp also writes the
+  // cookie jar BACK to this path on exit (even on failed downloads); if the
+  // directory is missing it dies with a raw `FileNotFoundError`. Creating it
+  // here guarantees both our write and yt-dlp's writeback succeed.
+  fs.mkdirSync(dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf-8");
   return true;
 }
