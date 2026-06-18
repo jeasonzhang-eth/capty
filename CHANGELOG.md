@@ -11,7 +11,14 @@ All notable changes to Capty are documented in this file.
   - Download success is now decided by whether a usable (non-`.part`) media file landed in the temp dir, not purely by yt-dlp's exit code — so a post-download/cookie-writeback error no longer discards an already-downloaded file.
   - On any failure the **full** yt-dlp stderr is logged to the console (the UI only shows one line), and the surfaced error line now prefers the actual `ERROR:` / `*Error:` line over an unhelpful traceback caret line (new tested `pickYtdlpErrorLine` helper). Added diagnostic `console.log`/`console.error` at key points (configDir/dataDir, temp dir, the exact yt-dlp command, downloaded file path, conversion input/output) to pinpoint path issues from a user's console.
   - `convertToWav` now verifies the input file exists and creates the output directory before invoking ffmpeg, failing with a clear message instead of an opaque ffmpeg error.
+- YouTube downloads still hit "Sign in to confirm you're not a bot" even after signing in. Root cause: the in-app login declared success as soon as `.google.com` account cookies (SAPISID/`__Secure-3PSID`) appeared — which happens the instant you sign into Google, **before** youtube.com sets its own `LOGIN_INFO` cookie. The exported `cookies.txt` therefore lacked `LOGIN_INFO`, the cookie yt-dlp actually needs, so YouTube treated the request as anonymous.
+  - Login is now considered complete only when the youtube.com `LOGIN_INFO` cookie is present (`hasYoutubeLogin`), and the login window nudges itself back to youtube.com once after Google sign-in so YouTube issues `LOGIN_INFO`. `exportYoutubeCookies` gates on the same cookie.
+  - **Existing users must sign in again** (Settings → YouTube 登录): a prior login that only captured Google cookies now correctly shows as logged-out.
 - CI e2e (`history-session-management`) was failing because the inline session-rename control became a multi-line `<textarea>` while the test still targeted an `<input>`. Updated the selector and added a `session-rename-input-<id>` test id.
+
+### Removed
+
+- Removed the `--cookies-from-browser` fallback (Settings → "Cookie 来源浏览器" dropdown and the `ytdlpCookiesFromBrowser` config field). YouTube downloads now authenticate solely via the in-app YouTube login (exported `cookies.txt`), which is more reliable and doesn't depend on a system browser. The "解 JS 挑战（YouTube）" toggle is retained under a renamed "YouTube 下载选项" section.
 
 ## [0.4.0] - 2026-06-17
 

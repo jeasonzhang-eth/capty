@@ -31,7 +31,7 @@ import {
   deleteDownload,
 } from "../database";
 import { createSession, updateSession } from "../database";
-import { readConfig, type AppConfig } from "../config";
+import { readConfig } from "../config";
 import { sanitizeSessionDirName } from "../shared/session-name";
 
 /** Track active yt-dlp child processes by download ID for cancel support. */
@@ -79,31 +79,6 @@ export function pickYtdlpErrorLine(stderr: string): string {
   return errorLine ?? lines[lines.length - 1];
 }
 
-/** Browsers yt-dlp can extract cookies from via --cookies-from-browser. */
-const COOKIE_BROWSERS = new Set([
-  "chrome",
-  "chromium",
-  "brave",
-  "edge",
-  "firefox",
-  "opera",
-  "safari",
-  "vivaldi",
-  "whale",
-]);
-
-/**
- * Build the yt-dlp cookie flag for a configured browser. Returns an empty
- * array when no/unknown browser is set, so callers can spread it
- * unconditionally. YouTube blocks anonymous requests with a bot check;
- * supplying browser cookies authenticates as the logged-in user.
- */
-export function ytdlpCookieArgs(browser: string | null | undefined): string[] {
-  if (!browser) return [];
-  const b = browser.toLowerCase().trim();
-  return COOKIE_BROWSERS.has(b) ? ["--cookies-from-browser", b] : [];
-}
-
 /**
  * yt-dlp flag enabling its remote JS-challenge solver (EJS) so YouTube's
  * "n" challenge can be solved via a local JS runtime (deno). Empty array when
@@ -128,15 +103,14 @@ export function isYoutubeUrl(url: string): boolean {
 }
 
 /**
- * Resolve the yt-dlp cookie args for a URL. Prefers an exported YouTube login
- * (Netscape cookies.txt via `--cookies`) when the URL is YouTube and the user
- * has signed in; otherwise falls back to the configured `--cookies-from-browser`
- * source. `--cookies` and `--cookies-from-browser` are mutually exclusive, so
- * only one is returned.
+ * Resolve the yt-dlp cookie args for a URL. For YouTube, uses the cookies
+ * exported from the user's in-app YouTube login (Netscape cookies.txt via
+ * `--cookies`). When the user hasn't signed in, returns no cookie args (an
+ * anonymous download, which YouTube may block with a bot check — the user
+ * should sign in via Settings → YouTube 登录).
  */
 async function resolveCookieArgs(
   url: string,
-  config: AppConfig,
   cookieFilePath: string,
 ): Promise<string[]> {
   if (isYoutubeUrl(url)) {
@@ -152,16 +126,13 @@ async function resolveCookieArgs(
         return ["--cookies", cookieFilePath];
       }
       console.log(
-        "[audio-download] no YouTube login; using browser cookies if configured",
+        "[audio-download] no YouTube login found; downloading anonymously (may hit bot check)",
       );
     } catch (err) {
-      console.error(
-        "[audio-download] cookie export failed, falling back to browser cookies:",
-        err,
-      );
+      console.error("[audio-download] cookie export failed:", err);
     }
   }
-  return ytdlpCookieArgs(config.ytdlpCookiesFromBrowser);
+  return [];
 }
 
 /** Check if URL is a Xiaoyuzhou (小宇宙) podcast episode. */
@@ -537,11 +508,10 @@ export function register(deps: IpcDeps): void {
         } else {
           // ── yt-dlp download path ──
 
-          // Cookie flag (YouTube bot check) — prefers an exported YouTube login
-          // (cookies.txt), else the configured browser cookie source.
+          // Cookie flag (YouTube bot check) — uses the exported in-app YouTube
+          // login (cookies.txt); empty when the user hasn't signed in.
           const cookieArgs = await resolveCookieArgs(
             url,
-            config,
             join(configDir, "youtube-cookies.txt"),
           );
           // JS-challenge solver flag (YouTube "n" challenge) — empty when off.

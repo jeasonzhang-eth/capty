@@ -165,34 +165,6 @@ describe("helper functions (extractSource / isXiaoyuzhouUrl)", () => {
   });
 });
 
-describe("ytdlpCookieArgs", () => {
-  it("returns the cookie flag for a known browser (case/space-insensitive)", async () => {
-    const { ytdlpCookieArgs } =
-      await import("../../../src/main/handlers/audio-download-handlers");
-    expect(ytdlpCookieArgs("chrome")).toEqual([
-      "--cookies-from-browser",
-      "chrome",
-    ]);
-    expect(ytdlpCookieArgs(" Safari ")).toEqual([
-      "--cookies-from-browser",
-      "safari",
-    ]);
-    expect(ytdlpCookieArgs("Firefox")).toEqual([
-      "--cookies-from-browser",
-      "firefox",
-    ]);
-  });
-
-  it("returns no args when unset or unknown", async () => {
-    const { ytdlpCookieArgs } =
-      await import("../../../src/main/handlers/audio-download-handlers");
-    expect(ytdlpCookieArgs(null)).toEqual([]);
-    expect(ytdlpCookieArgs(undefined)).toEqual([]);
-    expect(ytdlpCookieArgs("")).toEqual([]);
-    expect(ytdlpCookieArgs("netscape")).toEqual([]);
-  });
-});
-
 describe("ytdlpSolverArgs", () => {
   it("returns the EJS remote-components flag when enabled", async () => {
     const { ytdlpSolverArgs } =
