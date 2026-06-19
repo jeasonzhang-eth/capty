@@ -113,13 +113,6 @@ export interface AppConfig {
   readonly translatePrompt: string;
   readonly sidecar: SidecarConfig;
   /**
-   * Browser to pull cookies from for yt-dlp downloads (e.g. "chrome",
-   * "safari", "firefox", "edge"). null = no cookies (default). YouTube now
-   * blocks anonymous requests with a bot check; supplying browser cookies
-   * lets yt-dlp authenticate as the logged-in user.
-   */
-  readonly ytdlpCookiesFromBrowser: string | null;
-  /**
    * When true, pass `--remote-components ejs:github` to yt-dlp so it can solve
    * YouTube's JS ("n") challenge via a local JavaScript runtime (e.g. deno).
    * This makes yt-dlp fetch and run its official solver script from GitHub, so
@@ -249,7 +242,6 @@ const DEFAULT_CONFIG: AppConfig = {
     port: 8765,
     autoStart: true,
   },
-  ytdlpCookiesFromBrowser: null,
   ytdlpSolveJsChallenges: false,
 };
 

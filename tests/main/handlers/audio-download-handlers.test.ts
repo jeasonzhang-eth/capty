@@ -165,34 +165,6 @@ describe("helper functions (extractSource / isXiaoyuzhouUrl)", () => {
   });
 });
 
-describe("ytdlpCookieArgs", () => {
-  it("returns the cookie flag for a known browser (case/space-insensitive)", async () => {
-    const { ytdlpCookieArgs } =
-      await import("../../../src/main/handlers/audio-download-handlers");
-    expect(ytdlpCookieArgs("chrome")).toEqual([
-      "--cookies-from-browser",
-      "chrome",
-    ]);
-    expect(ytdlpCookieArgs(" Safari ")).toEqual([
-      "--cookies-from-browser",
-      "safari",
-    ]);
-    expect(ytdlpCookieArgs("Firefox")).toEqual([
-      "--cookies-from-browser",
-      "firefox",
-    ]);
-  });
-
-  it("returns no args when unset or unknown", async () => {
-    const { ytdlpCookieArgs } =
-      await import("../../../src/main/handlers/audio-download-handlers");
-    expect(ytdlpCookieArgs(null)).toEqual([]);
-    expect(ytdlpCookieArgs(undefined)).toEqual([]);
-    expect(ytdlpCookieArgs("")).toEqual([]);
-    expect(ytdlpCookieArgs("netscape")).toEqual([]);
-  });
-});
-
 describe("ytdlpSolverArgs", () => {
   it("returns the EJS remote-components flag when enabled", async () => {
     const { ytdlpSolverArgs } =
@@ -208,5 +180,39 @@ describe("ytdlpSolverArgs", () => {
       await import("../../../src/main/handlers/audio-download-handlers");
     expect(ytdlpSolverArgs(false)).toEqual([]);
     expect(ytdlpSolverArgs(undefined)).toEqual([]);
+  });
+});
+
+describe("pickYtdlpErrorLine", () => {
+  it("prefers a Python *Error traceback tail over the last source line", async () => {
+    const { pickYtdlpErrorLine } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    const stderr = [
+      "Traceback (most recent call last):",
+      '  File ".../cookies.py", line 1305, in open',
+      "    with open(file, 'w' if write else 'r', encoding='utf-8') as f:",
+      "         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "FileNotFoundError: [Errno 2] No such file or directory: '/x/cookies.txt'",
+    ].join("\n");
+    expect(pickYtdlpErrorLine(stderr)).toBe(
+      "FileNotFoundError: [Errno 2] No such file or directory: '/x/cookies.txt'",
+    );
+  });
+
+  it("prefers a yt-dlp ERROR: line", async () => {
+    const { pickYtdlpErrorLine } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    const stderr =
+      "[youtube] Extracting URL\nERROR: [youtube] abc: Video unavailable\nsome trailing noise";
+    expect(pickYtdlpErrorLine(stderr)).toBe(
+      "ERROR: [youtube] abc: Video unavailable",
+    );
+  });
+
+  it("falls back to the last non-empty line, and returns empty for empty input", async () => {
+    const { pickYtdlpErrorLine } =
+      await import("../../../src/main/handlers/audio-download-handlers");
+    expect(pickYtdlpErrorLine("just a warning\nlast line\n")).toBe("last line");
+    expect(pickYtdlpErrorLine("   \n  \n")).toBe("");
   });
 });

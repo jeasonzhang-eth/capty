@@ -1198,8 +1198,6 @@ function GeneralTab({
   const [yuanbaoLoggedIn, setYuanbaoLoggedIn] = useState<boolean | null>(null);
   const [yuanbaoClearing, setYuanbaoClearing] = useState(false);
 
-  // yt-dlp cookie source (YouTube bot check). "" = off.
-  const [cookieBrowser, setCookieBrowser] = useState<string>("");
   // yt-dlp JS-challenge solver (YouTube "n" challenge via deno).
   const [solveJsChallenges, setSolveJsChallenges] = useState(false);
 
@@ -1245,22 +1243,12 @@ function GeneralTab({
     void window.capty
       .getConfig()
       .then((c) => {
-        const v = (c as { ytdlpCookiesFromBrowser?: string | null })
-          .ytdlpCookiesFromBrowser;
-        setCookieBrowser(typeof v === "string" ? v : "");
         setSolveJsChallenges(
           (c as { ytdlpSolveJsChallenges?: boolean }).ytdlpSolveJsChallenges ===
             true,
         );
       })
-      .catch(() => setCookieBrowser(""));
-  }, []);
-
-  const handleChangeCookieBrowser = useCallback(async (value: string) => {
-    setCookieBrowser(value);
-    await window.capty.setConfig({
-      ytdlpCookiesFromBrowser: value === "" ? null : value,
-    });
+      .catch(() => setSolveJsChallenges(false));
   }, []);
 
   const handleToggleSolveJsChallenges = useCallback(async (value: boolean) => {
@@ -1661,11 +1649,11 @@ function GeneralTab({
         </div>
       </div>
 
-      {/* YouTube / yt-dlp cookies */}
-      <div style={sectionTitleStyle}>YouTube 下载 Cookie（备用）</div>
+      {/* YouTube download options */}
+      <div style={sectionTitleStyle}>YouTube 下载选项</div>
       <div style={sectionDescStyle}>
-        若未用上面的 YouTube 登录，可选择一个已登录 YouTube 的浏览器，yt-dlp
-        会读取其 Cookie 完成下载。Cookie 仅本地使用，不会上传。
+        YouTube 下载需先在上方「YouTube 登录」登录账号（Capty 会导出其 Cookie 供
+        yt-dlp 使用）。Cookie 仅本地使用，不会上传。
       </div>
       <div style={cardStyle}>
         <div
@@ -1674,59 +1662,6 @@ function GeneralTab({
             justifyContent: "space-between",
             alignItems: "center",
             gap: "8px",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: "13px",
-                fontWeight: 500,
-                color: "var(--text-primary)",
-              }}
-            >
-              Cookie 来源浏览器
-            </div>
-            <div
-              style={{
-                fontSize: "12px",
-                color: "var(--text-muted)",
-                marginTop: "2px",
-              }}
-            >
-              选「不使用」则按匿名下载（YouTube 可能失败）。
-            </div>
-          </div>
-          <select
-            value={cookieBrowser}
-            onChange={(e) => void handleChangeCookieBrowser(e.target.value)}
-            style={{
-              height: "32px",
-              padding: "0 10px",
-              borderRadius: "6px",
-              fontSize: "13px",
-              backgroundColor: "var(--bg-primary)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border)",
-              cursor: "pointer",
-            }}
-          >
-            <option value="">不使用</option>
-            <option value="chrome">Chrome</option>
-            <option value="safari">Safari</option>
-            <option value="firefox">Firefox</option>
-            <option value="edge">Edge</option>
-            <option value="brave">Brave</option>
-          </select>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "8px",
-            marginTop: "14px",
-            paddingTop: "14px",
-            borderTop: "1px solid var(--border)",
           }}
         >
           <div>

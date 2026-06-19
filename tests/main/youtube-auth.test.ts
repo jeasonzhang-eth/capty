@@ -1,13 +1,59 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// yt-auth pulls in electron only for the window/session helpers; the pure
-// serializer we test here doesn't touch them, but the import does, so mock it.
-vi.mock("electron", () => ({
-  BrowserWindow: class {},
-  session: { fromPartition: () => ({ cookies: { get: async () => [] } }) },
+// Mutable cookie store backing the mocked Electron partition session, so we can
+// drive hasYoutubeLogin/exportYoutubeCookies with controlled cookie sets.
+const store = vi.hoisted(() => ({
+  cookies: [] as Array<Record<string, unknown>>,
 }));
 
-import { cookiesToNetscape } from "../../src/main/youtube/yt-auth";
+vi.mock("electron", () => ({
+  BrowserWindow: class {},
+  session: {
+    fromPartition: () => ({
+      cookies: {
+        get: async (filter?: { name?: string }) =>
+          filter?.name
+            ? store.cookies.filter((c) => c.name === filter.name)
+            : store.cookies,
+      },
+    }),
+  },
+}));
+
+import {
+  cookiesToNetscape,
+  hasYoutubeLogin,
+} from "../../src/main/youtube/yt-auth";
+
+describe("hasYoutubeLogin", () => {
+  beforeEach(() => {
+    store.cookies = [];
+  });
+
+  it("is false when only google.com account cookies are present (no LOGIN_INFO)", async () => {
+    store.cookies = [
+      { name: "SAPISID", value: "x", domain: ".google.com" },
+      { name: "__Secure-3PSID", value: "y", domain: ".google.com" },
+    ];
+    expect(await hasYoutubeLogin()).toBe(false);
+  });
+
+  it("is true when a youtube.com LOGIN_INFO cookie is present", async () => {
+    store.cookies = [
+      { name: "LOGIN_INFO", value: "abc", domain: ".youtube.com" },
+    ];
+    expect(await hasYoutubeLogin()).toBe(true);
+  });
+
+  it("ignores a LOGIN_INFO cookie scoped to a non-youtube domain or with no value", async () => {
+    store.cookies = [{ name: "LOGIN_INFO", value: "", domain: ".youtube.com" }];
+    expect(await hasYoutubeLogin()).toBe(false);
+    store.cookies = [
+      { name: "LOGIN_INFO", value: "abc", domain: ".example.com" },
+    ];
+    expect(await hasYoutubeLogin()).toBe(false);
+  });
+});
 
 describe("cookiesToNetscape", () => {
   it("emits the Netscape header and one tab-separated line per cookie", () => {

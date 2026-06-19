@@ -14,13 +14,21 @@
 import { BrowserWindow, session as electronSession } from "electron";
 import type { Session } from "electron";
 import fs from "fs";
+import { dirname } from "path";
 
 const PARTITION = "persist:youtube";
 const YOUTUBE_URL = "https://www.youtube.com/";
 
-/** Cookie names that only exist once a Google/YouTube account is signed in. */
-const LOGIN_COOKIE_NAMES = new Set([
-  "LOGIN_INFO",
+/**
+ * The YouTube-specific authentication cookie. yt-dlp's youtube extractor keys
+ * off this cookie (scoped to `.youtube.com`) to decide you are signed in.
+ * Account cookies on `.google.com` alone (SAPISID/SID/…) are NOT enough —
+ * without `LOGIN_INFO` YouTube returns "Sign in to confirm you're not a bot".
+ */
+const YOUTUBE_LOGIN_COOKIE = "LOGIN_INFO";
+
+/** Google account cookies that appear as soon as you sign into Google. */
+const GOOGLE_AUTH_COOKIE_NAMES = new Set([
   "SAPISID",
   "__Secure-3PAPISID",
   "__Secure-3PSID",
@@ -37,23 +45,55 @@ function isYoutubeAuthDomain(domain: string): boolean {
   );
 }
 
+function isYoutubeDomain(domain: string): boolean {
+  const d = domain.replace(/^\./, "").toLowerCase();
+  return d === "youtube.com" || d.endsWith(".youtube.com");
+}
+
 export function getYoutubeSession(): Session {
   return electronSession.fromPartition(PARTITION);
 }
 
-/** True if the partition holds a YouTube/Google login cookie. */
+/**
+ * True only when the partition holds the youtube.com `LOGIN_INFO` cookie — the
+ * cookie yt-dlp actually needs to authenticate. We deliberately do NOT accept
+ * google.com account cookies alone, because those get set the instant you sign
+ * into Google (before youtube.com sets LOGIN_INFO) and would make us declare
+ * success too early, exporting a cookie set that still fails YouTube's bot
+ * check.
+ */
 export async function hasYoutubeLogin(): Promise<boolean> {
   try {
+    const cookies = await getYoutubeSession().cookies.get({
+      name: YOUTUBE_LOGIN_COOKIE,
+    });
+    return cookies.some((c) => !!c.value && isYoutubeDomain(c.domain));
+  } catch {
+    return false;
+  }
+}
+
+/** True if Google account cookies are present (signed into Google). */
+async function hasGoogleAuth(): Promise<boolean> {
+  try {
     const cookies = await getYoutubeSession().cookies.get({});
-    return cookies.some((c) => LOGIN_COOKIE_NAMES.has(c.name) && !!c.value);
+    return cookies.some(
+      (c) => GOOGLE_AUTH_COOKIE_NAMES.has(c.name) && !!c.value,
+    );
   } catch {
     return false;
   }
 }
 
 /**
- * Open a window for the user to log into YouTube. Resolves true once a login
- * cookie appears, false if the user closes the window first.
+ * Open a window for the user to log into YouTube. Resolves true once the
+ * youtube.com `LOGIN_INFO` cookie appears, false if the user closes the window
+ * first.
+ *
+ * Signing into Google sets `.google.com` cookies immediately, but youtube.com
+ * only sets `LOGIN_INFO` after it loads in an authenticated state. If the user
+ * finishes the Google sign-in on an account/consent page, we nudge the window
+ * back to youtube.com (once) so YouTube issues `LOGIN_INFO`.
  */
 export function openYoutubeLogin(parent?: BrowserWindow): Promise<boolean> {
   return new Promise((resolve) => {
@@ -67,6 +107,7 @@ export function openYoutubeLogin(parent?: BrowserWindow): Promise<boolean> {
     });
 
     let settled = false;
+    let nudged = false;
     const finish = (ok: boolean): void => {
       if (settled) return;
       settled = true;
@@ -77,7 +118,16 @@ export function openYoutubeLogin(parent?: BrowserWindow): Promise<boolean> {
 
     const timer = setInterval(async () => {
       try {
-        if (await hasYoutubeLogin()) finish(true);
+        if (await hasYoutubeLogin()) {
+          finish(true);
+          return;
+        }
+        // Signed into Google but YouTube hasn't issued LOGIN_INFO yet — reload
+        // youtube.com once to make it set the cookie.
+        if (!nudged && (await hasGoogleAuth()) && !win.isDestroyed()) {
+          nudged = true;
+          void win.loadURL(YOUTUBE_URL);
+        }
       } catch {
         // ignore transient cookie read errors
       }
@@ -125,9 +175,15 @@ export function cookiesToNetscape(cookies: readonly NetscapeCookie[]): string {
     const expiry = c.expirationDate ? Math.floor(c.expirationDate) : 0;
     const domainField = (c.httpOnly ? "#HttpOnly_" : "") + domain;
     lines.push(
-      [domainField, includeSub, path, secure, String(expiry), c.name, c.value].join(
-        "\t",
-      ),
+      [
+        domainField,
+        includeSub,
+        path,
+        secure,
+        String(expiry),
+        c.name,
+        c.value,
+      ].join("\t"),
     );
   }
   return lines.join("\n") + "\n";
@@ -146,8 +202,12 @@ export async function exportYoutubeCookies(filePath: string): Promise<boolean> {
     return false;
   }
   const relevant = cookies.filter((c) => isYoutubeAuthDomain(c.domain));
+  // Require the youtube.com LOGIN_INFO cookie — the only reliable signal that
+  // YouTube itself considers this session authenticated. Without it the export
+  // would still fail YouTube's bot check.
   const loggedIn = relevant.some(
-    (c) => LOGIN_COOKIE_NAMES.has(c.name) && !!c.value,
+    (c) =>
+      c.name === YOUTUBE_LOGIN_COOKIE && !!c.value && isYoutubeDomain(c.domain),
   );
   if (!loggedIn) return false;
 
@@ -162,6 +222,11 @@ export async function exportYoutubeCookies(filePath: string): Promise<boolean> {
       expirationDate: c.expirationDate,
     })),
   );
+  // Ensure the parent directory exists before writing. yt-dlp also writes the
+  // cookie jar BACK to this path on exit (even on failed downloads); if the
+  // directory is missing it dies with a raw `FileNotFoundError`. Creating it
+  // here guarantees both our write and yt-dlp's writeback succeed.
+  fs.mkdirSync(dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf-8");
   return true;
 }
